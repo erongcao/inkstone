@@ -1,0 +1,178 @@
+@import "./tokens.css";
+@import "./components.css";
+
+/* ── 基础重置 ── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: var(--ink-font-size);
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  font-family: var(--ink-font-family);
+  line-height: var(--ink-line-height);
+  color: var(--ink-fg);
+  background-color: var(--ink-bg);
+  overflow: hidden;
+  /* macOS 下避免拖拽窗口时出现文字选中高亮 */
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* 可编辑区域恢复文本选中 */
+input,
+textarea,
+[contenteditable="true"],
+.selectable {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+::selection {
+  background-color: var(--ink-selection);
+}
+
+/* ── 应用骨架布局 ── */
+.app {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: 1fr auto;
+  grid-template-areas:
+    "sidebar main"
+    "statusbar statusbar";
+  height: 100%;
+}
+
+/* 侧边栏隐藏时收起第一列，避免留白 */
+.app[data-sidebar="hidden"] {
+  grid-template-columns: 0 1fr;
+}
+
+.app__sidebar {
+  grid-area: sidebar;
+  overflow: hidden;
+  border-right: 1px solid var(--ink-border);
+  background-color: var(--ink-bg-soft);
+  display: flex;
+  flex-direction: column;
+}
+
+.app__main {
+  grid-area: main;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.app__statusbar {
+  grid-area: statusbar;
+  height: var(--ink-statusbar-height);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 12px;
+  font-size: 12px;
+  color: var(--ink-fg-muted);
+  border-top: 1px solid var(--ink-border);
+  background-color: var(--ink-bg-soft);
+}
+
+/* ── 通用 UI 元件 ── */
+.panel-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--ink-border);
+}
+
+.panel-tab {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--ink-fg-muted);
+  font-family: inherit;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: var(--ink-radius-sm);
+  cursor: pointer;
+  transition:
+    background-color var(--ink-transition),
+    color var(--ink-transition);
+}
+
+.panel-tab:hover {
+  background-color: var(--ink-bg-inset);
+  color: var(--ink-fg);
+}
+
+.panel-tab[aria-selected="true"] {
+  background-color: var(--ink-bg-inset);
+  color: var(--ink-fg);
+}
+
+.btn {
+  appearance: none;
+  font-family: inherit;
+  font-size: 13px;
+  padding: 5px 12px;
+  border-radius: var(--ink-radius-sm);
+  border: 1px solid var(--ink-border);
+  background-color: var(--ink-bg);
+  color: var(--ink-fg);
+  cursor: pointer;
+  transition:
+    background-color var(--ink-transition),
+    border-color var(--ink-transition);
+}
+
+.btn:hover {
+  background-color: var(--ink-bg-soft);
+  border-color: var(--ink-border-strong);
+}
+
+.btn--primary {
+  background-color: var(--ink-accent);
+  border-color: var(--ink-accent);
+  color: #fff;
+}
+
+.btn--primary:hover {
+  background-color: var(--ink-accent-hover);
+  border-color: var(--ink-accent-hover);
+}
+
+/* 滚动条 */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--ink-border);
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--ink-border-strong);
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}

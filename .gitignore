@@ -1,0 +1,33 @@
+# 依赖
+node_modules/
+.pnpm-store/
+
+# 构建产物
+dist/
+dist-ssr/
+*.local
+
+# Rust / Tauri
+src-tauri/target/
+src-tauri/gen/schemas/
+
+# 编辑器与系统
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+
+# 日志
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# 本地环境
+.env
+.env.local
+.env.*.local
+
+# 自动生成的移动端图标（暂不做移动端）
+src-tauri/icons/android/
+src-tauri/icons/ios/

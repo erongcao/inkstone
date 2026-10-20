@@ -1,0 +1,7 @@
+node_modules
+dist
+src-tauri/target
+coverage
+pnpm-lock.yaml
+docs/*.md
+tests/corpus/*.md

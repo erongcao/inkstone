@@ -1,0 +1,52 @@
+/**
+ * GitHub 主题 —— 复刻 GitHub 的排版观感。
+ * 只覆盖颜色令牌，版式令牌由设置面板控制。
+ */
+
+[data-theme="github"][data-mode="light"] {
+  --ink-bg: #ffffff;
+  --ink-bg-soft: #f6f8fa;
+  --ink-bg-inset: #eff2f5;
+  --ink-fg: #1f2328;
+  --ink-fg-muted: #59636e;
+  --ink-fg-faint: #818b98;
+  --ink-border: #d1d9e0;
+  --ink-border-strong: #afb8c1;
+  --ink-accent: #0969da;
+  --ink-accent-hover: #0550ae;
+  --ink-selection: rgba(9, 105, 218, 0.15);
+  --ink-code-bg: #f6f8fa;
+  --ink-code-fg: #1f2328;
+  --ink-code-border: #d1d9e0;
+  --ink-quote-border: #d1d9e0;
+  --ink-quote-fg: #59636e;
+  --ink-mark-bg: #fff8c5;
+  --ink-mark-fg: #1f2328;
+  --ink-table-border: #d1d9e0;
+  --ink-table-header-bg: #f6f8fa;
+  --ink-table-stripe-bg: #f6f8fa;
+}
+
+[data-theme="github"][data-mode="dark"] {
+  --ink-bg: #0d1117;
+  --ink-bg-soft: #161b22;
+  --ink-bg-inset: #010409;
+  --ink-fg: #e6edf3;
+  --ink-fg-muted: #9198a1;
+  --ink-fg-faint: #6e7681;
+  --ink-border: #30363d;
+  --ink-border-strong: #444c56;
+  --ink-accent: #4493f8;
+  --ink-accent-hover: #58a6ff;
+  --ink-selection: rgba(68, 147, 248, 0.25);
+  --ink-code-bg: #161b22;
+  --ink-code-fg: #e6edf3;
+  --ink-code-border: #30363d;
+  --ink-quote-border: #3d444d;
+  --ink-quote-fg: #9198a1;
+  --ink-mark-bg: rgba(187, 128, 9, 0.4);
+  --ink-mark-fg: #e6edf3;
+  --ink-table-border: #30363d;
+  --ink-table-header-bg: #161b22;
+  --ink-table-stripe-bg: #12181f;
+}

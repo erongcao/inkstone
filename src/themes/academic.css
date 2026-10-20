@@ -1,0 +1,65 @@
+/**
+ * 学术写作主题 —— 面向论文、综述、SCI 文稿。
+ *
+ * 设计取向：
+ * - 衬线正文，接近期刊排版观感
+ * - 更宽的默认写作区在设置里调（这里是代码块与表格的收窄规则）
+ * - 引用块带左侧细线与浅底，便于识别
+ * - 行距略大，长段落可读性优先
+ */
+
+[data-theme="academic"] {
+  --ink-font-family:
+    "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Songti SC", "STSong",
+    "Source Han Serif SC", "Noto Serif CJK SC", serif;
+  --ink-mono-family:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+[data-theme="academic"][data-mode="light"] {
+  --ink-bg: #fdfdfc;
+  --ink-bg-soft: #f4f4f1;
+  --ink-bg-inset: #eaeae5;
+  --ink-fg: #1a1a19;
+  --ink-fg-muted: #55554f;
+  --ink-fg-faint: #8a8a80;
+  --ink-border: #dcdcd5;
+  --ink-border-strong: #bcbcb2;
+  --ink-accent: #1a5fb4;
+  --ink-accent-hover: #134ba0;
+  --ink-selection: rgba(26, 95, 180, 0.16);
+  --ink-code-bg: #f4f4f1;
+  --ink-code-fg: #2a2a27;
+  --ink-code-border: #dcdcd5;
+  --ink-quote-border: #b9c8de;
+  --ink-quote-fg: #3f4a5a;
+  --ink-mark-bg: #fdf3c8;
+  --ink-mark-fg: #1a1a19;
+  --ink-table-border: #dcdcd5;
+  --ink-table-header-bg: #f4f4f1;
+  --ink-table-stripe-bg: #fafaf8;
+}
+
+[data-theme="academic"][data-mode="dark"] {
+  --ink-bg: #1a1a19;
+  --ink-bg-soft: #232322;
+  --ink-bg-inset: #121211;
+  --ink-fg: #e8e6e0;
+  --ink-fg-muted: #a8a69e;
+  --ink-fg-faint: #7d7b74;
+  --ink-border: #373733;
+  --ink-border-strong: #4d4d47;
+  --ink-accent: #7aa2f7;
+  --ink-accent-hover: #94b8ff;
+  --ink-selection: rgba(122, 162, 247, 0.22);
+  --ink-code-bg: #232322;
+  --ink-code-fg: #e8e6e0;
+  --ink-code-border: #373733;
+  --ink-quote-border: #3f4a5a;
+  --ink-quote-fg: #b6bcc7;
+  --ink-mark-bg: rgba(199, 160, 40, 0.28);
+  --ink-mark-fg: #e8e6e0;
+  --ink-table-border: #373733;
+  --ink-table-header-bg: #232322;
+  --ink-table-stripe-bg: #1f1f1e;
+}
