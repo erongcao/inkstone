@@ -228,3 +228,11 @@
   color: var(--ink-fg);
   resize: vertical;
 }
+
+/* ── 编辑器宿主容器 ── */
+.editor-host {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background-color: var(--ink-bg);
+}

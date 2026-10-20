@@ -1,5 +1,6 @@
 @import "./tokens.css";
 @import "./components.css";
+@import "../editor/live-preview.css";
 
 /* ── 基础重置 ── */
 *,

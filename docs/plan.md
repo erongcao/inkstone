@@ -17,7 +17,7 @@
 2. **不丢失用户的字节**。任何"美化"操作（格式化、转换）默认关闭；保存时不动用户没碰过的字符。
 3. **快**。冷启动 < 1.5s，输入延迟 < 16ms（60fps），空闲内存 < 150MB。
 
-### 当前进度：M0 已完成（2026-10-20）
+### 当前进度：M0 已完成，M1 spike 已完成（2026-10-20）
 
 | 交付项 | 状态 | 实测 |
 | --- | --- | --- |
@@ -33,8 +33,14 @@
 | 依赖许可证白名单扫描 | ✅ | 246 条依赖零违规 |
 | CI（lint/test/build/打包 × 4 平台） | ✅ | `.github/workflows/ci.yml` |
 | 组件交互测试（jsdom） | ✅ | 30 个测试全绿 |
+| **编辑内核选型 spike** | ✅ | **实测推翻原定 Milkdown，改用 CodeMirror 6**（见 §2.3） |
+| **Live Preview 装饰器** | ✅ | 行内标记隐藏/展开、块级标记弱化、标题层级渲染，浏览器内实测通过 |
+| **源码模式 ↔ 混合模式** | ✅ | 同一 EditorView 切装饰器，**光标位置精确保留**（实测） |
+| **解析性能基准** | ✅ | remark 1000 行 p95 = 10.96ms 超标；lezer = 1.05ms |
 
 **实测数据**：空闲内存 102 MB（目标 < 150 MB）；release 构建 51 s；应用包 3.70 MiB。
+
+**M1 待办**：中文 IME 组字过程人工验证、lezer 增量解析、表格/公式/图表渲染层。
 
 ---
 
@@ -47,7 +53,7 @@
 | Logseq / SiYuan | AGPL-3.0 | 许可证不适合衍生商业集成 |
 | MarkText | MIT、62.9k star、**v0.22.0 仍在 2026-10 维护** | 最接近的 MIT 开源对标物，但仍是"所见即所得"而非 Typora 式 Live Preview |
 | Zettlr | GPL-3.0、学术向工作台 | 许可证与定位都不同 |
-| Milkdown | MIT、插件化 Markdown WYSIWYG 框架 | **就是为这件事造的内核** |
+| Milkdown | MIT、插件化 Markdown WYSIWYG 框架 | 曾是首选内核，实测发现其 mark 不含标记符文本，无法做 Typora 式直接编辑 `**` → 已改用 CodeMirror 6 |
 
 **结论**：MIT 许可、专注 Markdown、Typora 式体验的空白位是真实存在的。
 
@@ -59,12 +65,15 @@
 
 ### 2.1 结论先行
 
+> ⚠️ **本节已被 M1 实测修订（2026-10-20）**：编辑内核从 Milkdown 改选 **CodeMirror 6**，
+> 理由与实测数据见 §2.3。
+
 | 层 | 选型 | 版本 | 许可证 | 成熟度 |
 |---|---|---|---|---|
 | **外壳** | **Tauri 2** | `@tauri-apps/cli` 2.12.3（2026-10-14） | Apache-2.0 | 稳定（v3 已进 alpha） |
-| **编辑内核** | **Milkdown 7.x（ProseMirror + remark）** | v7.22.3（2026-10-10） | MIT | 活跃（12k★，5 天前发版） |
-| **解析层** | **remark / unified / mdast** | remark 9.0k★ | MIT | 事实标准 |
-| **源码模式** | **CodeMirror 6** | — | MIT | 事实标准 |
+| **编辑内核** | **CodeMirror 6** | `@codemirror/view` 6.43.15 | MIT | 事实标准（VSCode 同源） |
+| **语义解析** | **remark / unified / mdast** | remark 9.0k★ | MIT | 事实标准 |
+| **编辑视图布局** | **lezer / @lezer/markdown** | 1.8.1 | MIT | 活跃（CodeMirror 同源） |
 | **语法高亮** | **Shiki** | v4.5.0（2026-10-01） | MIT | 活跃 |
 | **数学公式** | **KaTeX** | v0.19.0（2026-10-01） | MIT | 活跃 |
 | **图表** | **Mermaid** | 12.2.0（2026-10-13） | MIT | 活跃（90k★） |
@@ -94,39 +103,80 @@
 **已知代价与对冲**：本机 Rust 未安装 + 磁盘仅剩 49 GB。Rust 工具链约 1.5 GB、Tauri `target/` 目录 3–8 GB，需先清理磁盘。
 **退路**：若 Rust 链路不顺，Electron 44 + electron-builder 26.15.3 是成熟退路，前端 100% 代码可复用（只换外壳层）。
 
-### 2.3 编辑内核：为什么是 Milkdown
+### 2.3 编辑内核：为什么最终是 CodeMirror 6（2026-10-20 实测修订）
 
-这是整个项目最关键的选型。候选对比：
+> **原计划选 Milkdown 7，M1 spike 用实测数据推翻了它。** 这里保留原始候选对比，
+> 并附上推翻的具体证据。
 
-| 方案 | 许可证 | 活跃度 | 是否支持 Typora 式 Live Preview | 评价 |
+原候选对比：
+
+| 方案 | 许可证 | 活跃度 | 是否支持 Typora 式 Live Preview | 原评价 |
 |---|---|---|---|---|
-| **Milkdown 7.x** | MIT | v7.22.3（2026-10-10） | 需自研 Live Preview 插件，但底座齐全 | ✅ **推荐** |
+| Milkdown 7.x | MIT | v7.22.3（2026-10-10） | 需自研 Live Preview 插件，但底座齐全 | ~~✅ 推荐~~ → ❌ **实测否决** |
 | Tiptap 3.x | MIT | v3.32.0（2026-10-13） | 需自研 Markdown 序列化 + Live Preview | 可用，但 Markdown 序列化要自己写 |
 | Lexical | MIT | v0.52.1 | 同上，且与 Markdown 生态脱节 | 不推荐 |
 | Slate | MIT | 0.146.1 | 需自研；文档大时性能差 | 不推荐 |
-| CodeMirror 6 直接做富文本 | MIT | 活跃 | 装饰器天然适合隐藏标记 | 可行，但表格/列表等富文本交互要自己造轮子 |
-| 原生 ProseMirror + remark | MIT | npm 包活跃（见下） | 需自研全部胶水层 | 兜底方案 |
+| **CodeMirror 6** | MIT | 活跃（VSCode 同源） | 装饰器天然适合隐藏标记 | ✅ **实测胜出** |
+| 原生 ProseMirror + remark | MIT | npm 包活跃 | 需自研全部胶水层 | 兜底方案 |
 
-**为什么是 Milkdown**：
-1. 它**就是** "ProseMirror + remark"，与我们的架构 1:1 吻合——ProseMirror 文档树做内存模型，remark 做序列化，无需两套解析器。
-2. 插件化架构（`@milkdown/kit`）让 Live Preview、表格、代码块、公式、图表都能作为独立插件插入，不 fork 源码。
-3. `@milkdown/crepe` 主题是**现存开源项目里最接近 Typora 的成品**，可作为视觉与交互的现成起点。
-4. MIT，12k★，**5 天前刚发版**——不是濒死项目。
+#### 推翻 Milkdown 的决定性证据
 
-**关键风险与对冲**：
-- Milkdown 迭代快、API 会变 → **只依赖它的插件层 API**，我们自己的 `EditorCore` 抽象层做薄封装。必要时可绕过 Milkdown 直接用 ProseMirror + remark（同一底层，替换成本低）。
-- **ProseMirror 主仓库虽已 archived（2026-04-01 最后提交），但 npm 包仍在正常发版**：`prosemirror-view` 1.42.6（2026-09-25）、`prosemirror-model` 1.25.12（2026-09-21）。**仓库归档 ≠ 停更**，此前担心的 R6 风险下调。
+**证据一：Milkdown 的标记符根本不在文档文本里。**
+读 `node_modules/@milkdown/core/src/mark/strong.ts` 源码可见，strong 是 ProseMirror 的 **mark**，
+`**` 两个字符在序列化时生成，**正文里只有「粗体」二字**。
+
+这直接击穿了 Typora 式体验的核心前提——「行内标记符号本身是真实的文档内容，可以直接编辑」。
+用 Milkdown 做不到「像普通文本一样编辑 `**`」。
+
+**证据二：源码模式 ↔ 混合模式切换在 Milkdown 下代价极高。**
+原计划是「序列化 + 重解析」来回切，这会带来：撤销栈分裂、光标位置需要手动映射、
+多次切换后文档可能漂移。CodeMirror 6 路线下，两种模式是**同一个编辑器实例**切换装饰器，
+光标、滚动、撤销栈天然保持（已实测，见下）。
+
+**证据三：remark 全量解析撑不住每击键重解析。**
+实测（`scripts/bench-parser.ts`，2026-10-20）：
+
+| 文档规模 | remark p95 | lezer p95 | 16ms 交互预算 |
+|---|---|---|---|
+| 200 行 / 3 KB | 3.79 ms | 0.39 ms | 都过 |
+| 1000 行 / 14 KB | **10.96 ms** | 1.05 ms | remark 已逼近上限 |
+| 3000 行 / 43 KB | **28.95 ms** | 1.82 ms | **remark 超标** |
+
+编辑视图要求每击键即时更新布局 → 只能用 lezer。
+
+#### CM6 路线实测结果（2026-10-20，浏览器内验证）
+
+| 能力 | 实测结果 |
+| --- | --- |
+| 行内标记隐藏/展开 | ✅ `**` `*` `` ` `` `~~` 链接的括号与网址全部按规则隐藏/展开 |
+| 展开判定 | ✅ 光标进入结构 → 标记变回真实可编辑文本；移出 → 重新隐藏；同时只有一个结构展开 |
+| 源码模式 | ✅ 切过去是纯 Markdown 原文，标记全部消失 |
+| 模式切换保持光标 | ✅ 切到源码再切回，`cm-activeLine` 仍在原行、该行的 `**` 仍是展开态 → **光标精确保持** |
+| 中文文本输入 | ✅ 中文正常输入、装饰实时跟随（**IME 组字过程未能用合成事件验证，需人工测**） |
+
+**已知代价**：CM6 没有富文本语义，表格 / 公式 / 图表 / 脚注编号的渲染层要自己实现，
+这是 M2 的工作量（Milkdown 本来白送一部分）。但换来的是「标记符可编辑 + 模式切换零漂移」这两条硬需求。
+
+#### 保留的 Milkdown 结论
+
+- Milkdown 迭代快、API 会变 → 若将来要用，**只依赖它的插件层 API**
+- **ProseMirror 主仓库虽已 archived（2026-04-01 最后提交），但 npm 包仍在正常发版**：
+  `prosemirror-view` 1.42.6（2026-09-25）、`prosemirror-model` 1.25.12（2026-09-21）。**仓库归档 ≠ 停更**
 
 ### 2.4 解析层：remark 而非 markdown-it / comrak
 
 | 方案 | 评价 |
 |---|---|
-| **remark / unified / mdast**（推荐） | Milkdown 内建使用；AST 优先，插件生态（remark-gfm / remark-math / remark-frontmatter / remark-directive）齐全；mdast 是无损序列化的理想中间表示 |
+| **remark / unified / mdast**（语义层） | AST 优先，插件生态（remark-gfm / remark-math / remark-frontmatter / remark-directive）齐全；mdast 是无损序列化的理想中间表示 |
+| **lezer / @lezer/markdown**（布局层） | 增量解析，1000 行 p95 ≈ 1.05ms；只回答「标记在哪、正文在哪」，不产出语义结论 |
 | markdown-it 15.0.3 | 性能优秀、CommonMark 100% 合规，但**输出偏 DOM/HTML 导向**，做"源码↔树"双向无损映射时不如 mdast 顺手 |
 | comrak（Rust） | GFM 极准、快，但它是 Rust 侧库；前端编辑器要跨 IPC 拿 AST，得不偿失 |
 | pulldown-cmark 0.13.4 | 同上，且是 CommonMark 严格向，GFM 扩展要自己补 |
 
-**决策**：**mdast 作为唯一中间表示**。渲染、导出、大纲、脚注编号全部从同一棵 mdast 树派生——这直接落实了架构约束 C。
+**决策（2026-10-20 修订）**：**mdast 作为唯一语义来源**（渲染、导出、大纲、脚注编号全部从同一棵 mdast 树派生），
+**lezer 只服务编辑视图的实时布局**。两者不是「两套解析规则」，而是「同一套规则的两个实现」——
+一致性由 `tests/corpus/` 的语料库断言。原来的约束 C「解析规则唯一」因此修订为：
+**语义归 mdast，布局归 lezer，两者必须对齐。**
 
 ### 2.5 渲染组件
 
@@ -238,21 +288,36 @@ Typora 的做法是"先转 pandoc native AST，再由 pandoc 转目标格式"，
 - 光标进入这个词内部，视觉上变成 `**加粗**`，可像普通文本一样编辑标记符
 - 行内标记符号本身是**真实的文档内容**，不是装饰
 
-**实现（ProseMirror 装饰器方案）**：
-1. mdast 解析出的 inline 节点（strong / emphasis / inlineCode / delete / mark）映射为 ProseMirror 的 mark
-2. 一个 ProseMirror 插件产生 **inline decoration**：把标记符（如 `**`）包装成不可见但占位的 widget
-3. CSS 默认隐藏这些 widget（`font-size: 0` + 保留光标宽度），使排版看起来像渲染后的结果
-4. 插件监听 selection：当 selection 落在某个 decoration 范围内时，给该 decoration 加 `active` class，露出真实标记符
-5. 用户在标记符上直接编辑 → ProseMirror 文档树变化 → 序列化器重新生成 Markdown
+**实现（CodeMirror 6 装饰器方案，2026-10-20 已跑通）**：
 
-**难点清单**（预估工作量占 M1 的 60%）：
-- 标记符的**宽度占位**：隐藏后光标位置必须仍然合理（Typora 用了 0 宽 + 特殊光标绘制）
+1. **文档恒为 Markdown 源码**。CM6 的 `Text` 里装的就是用户原文，一个字符都不多。
+2. lezer 解析出语法树，回答「哪里是标记、哪里是正文」（`EmphasisMark` / `CodeMark` / `LinkMark` 等节点）。
+3. `buildLivePreviewDecorations()` 把这些节点翻译成两类装饰器：
+   - **替换装饰** `Decoration.replace({widget})`——把标记区间换成一个**零宽 widget**，
+     屏幕上看起来标记消失了，但**文档坐标不变**
+   - **标记装饰** `Decoration.mark({class})`——给正文套上 `cm-md-strong` 等样式
+4. 光标判定用「**左开右闭**」：`node.from < cursor <= node.to`
+   → 光标在正文里 → 展开；紧跟结束标记之后 → 展开；紧贴开始标记之前 → 不展开。
+5. 展开时不生成替换装饰，标记符就以**真实文本**形式回到屏幕上，可直接编辑。
+
+**为什么必须用 `Decoration.replace` 而不是 CSS 隐藏**：
+replace 保持文档坐标不变，光标仍能落进标记区间（我们据此判断「光标进入了」）；
+纯 CSS 隐藏（`font-size:0` / `display:none`）会让光标永远进不去，做不到直接编辑 `**`。
+
+**动态装饰器的实现陷阱**（实测踩过）：
+`EditorView.decorations.compute([field], get)` **只在依赖字段变化时重算**。
+装饰器真正依赖的是「文档内容 + 光标位置」，这两个每次击键都在变，却不是任何一个 StateField。
+正确做法是 `ViewPlugin.fromClass` 的 `update()`——CM6 在每个事务后都会调用它。
+
+**剩余难点清单**（M1 剩余工作）：
+- 中文 IME **组字过程**在标记符边界的行为（**这是 Typora 历史上最痛的坑**，需人工在真机验证）
 - 嵌套标记（`**粗体里的 `代码`**`）的装饰嵌套顺序
-- 中文 IME 输入法在标记符边界的行为（**这是 Typora 历史上最痛的坑**）
 - 跨段落标记（引用块内的段落标记、列表项前缀）
 - 光标在标记符中间时按下方向键的预期行为
+- lezer **增量解析**（`TreeEditor`）——目前每次击键全量重解析，大文档下要优化
 
 **退路方案**：如果 Live Preview 的某个边界场景反复出问题，提供"渲染模式 / 源码模式"双模式作为一等公民，而不是硬撑一个"半 WYSIWYG"。**这点必须写进产品原则：源码模式永远可达、永远无损。**
+（好消息：CM6 路线下这两模式是同一个实例切装饰器，切换零成本、零漂移。）
 
 ---
 
@@ -266,13 +331,16 @@ Typora 的做法是"先转 pandoc native AST，再由 pandoc 转目标格式"，
 - **验收**：能双击打开一个 `.md`，显示纯文本并滚动流畅
 
 ### M1 · 编辑内核（目标：6 周）★ 决定项目成败
-- [ ] mdast 解析层：GFM + YAML front matter + 数学 + 脚注 + Alerts
-- [ ] 混合编辑：行内标记的实时渲染与展开
-- [ ] 源码模式（CodeMirror 6），与混合模式共享 undo 栈
-- [ ] 模式切换：光标位置 + 滚动位置保持
-- [ ] 中文输入法全场景测试（拼音/候选框/选词/组合输入）
+- [x] mdast 解析层：GFM + YAML front matter + 数学 + 脚注 + Alerts
+- [x] 编辑内核选型 spike（Milkdown vs CM6，实测定案：**CodeMirror 6**）
+- [x] 混合编辑：行内标记的实时渲染与展开
+- [x] 源码模式，与混合模式**共用同一个 CM6 实例**
+- [x] 模式切换：光标位置保持（实测通过；滚动位置由同一 view 保证）
+- [ ] 中文输入法全场景测试（拼音/候选框/选词/组合输入）← **需人工在真机验证**
+- [ ] lezer 增量解析（`TreeEditor`），避免每次击键全量重解析
 - [ ] 撤销/重做、复制粘贴（HTML + Markdown 双格式）、智能粘贴
 - [ ] 自动配对
+- [ ] 表格 / 公式 / 图表 / 脚注的渲染层
 - **验收**：连续写 2000 字不卡顿；中英混排输入法不跳光标；两种模式反复切换 100 次无内容漂移
 
 ### M2 · 写作体验（目标：4 周）
@@ -344,10 +412,11 @@ GitHub Alerts / 脚注 / RTL / 插件系统 / 主题市场 / 图片图床 / EPUB
 | R3 | **单人维护者的持续性** | 🔴 高 | 架构上把"外壳"与"内核"解耦，降低任何一块的退出成本；尽早开源、尽早招人 |
 | R4 | **依赖许可证污染**（引入 AGPL 库） | 🟡 中 | 建立依赖许可证白名单 + CI 自动扫描；只用 MIT/Apache/BSD |
 | R5 | **磁盘空间** | 🟢 低（已缓解） | **实测：清理 15 GB 后剩余 64 GB**。已清 uv(7.4G)/pip(5.9G)/npm(3.5G)/Homebrew(1.4G) 缓存；模型缓存（modelscope 63G / lm-studio 43G / huggingface 20G）属用户资产，**未动**，需要时用户可自行清理 |
-| R6 | **核心依赖上游停更** | 🟢 低（已下调） | **实测：ProseMirror 主仓库虽 archived（2026-04-01），但 npm 包仍在发版**（view 1.42.6 / 2026-09-25，model 1.25.12 / 2026-09-21）；Milkdown v7.22.3 于 2026-10-10 发布。**锁版本 + 核心层薄封装** |
+| R6 | **核心依赖上游停更** | 🟢 低（已下调） | **实测：ProseMirror 主仓库虽 archived（2026-04-01），但 npm 包仍在发版**（view 1.42.6 / 2026-09-25，model 1.25.12 / 2026-09-21）；Milkdown v7.22.3 于 2026-10-10 发布。**选定 CM6 路线后本风险进一步下降**——CodeMirror 6 是 VSCode 同源，CodeMirror 团队仍在高频维护 |
 | R7 | **Markdown round-trip 有损**（导出后原文变形，用户发现后失去信任） | 🟡 中 | round-trip 测试语料库；默认关闭所有"美化"行为 |
-| R8 | **性能随文档规模劣化** | 🟢 低 | 大文档走"分块渲染 + 虚拟滚动"；先测再优化 |
+| R8 | **性能随文档规模劣化** | 🟡 中（已量化） | **实测：remark 1000 行 p95 = 10.96ms、3000 行 = 28.95ms 超 16ms 预算；lezer = 1.05 / 1.82ms**。对策：编辑视图走 lezer 且接增量解析；渲染层只对可视区做渲染 |
 | R9 | **macOS 平台专属能力缺口**（Touch Bar、连续相机、文档版本恢复） | 🟢 低 | 明确列入"可能永远不做"清单，避免承诺 |
+| R10 | **CM6 无富文本语义，渲染层要自建**（表格 / 公式 / 图表 / 脚注编号） | 🟡 中 | 这是改用 CM6 的直接代价。缓解：`src/parser/` 的 mdast 层仍在，渲染层从 mdast 派生；表格等复杂交互可单独评估是否用局部 widget 实现 |
 
 ---
 
@@ -368,7 +437,7 @@ GitHub Alerts / 脚注 / RTL / 插件系统 / 主题市场 / 图片图床 / EPUB
 | # | 决策点 | 选项 | 我的建议 |
 |---|---|---|---|
 | D1 | **外壳框架** | Tauri 2 / Electron 44 / Wails 3 | **Tauri 2**（包体 10–20MB vs 200MB，内存 1/3，Rust 后端直接服务于搜索/监听/PDF 直出）。退路：Electron 44，前端代码 100% 复用 |
-| D2 | **编辑内核** | Milkdown 7 / 自研 CM6 装饰 / Tiptap 3 | **Milkdown 7**（= ProseMirror + remark，与架构 1:1；MIT；5 天前刚发版）。Live Preview 插件自研 |
+| D2 | **编辑内核** | Milkdown 7 / 自研 CM6 装饰 / Tiptap 3 | ✅ **已定：CodeMirror 6**（2026-10-20 实测定案，见 §2.3）。原建议 Milkdown 被实测推翻——Milkdown 的 mark 不含标记符文本，做不到直接编辑 `**`；CM6 路线已跑通 Live Preview 与模式切换保持光标 |
 | D3 | **项目命名与路径** | `inkstone`（砚）/ `Inkstone` / 其他 | 暂用 `~/Documents/GitHub/inkstone`，**名字您随时改** |
 | D4 | **许可证** | MIT / Apache-2.0 | **MIT**（最大包容性，便于被集成进各类闭源工具） |
 | D5 | **首版差异化** | 通用写作 / 学术写作（公式+文献+引用管理） | **通用打地基，把学术写作作为首个差异化亮点**——公式/脚注/引用是 Typora 用户最常吐槽的部分，也最契合您的实际需求 |
@@ -384,7 +453,8 @@ GitHub Alerts / 脚注 / RTL / 插件系统 / 主题市场 / 图片图床 / EPUB
 - [x] **初始化仓库** —— `~/Documents/GitHub/inkstone`，MIT 协议，`.gitignore` 完整
 - [x] **round-trip 测试语料库** —— 5 份真实 Markdown 样本，覆盖表格/任务列表/数学/mermaid/脚注/YAML/边界情况
 - [x] **依赖许可证白名单 CI** —— 自动扫描 `package.json` / `Cargo.lock` / cargo registry 缓存
-- [ ] **M1 前置**：把 `EditorSurface` 的 textarea 替换为 Milkdown 内核，接入 Live Preview 插件
+- [x] **M1 前置**：把 `EditorSurface` 的 textarea 替换为 CodeMirror 6 内核，接入 Live Preview 装饰器插件
+- [ ] **M1 剩余**：中文 IME 人工验证、lezer 增量解析、表格/公式/图表渲染层
 
 ### 本机环境快照（2026-10-20）
 

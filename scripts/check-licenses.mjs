@@ -7,9 +7,17 @@
  * 是因为它只调用 pandoc 进程、不链接其代码。
  *
  * 规则：
- *   - 允许：MIT / Apache-2.0 / BSD-2 / BSD-3 / ISC / 0BSD / CC0 / Unlicense / Python-2.0 / Zlib / MPL-2.0
+ *   - 允许：MIT / Apache-2.0 / BSD-2 / BSD-3 / ISC / 0BSD / CC0 / Unlicense /
+ *           Python-2.0 / Zlib / MPL-2.0 / MIT-0 / BlueOak-1.0.0
  *   - 拒绝：GPL（含 GPL-2.0 / GPL-3.0）、AGPL、SSPL、EUPL、OSL、任何 "Proprietary" / "UNLICENSED"
  *   - 例外清单（EXCEPTIONS）：明确记录「以独立进程调用、不链接」的例外，需写明理由
+ *   - 数据白名单（DATA_ALLOWLIST）：只放事实性数据集，不放代码
+ *
+ * 扫描来源（重要）：
+ *   npm 侧的许可证**不能只读 pnpm-lock.yaml**——pnpm v9+ 的 lockfile 不写
+ *   `license` 字段（实测 842 个包条目、0 个带 license），只看 lockfile 会一条都扫不到，
+ *   闸门形同虚设。这里直接遍历 `node_modules/.pnpm/` 下每个真实安装目录的 package.json，
+ *   覆盖全部传递依赖。lockfile 解析仅作兜底。
  *
  * 退出码：发现违规依赖时为 1（CI 失败）。
  */
@@ -36,6 +44,10 @@ const ALLOWED = new Set(
     "mpl-2.0",
     "unicode-3.0",
     "unicode-dfs-2016",
+    // MIT-0：即「MIT No Attribution」，比 MIT 更宽松（连版权声明都不要求）
+    "mit-0",
+    // BlueOak-1.0.0：OSI 认证的宽松许可证，与 MIT 同级
+    "blueoak-1.0.0",
   ].map((s) => s.toLowerCase()),
 );
 
@@ -67,6 +79,18 @@ const EXCEPTIONS = {
   // 备注：pandoc 不在 npm 依赖树中，通过系统安装调用，因此通常不会出现。
 };
 
+/**
+ * 数据类依赖白名单：只放**事实性数据集**，不放代码。
+ *
+ * 与 EXCEPTIONS 的区别：EXCEPTIONS 是「许可证本身被禁止，但有正当理由」；
+ * 这里是「许可证本身允许（CC-BY 只要求署名、不传染），但限定只能用于数据」。
+ */
+const DATA_ALLOWLIST = {
+  // caniuse-lite：浏览器兼容性**事实数据**（哪个浏览器支持哪个特性），
+  // CC-BY-4.0 只要求署名、不构成代码传染，且数据本身不是创作作品。
+  "caniuse-lite": "浏览器兼容性事实数据，CC-BY-4.0 仅要求署名，不传染代码",
+};
+
 function normalizeLicense(value) {
   if (!value) return "unknown";
   if (typeof value === "string") return value;
@@ -76,7 +100,72 @@ function normalizeLicense(value) {
   return "unknown";
 }
 
-/** 从 pnpm-lock.yaml 中提取 name → license 映射 */
+/**
+ * 从包的 package.json 里取许可证。
+ *
+ * 要兼容三种写法：
+ *   1. `"license": "MIT"`                    —— 现代标准字段（字符串）
+ *   2. `"license": { "type": "MIT" }`        —— 现代标准字段（对象）
+ *   3. `"licenses": [{ "type": "MIT" }]`     —— npm 早期废弃字段
+ *      （实测：`format@0.2.2` 用的是这种，只看 `license` 会误判成「无许可证」）
+ */
+function readPackageLicense(manifest) {
+  const direct = normalizeLicense(manifest.license);
+  if (direct !== "unknown") return direct;
+
+  const legacy = manifest.licenses;
+  if (Array.isArray(legacy)) {
+    const types = legacy.map((l) => normalizeLicense(l)).filter((t) => t !== "unknown");
+    if (types.length > 0) return types.join(" OR ");
+  }
+  return "unknown";
+}
+
+/**
+ * 读取 npm 依赖的许可证。
+ *
+ * 为什么不能只读 pnpm-lock.yaml？
+ *   pnpm v9+ 的 lockfile **不写 `license` 字段**（实测：842 个包条目，0 个带 license），
+ *   只解析 lockfile 的话 npm 侧一条都扫不到——闸门形同虚设。
+ *   真实许可证在每个包的 `node_modules/<pkg>/package.json` 里，
+ *   所以这里直接遍历 `node_modules/.pnpm/` 下的真实安装目录。
+ */
+function readNpmLicenses() {
+  const pnpmDir = join(root, "node_modules", ".pnpm");
+  if (!existsSync(pnpmDir)) return [];
+
+  const results = [];
+  for (const entry of readdirSafe(pnpmDir)) {
+    // .pnpm 下的目录名形如 `@codemirror+view@6.43.15` 或 `react@19.3.1`
+    if (entry.startsWith("node_modules")) continue;
+    const pkgDir = join(pnpmDir, entry, "node_modules");
+    if (!existsSync(pkgDir)) continue;
+
+    for (const scopeOrName of readdirSafe(pkgDir)) {
+      // 作用域包（@scope/name）多一层目录
+      const candidates = scopeOrName.startsWith("@")
+        ? readdirSafe(join(pkgDir, scopeOrName)).map((n) => join(scopeOrName, n))
+        : [scopeOrName];
+
+      for (const relPath of candidates) {
+        const manifestPath = join(pkgDir, relPath, "package.json");
+        if (!existsSync(manifestPath)) continue;
+        try {
+          const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+          results.push({
+            name: manifest.name ?? relPath,
+            license: readPackageLicense(manifest),
+          });
+        } catch {
+          /* 包元数据损坏时跳过，不影响其他包的检查 */
+        }
+      }
+    }
+  }
+  return results;
+}
+
+/** 从 pnpm-lock.yaml 中提取 name → license 映射（lockfile 无 license 字段时作为兜底） */
 function readPnpmLicenses() {
   const lockPath = join(root, "pnpm-lock.yaml");
   if (!existsSync(lockPath)) return [];
@@ -160,7 +249,7 @@ function classify(license) {
 }
 
 function main() {
-  const deps = [...readPnpmLicenses(), ...readCargoLicenses()];
+  const deps = [...readNpmLicenses(), ...readPnpmLicenses(), ...readCargoLicenses()];
   const violations = [];
   const unknowns = [];
   const seen = new Set();
@@ -171,6 +260,7 @@ function main() {
     seen.add(key);
 
     if (EXCEPTIONS[dep.name]) continue;
+    if (DATA_ALLOWLIST[dep.name]) continue;
 
     const verdict = classify(dep.license);
     if (verdict === "deny") violations.push(dep);
@@ -185,7 +275,6 @@ function main() {
       console.log(`  ? ${dep.name} — ${dep.license}`);
     }
   }
-
   if (violations.length > 0) {
     console.error(`\n❌ 发现 ${violations.length} 个禁止许可证的依赖：`);
     for (const dep of violations) {

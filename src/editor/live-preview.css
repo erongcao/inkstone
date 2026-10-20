@@ -1,0 +1,153 @@
+/* ═══════════════════════════════════════════════════════════
+   Live Preview 装饰器样式
+   ═══════════════════════════════════════════════════════════ */
+
+/* 被隐藏的标记占位：完全不可见且不占宽度 */
+.cm-md-hidden {
+  display: inline-block;
+  width: 0;
+  padding: 0;
+  margin: 0;
+  overflow: hidden;
+  vertical-align: baseline;
+}
+
+/* 行内内容样式 —— 视觉上呈现「已渲染」的效果 */
+.cm-md-strong {
+  font-weight: 700;
+}
+
+.cm-md-emphasis {
+  font-style: italic;
+}
+
+.cm-md-inline-code {
+  font-family: var(--ink-mono-family);
+  font-size: 0.875em;
+  padding: 0.15em 0.35em;
+  border-radius: var(--ink-radius-sm);
+  background-color: var(--ink-code-bg);
+  color: var(--ink-code-fg);
+  border: 1px solid var(--ink-code-border);
+}
+
+.cm-md-strikethrough {
+  text-decoration: line-through;
+  text-decoration-color: var(--ink-fg-faint);
+}
+
+.cm-md-link {
+  color: var(--ink-accent);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--ink-accent) 40%, transparent);
+  text-underline-offset: 2px;
+}
+
+.cm-md-image {
+  color: var(--ink-fg-muted);
+  background-color: var(--ink-bg-soft);
+  border: 1px dashed var(--ink-border);
+  border-radius: var(--ink-radius-sm);
+  padding: 0 0.25em;
+}
+
+/* 块级标记：默认弱化，光标进入时恢复清晰 */
+.cm-md-header-mark,
+.cm-md-list-mark,
+.cm-md-quote-mark {
+  color: var(--ink-fg-faint);
+  opacity: 0.45;
+  transition: opacity var(--ink-transition);
+}
+
+.cm-md-block-mark--active {
+  opacity: 1;
+  color: var(--ink-fg-muted);
+}
+
+/* 标题：渲染后的视觉层级 */
+.cm-md-heading-1,
+.cm-md-heading-2,
+.cm-md-heading-3,
+.cm-md-heading-4,
+.cm-md-heading-5,
+.cm-md-heading-6 {
+  font-weight: 700;
+  line-height: 1.3;
+  margin-top: 1.2em;
+  margin-bottom: 0.6em;
+}
+
+.cm-md-heading-1 {
+  font-size: 1.9em;
+}
+.cm-md-heading-2 {
+  font-size: 1.5em;
+}
+.cm-md-heading-3 {
+  font-size: 1.25em;
+}
+.cm-md-heading-4 {
+  font-size: 1.1em;
+}
+.cm-md-heading-5 {
+  font-size: 1em;
+}
+.cm-md-heading-6 {
+  font-size: 0.9em;
+  color: var(--ink-fg-muted);
+}
+
+/* CodeMirror 自身的细节调校 */
+.cm-editor {
+  height: 100%;
+  background: transparent;
+}
+
+.cm-editor .cm-gutters {
+  background-color: transparent;
+  border-right: 1px solid var(--ink-border);
+  color: var(--ink-fg-faint);
+}
+
+.cm-editor .cm-activeLine {
+  background-color: color-mix(in srgb, var(--ink-accent) 6%, transparent);
+}
+
+.cm-editor .cm-activeLineGutter {
+  background-color: transparent;
+  color: var(--ink-fg-muted);
+}
+
+.cm-editor .cm-cursor {
+  border-left-color: var(--ink-accent);
+  border-left-width: 2px;
+}
+
+.cm-editor .cm-selectionBackground,
+.cm-editor.cm-focused .cm-selectionBackground,
+.cm-editor ::selection {
+  background-color: var(--ink-selection) !important;
+}
+
+.cm-editor .cm-placeholder {
+  color: var(--ink-fg-faint);
+  font-style: italic;
+}
+
+/* 查找面板 */
+.cm-panels {
+  background-color: var(--ink-bg-soft);
+  border-color: var(--ink-border);
+  color: var(--ink-fg);
+}
+
+.cm-panels input,
+.cm-panels button {
+  font-family: inherit;
+  color: var(--ink-fg);
+  background-color: var(--ink-bg);
+  border: 1px solid var(--ink-border);
+  border-radius: var(--ink-radius-sm);
+  padding: 2px 6px;
+}

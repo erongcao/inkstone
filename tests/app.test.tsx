@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeEach } from "vitest";
-import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup, act } from "@testing-library/react";
+import { EditorView } from "@codemirror/view";
 import App from "../src/App";
 
 /**
@@ -13,6 +14,20 @@ import App from "../src/App";
  * CI 会立刻报警，而不是等到手动点开应用才发现。
  */
 
+/**
+ * 取到 App 挂载的那个 CodeMirror 6 实例。
+ *
+ * M1 起编辑区是 CM6 而不是 textarea，jsdom 里模拟中文输入很不可靠，
+ * 所以直接用 CM6 官方的事务接口来驱动输入——测的是同一条数据链路。
+ */
+function getEditorView(): EditorView {
+  const host = document.querySelector<HTMLElement>(".editor-host");
+  if (!host) throw new Error("找不到编辑器挂载点");
+  const view = EditorView.findFromDOM(host);
+  if (!view) throw new Error("找不到 CodeMirror 实例");
+  return view;
+}
+
 describe("应用交互", () => {
   beforeEach(() => {
     cleanup();
@@ -22,13 +37,30 @@ describe("应用交互", () => {
   it("输入内容后状态栏字数统计随之更新", () => {
     render(<App />);
 
-    const textarea = screen.getByPlaceholderText(
-      "在此输入 Markdown…",
-    ) as HTMLTextAreaElement;
-    fireEvent.change(textarea, { target: { value: "你好世界 hello" } });
+    const view = getEditorView();
+    // 必须包在 act() 里：fireEvent 会自动包，而 CM6 的事务是外部触发的，
+    // 不包的话 React 的重渲染不会在断言前落地。
+    act(() => {
+      view.dispatch({
+        changes: { from: 0, to: view.state.doc.length, insert: "你好世界 hello" },
+      });
+    });
 
     // 「你好世界」4 字 + 「hello」1 词 = 5 词；字符数含空格共 10
     expect(screen.getByText(/5 词 · 10 字符/)).toBeTruthy();
+  });
+
+  it("编辑器内容与文档状态保持同步", () => {
+    render(<App />);
+
+    const view = getEditorView();
+    act(() => {
+      view.dispatch({
+        changes: { from: 0, to: view.state.doc.length, insert: "# 标题" },
+      });
+    });
+
+    expect(view.state.doc.toString()).toBe("# 标题");
   });
 
   it("点击「设置」打开设置面板", () => {
