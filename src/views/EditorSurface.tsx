@@ -5,9 +5,11 @@
  * 对外仍然只暴露「Markdown 文本」，不泄露编辑器内部结构。
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { createMarkdownEditor, type MarkdownEditorHandle } from "@/editor/MarkdownEditor";
 import { useDocument } from "@/ipc/document";
+import { useSettings } from "@/settings/store";
+import { MARKER_DISPLAY_MODES } from "@/settings/schema";
 
 interface Props {
   onOpenSettings: () => void;
@@ -15,12 +17,12 @@ interface Props {
 
 export function EditorSurface({ onOpenSettings }: Props) {
   const { doc, save, create, setContent } = useDocument();
+  const [settings, updateSettings] = useSettings();
+  const markerDisplay = settings.editor.markerDisplay;
   const hostRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<MarkdownEditorHandle | null>(null);
   /** 上一次同步进编辑器的值，用来避免回环更新 */
   const lastSyncedRef = useRef<string>("");
-  /** 是否处于实时预览模式（true）还是源码模式（false） */
-  const [livePreview, setLivePreview] = useState(true);
 
   // 创建编辑器（只做一次）
   useEffect(() => {
@@ -28,6 +30,7 @@ export function EditorSurface({ onOpenSettings }: Props) {
     const editor = createMarkdownEditor({
       parent: hostRef.current,
       doc: "",
+      displayMode: markerDisplay,
       onChange: (value) => {
         lastSyncedRef.current = value;
         setContent(value);
@@ -38,6 +41,8 @@ export function EditorSurface({ onOpenSettings }: Props) {
       editor.destroy();
       editorRef.current = null;
     };
+    // 只在挂载时创建一次；markerDisplay 的变化由下面的 effect 单独同步
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setContent]);
 
   // 外部内容变化 → 同步进编辑器
@@ -50,12 +55,21 @@ export function EditorSurface({ onOpenSettings }: Props) {
     editor.setValue(doc.content);
   }, [doc.content]);
 
-  // 切换实时预览 / 源码模式
-  const toggleLivePreview = () => {
-    const next = !livePreview;
-    setLivePreview(next);
-    editorRef.current?.setLivePreview(next);
+  // 设置里的显示策略变化 → 同步到编辑器
+  useEffect(() => {
+    editorRef.current?.setDisplayMode(markerDisplay);
+  }, [markerDisplay]);
+
+  // 工具栏按钮：在三种显示策略之间循环
+  const cycleDisplayMode = () => {
+    const index = MARKER_DISPLAY_MODES.findIndex((m) => m.value === markerDisplay);
+    const next = MARKER_DISPLAY_MODES[(index + 1) % MARKER_DISPLAY_MODES.length];
+    // 走设置层，保证持久化；编辑器侧由上面的 effect 同步
+    updateSettings({ editor: { markerDisplay: next.value } });
   };
+
+  const modeLabel =
+    MARKER_DISPLAY_MODES.find((m) => m.value === markerDisplay)?.label ?? markerDisplay;
 
   return (
     <div className="editor-surface">
@@ -68,10 +82,14 @@ export function EditorSurface({ onOpenSettings }: Props) {
           <button
             type="button"
             className="btn"
-            onClick={toggleLivePreview}
-            title="切换实时预览 / 源码模式（⌘/）"
+            onClick={cycleDisplayMode}
+            title={`显示策略：${modeLabel}（点击切换）`}
           >
-            {livePreview ? "实时预览" : "源码模式"}
+            {markerDisplay === "live"
+              ? "实时预览"
+              : markerDisplay === "dimmed"
+                ? "弱化显示"
+                : "源码模式"}
           </button>
           <button type="button" className="btn" onClick={create}>
             新建

@@ -51,6 +51,19 @@
   padding: 0 0.25em;
 }
 
+/* 弱化显示模式（Ulysses 式）：标记不隐藏，只弱化着色 */
+.cm-md-marker {
+  color: var(--ink-fg-faint);
+  opacity: 0.55;
+  font-weight: 400;
+  font-style: normal;
+  transition: opacity var(--ink-transition);
+}
+
+.cm-md-marker:hover {
+  opacity: 1;
+}
+
 /* 块级标记：默认弱化，光标进入时恢复清晰 */
 .cm-md-header-mark,
 .cm-md-list-mark,

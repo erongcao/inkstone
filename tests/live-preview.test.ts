@@ -13,6 +13,7 @@
 import { describe, expect, it } from "vitest";
 import { EditorState } from "@codemirror/state";
 import { buildLivePreviewDecorations } from "@/editor/live-preview/decorations";
+import type { MarkerDisplayMode } from "@/settings/schema";
 
 interface Deco {
   from: number;
@@ -22,12 +23,12 @@ interface Deco {
 }
 
 /** 把装饰器集合摊平成可断言的数组 */
-function collect(doc: string, cursor: number): Deco[] {
+function collect(doc: string, cursor: number, mode: MarkerDisplayMode = "live"): Deco[] {
   const state = EditorState.create({
     doc,
     selection: { anchor: cursor },
   });
-  const set = buildLivePreviewDecorations(state);
+  const set = buildLivePreviewDecorations(state, mode);
   const out: Deco[] = [];
   // 注意：`RangeSet.iter()` 返回的是 RangeCursor，它**不是可迭代对象**，
   // 必须手动 next() 推进，value 为 null 表示遍历结束。
@@ -165,5 +166,56 @@ describe("Live Preview 装饰器", () => {
 
   it("普通文本不产生任何装饰器", () => {
     expect(collect("就是一段普通文字", 3)).toEqual([]);
+  });
+});
+
+describe("标记符显示策略", () => {
+  /** 取指定模式下的替换装饰（隐藏标记）区间 */
+  function replaced(doc: string, cursor: number, mode: MarkerDisplayMode): [number, number][] {
+    return collect(doc, cursor, mode)
+      .filter((d) => d.kind === "replace")
+      .map((d) => [d.from, d.to] as [number, number]);
+  }
+
+  it("弱化模式下标记不隐藏，只加弱化 class", () => {
+    const doc = "**粗体** 后";
+    // 没有任何替换装饰 → 标记始终可见
+    expect(replaced(doc, doc.length, "dimmed")).toEqual([]);
+    // 但标记区间被标记上了 cm-md-marker
+    const dimmed = collect(doc, doc.length, "dimmed").filter(
+      (d) => d.cls === "cm-md-marker",
+    );
+    expect(dimmed).toHaveLength(2);
+    expect(dimmed[0].from).toBe(0);
+    expect(dimmed[0].to).toBe(2);
+  });
+
+  it("弱化模式下正文照样渲染（加粗样式保留）", () => {
+    const doc = "**粗体** 后";
+    expect(marksWithClass(doc, doc.length, "cm-md-strong").length).toBe(1);
+  });
+
+  it("弱化模式下光标位置不影响标记显隐", () => {
+    const doc = "**粗体**";
+    // 光标在结构内
+    expect(collect(doc, 3, "dimmed").filter((d) => d.cls === "cm-md-marker")).toHaveLength(2);
+    // 光标在结构外
+    expect(collect(doc, 0, "dimmed").filter((d) => d.cls === "cm-md-marker")).toHaveLength(2);
+  });
+
+  it("弱化模式同样处理链接的括号与网址", () => {
+    const doc = "[文字](https://a.com) 后";
+    const dimmed = collect(doc, doc.length, "dimmed").filter((d) => d.cls === "cm-md-marker");
+    // `[`、`]`、`(`、`)`、URL —— 5 段
+    expect(dimmed).toHaveLength(5);
+    expect(replaced(doc, doc.length, "dimmed")).toEqual([]);
+  });
+
+  it("实时预览模式仍然隐藏标记（回归保护）", () => {
+    const doc = "**粗体** 后";
+    expect(replaced(doc, doc.length, "live")).toEqual([
+      [0, 2],
+      [4, 6],
+    ]);
   });
 });

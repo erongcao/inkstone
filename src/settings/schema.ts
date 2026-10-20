@@ -17,6 +17,25 @@ export const FONT_SIZE_PRESETS = [13, 14, 15, 16, 17, 18, 20, 22] as const;
 /** 写作区宽度档位（rem） */
 export const CONTENT_WIDTH_PRESETS = [36, 40, 44, 46, 50, 56, 64, 72] as const;
 
+/**
+ * 行内标记符的显示策略。
+ *
+ * 三种策略对应三个标杆产品（调研见 docs/editors-comparison.md）：
+ *   - `live`   标记隐藏，光标进入才显露 —— Typora
+ *   - `dimmed` 标记始终可见但弱化着色 —— Ulysses
+ *   - `source` 纯源码，不做渲染 —— Typora 源码模式 / Bear 通用模式
+ *
+ * 三者共用同一份文档、同一套装饰器管线，切换只改装饰器策略，
+ * 所以光标、滚动、撤销栈天然保持。
+ */
+export type MarkerDisplayMode = "live" | "dimmed" | "source";
+
+export const MARKER_DISPLAY_MODES: { value: MarkerDisplayMode; label: string }[] = [
+  { value: "live", label: "实时预览（Typora 式，标记隐藏）" },
+  { value: "dimmed", label: "弱化显示（Ulysses 式，标记可见）" },
+  { value: "source", label: "源码模式（纯 Markdown）" },
+];
+
 export interface AppearanceSettings {
   /** 主题 ID，对应 theme/themes.ts 的注册表 */
   theme: string;
@@ -41,6 +60,8 @@ export interface AppearanceSettings {
 }
 
 export interface EditorSettings {
+  /** 行内标记符的显示策略 */
+  markerDisplay: MarkerDisplayMode;
   /** 自动配对符号：*, _, `, ~, =, $, ^ 等 */
   autoPair: boolean;
   /** 智能标点：自动引号/破折号 */
@@ -138,6 +159,7 @@ export const DEFAULT_SETTINGS: Settings = {
     followSystemAppearance: true,
   },
   editor: {
+    markerDisplay: "live",
     autoPair: true,
     smartPunctuation: false,
     strictMode: false,

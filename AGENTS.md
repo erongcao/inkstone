@@ -68,6 +68,46 @@ CM6 天然满足。其余能力两者都能做到。**因此编辑内核改用 C
 
 代价：CM6 没有富文本语义，需要我们自己实现「渲染层」（公式、图表、表格），这是 M2/M3 的工作量。
 
+### 外部验证：标杆编辑器都是这条路（2026-10-20 调研）
+
+完整调研见 `docs/editors-comparison.md`。**四家标杆中，没有一家的文档模型是「富文本节点里不含标记符」**：
+
+| 产品 | 文档模型 | 标记符 | 隐藏机制 | 渲染粒度 |
+| --- | --- | --- | --- | --- |
+| **Typora** | 真实文本层 + AST | 真实可编辑 | `.md-meta`/`.md-content` 双元素 + `.md-expand` class 切换 | **段落级 AST + 增量渲染** |
+| **Ulysses** | 纯文本（Markdown XL） | **始终可见**，只弱化着色 | 不隐藏 | 整篇语法高亮 |
+| **Bear** | 纯文本 | 隐藏，「通用模式」可切回 | NSTextView 自定义 | 整篇 |
+| **Milkup** | ProseMirror 树 + `syntax_marker` **文本节点** | 真实文本节点 | CSS `font-size: 0` | 整篇 + 两级缓存 |
+| **Inkstone** | 纯 Markdown 文本 | 真实可编辑 | `Decoration.replace` 零宽 widget | 全文 lezer |
+
+**最有参考价值的是 Milkup**（`github.com/Auto-Plugin/milkup`）：它的 v1 版本**从 Milkdown 迁到了自研
+ProseMirror 内核**，理由和我们完全一样——mark 不含标记符文本，做不到直接编辑 `**`。
+但它为解决这件事付出的代价是：自研 1200 行 Parser + 自研 Serializer + 文档重建（源码模式要
+`replaceWith` 整篇替换）+ `syntax-detector`/`syntax-fixer` 配对插件。**CM6 路线把这一整套成本降为 0。**
+
+> Milkup 用 CSS `font-size: 0` 隐藏标记，代价是光标进不去标记区间，所以必须额外写插件处理
+> 「用户在渲染模式下输入 `**`」的场景。我们用 `Decoration.replace` + 零宽 widget，
+> 光标能落在标记区间内——**从根上避开了这个坑**（M1 spike 实测确认）。
+
+**Typora 的两个可借鉴点**（已采纳或列入待办）：
+1. **段落级 AST + 只重渲染变动节点**（见 M1 待办「lezer 增量解析」）
+2. **Typora 源码模式用的是 CodeMirror 5**（官方支持页原文："Typora uses CodeMirror for
+   syntax highlighting in code fences"）—— 说明「CodeMirror 作为编辑器内核」在本品类里被验证过
+
+## 标记符显示策略：三种（2026-10-20）
+
+对应三个标杆产品，实现上共用同一份文档、同一套装饰器管线，切换只改装饰器策略：
+
+| 策略 | 行为 | 对标 | 设置项 |
+| --- | --- | --- | --- |
+| `live` | 标记隐藏，光标进入才显露 | Typora（默认） | `editor.markerDisplay` |
+| `dimmed` | 标记始终可见但弱化着色，内容照样渲染 | Ulysses | 同上 |
+| `source` | 纯 Markdown 原文，无任何装饰 | Typora 源码模式 / Bear 通用模式 | 同上 |
+
+> **为什么三种都要有**：Ulysses 拿了 Apple Design Award，它的「标记符不隐藏、只弱化」
+> 是一条被验证过的产品路线，且实现成本极低（`Decoration.replace` 换成一个 `Decoration.mark`）。
+> Bear 的「通用模式」也证明「同一份文档切标记符显示策略」是可行交互。
+
 ## 代码约定
 
 - **注释用中文**，解释「为什么」而不是「做了什么」
@@ -175,4 +215,5 @@ M1 剩余待办：
 
 - 中文输入法的**组字过程**（拼音候选框）未能用合成事件验证，需要人工在真机上试
 - lezer **增量解析**（`TreeEditor`）未接，目前每次击键全量重解析；大文档下需要优化
+  （Typora 的做法是「段落级 AST + 只重渲染变动节点」，见 `docs/editors-comparison.md`）
 - 表格、公式、图表的渲染层尚未实现

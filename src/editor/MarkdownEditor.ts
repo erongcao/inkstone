@@ -18,13 +18,16 @@ import {
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import { languages } from "@codemirror/language-data";
-import { livePreview, setLivePreviewMode } from "./live-preview";
+import { livePreview, setDisplayModeOf } from "./live-preview";
+import type { MarkerDisplayMode } from "@/settings/schema";
 
 export interface MarkdownEditorOptions {
   /** 初始内容 */
   doc?: string;
   /** 父容器 */
   parent: HTMLElement;
+  /** 初始标记符显示策略 */
+  displayMode?: MarkerDisplayMode;
   /** 内容变化回调 */
   onChange?: (value: string) => void;
   /** 选区变化回调 */
@@ -97,8 +100,8 @@ export interface MarkdownEditorHandle {
   setValue(value: string): void;
   /** 聚焦编辑器 */
   focus(): void;
-  /** 切换实时预览 */
-  setLivePreview(enabled: boolean): void;
+  /** 切换标记符显示策略 */
+  setDisplayMode(mode: MarkerDisplayMode): void;
   /** 销毁编辑器 */
   destroy(): void;
   /** 底层视图（高级用法：查找替换面板、滚动定位等） */
@@ -118,6 +121,12 @@ export function createMarkdownEditor(
     parent: options.parent,
   });
 
+  // StateField 没有「初始值」配置项，只能在创建后派发一次 effect 设置。
+  // 这条 effect 不会进撤销栈（它不是 change），所以不会污染用户的 ⌘Z。
+  if (options.displayMode && options.displayMode !== "live") {
+    setDisplayModeOf(view, options.displayMode);
+  }
+
   return {
     getValue: () => view.state.doc.toString(),
     setValue: (value: string) => {
@@ -129,7 +138,7 @@ export function createMarkdownEditor(
       });
     },
     focus: () => view.focus(),
-    setLivePreview: (enabled: boolean) => setLivePreviewMode(view, enabled),
+    setDisplayMode: (mode: MarkerDisplayMode) => setDisplayModeOf(view, mode),
     destroy: () => view.destroy(),
     view,
   };

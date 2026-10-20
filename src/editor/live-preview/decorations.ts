@@ -17,6 +17,7 @@ import { Decoration, WidgetType, type DecorationSet } from "@codemirror/view";
 import type { EditorState, Range } from "@codemirror/state";
 import type { SyntaxNode } from "@lezer/common";
 import { parseSyntax, INLINE_MARKERS, BLOCK_MARKERS, HEADING_CLASSES } from "./syntax";
+import type { MarkerDisplayMode } from "@/settings/schema";
 
 /**
  * 零宽占位 widget：把被隐藏的标记区间替换成它。
@@ -155,8 +156,16 @@ function analyze(
 
 /**
  * 生成 Live Preview 装饰器集合。
+ *
+ * @param state 编辑器状态
+ * @param mode  标记符显示策略：
+ *   - `live`   标记隐藏（零宽 widget 顶替），光标进入该结构才显露
+ *   - `dimmed` 标记始终可见，但弱化着色（Ulysses 式）
  */
-export function buildLivePreviewDecorations(state: EditorState): DecorationSet {
+export function buildLivePreviewDecorations(
+  state: EditorState,
+  mode: MarkerDisplayMode = "live",
+): DecorationSet {
   const text = state.doc.toString();
   const tree = parseSyntax(text);
   // 注意：`Decoration.mark(...).range(a, b)` 返回的是 `Range<Decoration>`（带 from/to 的区间），
@@ -187,6 +196,18 @@ export function buildLivePreviewDecorations(state: EditorState): DecorationSet {
           Decoration.mark({ class: item.styleClass }).range(range.from, range.to),
         );
       }
+    }
+
+    if (mode === "dimmed") {
+      // Ulysses 式：标记不隐藏，只弱化着色；内容照样渲染
+      for (const range of item.hideRanges) {
+        if (range.to > range.from) {
+          decorations.push(
+            Decoration.mark({ class: "cm-md-marker" }).range(range.from, range.to),
+          );
+        }
+      }
+      continue;
     }
 
     // 光标在该结构内 → 标记保持可见可编辑；否则隐藏

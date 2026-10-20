@@ -10,6 +10,7 @@ import { useSettings, resetSettings } from "@/settings/store";
 import {
   CONTENT_WIDTH_PRESETS,
   FONT_SIZE_PRESETS,
+  MARKER_DISPLAY_MODES,
   SETTINGS_SECTIONS,
   type DeepPartial,
   type Settings,
@@ -219,7 +220,11 @@ function AppearanceSection({ settings, patch }: { settings: Settings; patch: Pat
 
 function EditorSection({ settings, patch }: { settings: Settings; patch: PatchFn }) {
   const e = settings.editor;
-  const toggles: { key: keyof typeof e; label: string }[] = [
+  // markerDisplay 是下拉选择不是开关，单独渲染，所以这里要排除掉
+  const toggles: {
+    key: Exclude<keyof typeof e, "markerDisplay">;
+    label: string;
+  }[] = [
     { key: "autoPair", label: "自动配对符号" },
     { key: "smartPunctuation", label: "智能标点" },
     { key: "strictMode", label: "严格模式（严格 CommonMark）" },
@@ -233,6 +238,23 @@ function EditorSection({ settings, patch }: { settings: Settings; patch: PatchFn
   return (
     <section className="settings-group">
       <h3>编辑</h3>
+
+      <label className="field">
+        <span>标记符显示</span>
+        <select
+          value={e.markerDisplay}
+          onChange={(ev) =>
+            patch("editor", { markerDisplay: ev.target.value as typeof e.markerDisplay })
+          }
+        >
+          {MARKER_DISPLAY_MODES.map((mode) => (
+            <option key={mode.value} value={mode.value}>
+              {mode.label}
+            </option>
+          ))}
+        </select>
+      </label>
+
       {toggles.map(({ key, label }) => (
         <label key={key} className="field field--inline">
           <span>{label}</span>

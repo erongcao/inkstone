@@ -157,6 +157,37 @@
 **已知代价**：CM6 没有富文本语义，表格 / 公式 / 图表 / 脚注编号的渲染层要自己实现，
 这是 M2 的工作量（Milkdown 本来白送一部分）。但换来的是「标记符可编辑 + 模式切换零漂移」这两条硬需求。
 
+#### 外部验证：标杆编辑器的实现（2026-10-20 补充调研）
+
+完整报告见 **`docs/editors-comparison.md`**。核心结论：
+
+**四家标杆中，没有一家的文档模型是「富文本节点里不含标记符」。**
+
+| 产品 | 文档模型 | 标记符 | 隐藏机制 | 渲染粒度 | 技术栈 |
+|---|---|---|---|---|---|
+| **Typora** | 真实文本层 + AST | 真实可编辑 | `.md-meta`/`.md-content` 双元素 + `.md-expand` class 切换 | **段落级 AST + 增量** | Electron + 自研；源码模式/代码块用 **CodeMirror 5** |
+| **Ulysses** | 纯文本（Markdown XL） | **始终可见**，只弱化着色 | 不隐藏 | 整篇 | 原生 macOS/iOS（TextKit 系） |
+| **Bear** | 纯文本 | 隐藏，「通用模式」可切回 | NSTextView 自定义 | 整篇 | 原生 macOS/iOS |
+| **Milkup** | ProseMirror 树 + `syntax_marker` **文本节点** | 真实文本节点 | CSS `font-size: 0` | 整篇 + 两级缓存 | 自研 ProseMirror 内核 |
+| **Inkstone** | 纯 Markdown 文本 | 真实可编辑 | `Decoration.replace` 零宽 widget | 全文 lezer | Tauri 2 + CM6 |
+
+**最有说服力的一条**：开源项目 **Milkup**（`github.com/Auto-Plugin/milkup`）的 v1 版本
+**从 Milkdown 迁到了自研 ProseMirror 内核**，理由和我们完全一致——mark 不含标记符文本，
+做不到直接编辑 `**`。它为解决这件事付出的代价是：自研 1200 行 Parser + 自研 Serializer +
+源码模式整篇文档重建 + `syntax-detector`/`syntax-fixer` 配对插件。
+**CM6 路线把这一整套成本降为 0。**
+
+**Typora 官方文档还证实**：Typora 的源码模式与代码块高亮用的就是 **CodeMirror**
+（官方支持页原文："Typora uses CodeMirror for syntax highlighting in code fences"）。
+说明「CodeMirror 作为编辑器内核」在本品类里是被验证过的。
+
+#### 从调研中采纳的两个改进点（已实施）
+
+| # | 改进点 | 来源 | 状态 |
+|---|---|---|---|
+| A | **三种标记符显示策略**：`live`（Typora，标记隐藏）/ `dimmed`（Ulysses，标记弱化可见）/ `source`（纯源码） | Ulysses + Bear | ✅ 已实施 |
+| B | **段落级增量渲染** | Typora（段落级 AST）+ Milkup（两级缓存） | ⏳ M1 待办：lezer 增量解析（`TreeEditor`）+ 装饰器按可见区缓存 |
+
 #### 保留的 Milkdown 结论
 
 - Milkdown 迭代快、API 会变 → 若将来要用，**只依赖它的插件层 API**

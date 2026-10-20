@@ -10,6 +10,11 @@
  *   1. 源码 ↔ 实时模式切换 = 同一个编辑器切装饰器 → 光标、滚动、撤销栈天然保持
  *   2. 标记符是真实文本 → 可以像 Typora 一样直接编辑 `**`
  *   3. 中文输入法由 CM6 的成熟文本编辑逻辑处理，不需要自己操心
+ *
+ * 三种显示策略（调研依据见 docs/editors-comparison.md）：
+ *   - `live`   标记隐藏，光标进入才显露（Typora）
+ *   - `dimmed` 标记始终可见但弱化着色（Ulysses）
+ *   - `source` 纯源码，不做渲染（Typora 源码模式 / Bear 通用模式）
  */
 
 import {
@@ -26,16 +31,17 @@ import {
   type Extension,
 } from "@codemirror/state";
 import { buildLivePreviewDecorations } from "./decorations";
+import type { MarkerDisplayMode } from "@/settings/schema";
 
-/** 切换「实时预览」开关 */
-export const setLivePreview = StateEffect.define<boolean>();
+/** 切换标记符显示策略 */
+export const setDisplayMode = StateEffect.define<MarkerDisplayMode>();
 
-/** 是否处于实时预览模式 */
-const livePreviewEnabled = StateField.define<boolean>({
-  create: () => true,
+/** 当前显示策略（存在 state 里，切换是事务的一部分） */
+const displayModeField = StateField.define<MarkerDisplayMode>({
+  create: () => "live",
   update(value, tr) {
     for (const effect of tr.effects) {
-      if (effect.is(setLivePreview)) {
+      if (effect.is(setDisplayMode)) {
         return effect.value;
       }
     }
@@ -53,14 +59,13 @@ const livePreviewEnabled = StateField.define<boolean>({
  *   而装饰器真正依赖的是「文档内容 + 光标位置」，这两个每次击键都在变，
  *   却不是任何一个 StateField。
  *
- *   如果把依赖写成 `livePreviewEnabled`（只在切换模式时变），
+ *   如果把依赖写成「是否实时预览」（只在切换模式时变），
  *   装饰器就只会在初始化时算一次，之后再也不更新——这是实测踩过的坑。
  *
  *   ViewPlugin 的 `update()` 则由 CM6 在**每个事务**后调用，
  *   我们在这里显式决定何时重算，行为最清晰、也不依赖 CM6 的依赖追踪细节。
  */
 class LivePreviewPlugin {
-  /** 注意类型是 DecorationSet（= RangeSet<Decoration>），不是单个 Decoration */
   decorations: DecorationSet;
 
   constructor(view: EditorView) {
@@ -77,8 +82,9 @@ class LivePreviewPlugin {
 
 /** 根据当前状态算出装饰器集合；源码模式返回空集 */
 function computeDecorations(state: EditorState): DecorationSet {
-  if (!state.field(livePreviewEnabled)) return Decoration.none;
-  return buildLivePreviewDecorations(state);
+  const mode = state.field(displayModeField);
+  if (mode === "source") return Decoration.none;
+  return buildLivePreviewDecorations(state, mode);
 }
 
 const livePreviewPlugin = ViewPlugin.fromClass(LivePreviewPlugin, {
@@ -87,12 +93,16 @@ const livePreviewPlugin = ViewPlugin.fromClass(LivePreviewPlugin, {
 
 /**
  * Live Preview 扩展。
+ *
+ * 初值不通过 StateField 传入（StateField 没有 init 配置项），
+ * 而是由调用方在创建编辑器后派发一次 effect 设置——
+ * 见 `createMarkdownEditor` 里的 `initialDisplayMode`。
  */
 export function livePreview(): Extension {
-  return [livePreviewEnabled, livePreviewPlugin];
+  return [displayModeField, livePreviewPlugin];
 }
 
-/** 编程式切换实时预览 */
-export function setLivePreviewMode(view: EditorView, enabled: boolean): void {
-  view.dispatch({ effects: setLivePreview.of(enabled) });
+/** 编程式切换显示策略 */
+export function setDisplayModeOf(view: EditorView, mode: MarkerDisplayMode): void {
+  view.dispatch({ effects: setDisplayMode.of(mode) });
 }
