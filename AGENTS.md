@@ -44,7 +44,7 @@ Inkstone（砚）是一个**开源 Markdown 编辑器**，对标 Typora 的 Live
 
 | 层 | 选型 | 备注 |
 | --- | --- | --- |
-| 外壳 | Tauri 2 | 实测应用包 3.70 MiB；Electron 方案约 200 MB，前端代码可复用但包体代价大 |
+| 外壳 | Tauri 2 | 实测应用包 4.24 MiB（CM6 接入后）；Electron 方案约 200 MB，前端代码可复用但包体代价大 |
 | 编辑内核 | **CodeMirror 6** | M1 实测后从 Milkdown 改选，理由见下方「M1 选型结论」 |
 | 语义解析 | remark / unified / mdast | 渲染、导出、大纲、脚注编号的唯一来源 |
 | 编辑视图布局 | lezer / @lezer/markdown | 增量快 10–15 倍，只回答「标记在哪」 |
