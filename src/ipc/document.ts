@@ -37,6 +37,7 @@ type Backend = {
   saveFile(path: string, content: string): Promise<void>;
   saveFileAs(content: string): Promise<string | null>;
   setTitle(title: string): Promise<void>;
+  readFile(path: string): Promise<string>;
 };
 
 const isTauri = (): boolean =>
@@ -56,6 +57,9 @@ const browserBackend: Backend = {
   async setTitle() {
     /* 浏览器降级模式没有窗口标题 */
   },
+  async readFile() {
+    return "";
+  },
 };
 
 const tauriBackend: Backend = {
@@ -74,6 +78,10 @@ const tauriBackend: Backend = {
   async setTitle(title) {
     const { invoke } = await import("@tauri-apps/api/core");
     await invoke("set_document_title", { title });
+  },
+  async readFile(path) {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return await invoke<string>("read_document", { path });
   },
 };
 
@@ -131,6 +139,13 @@ export async function openDocument(): Promise<void> {
   await getBackend().setTitle(state.title);
 }
 
+/** 直接打开指定路径（用于「从 Finder 双击打开」） */
+export async function openDocumentAt(path: string): Promise<void> {
+  const content = await getBackend().readFile(path);
+  setState({ path, content, dirty: false, title: titleFromPath(path) });
+  await getBackend().setTitle(state.title);
+}
+
 export async function saveDocument(): Promise<void> {
   if (!state.path) return;
   await getBackend().saveFile(state.path, state.content);
@@ -150,10 +165,7 @@ export function newDocument(): void {
 }
 
 export function setDocumentContent(content: string): void {
-  setState({
-    content,
-    dirty: state.path === null ? state.content !== content : state.content !== content,
-  });
+  setState({ content, dirty: state.content !== content });
 }
 
 export function useDocument() {

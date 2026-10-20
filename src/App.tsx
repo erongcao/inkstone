@@ -8,7 +8,7 @@
 import { useEffect, useState } from "react";
 import { useThemeRuntime } from "@/theme/useThemeRuntime";
 import { initMenuBridge, onMenuAction } from "@/ipc/menu";
-import { useDocument } from "@/ipc/document";
+import { openDocumentAt, useDocument } from "@/ipc/document";
 import { useSettings } from "@/settings/store";
 import { Sidebar } from "@/views/Sidebar";
 import { EditorSurface } from "@/views/EditorSurface";
@@ -27,6 +27,20 @@ export default function App() {
   // 挂载原生菜单事件桥
   useEffect(() => {
     void initMenuBridge();
+  }, []);
+
+  // 从 Finder / 命令行打开文件
+  useEffect(() => {
+    if (!("__TAURI_INTERNALS__" in window)) return;
+    let unlisten: (() => void) | undefined;
+    void import("@tauri-apps/api/event").then(({ listen }) =>
+      listen<string>("document://open", (event) => {
+        void openDocumentAt(event.payload);
+      }).then((fn) => {
+        unlisten = fn;
+      }),
+    );
+    return () => unlisten?.();
   }, []);
 
   // 菜单动作 → 具体行为

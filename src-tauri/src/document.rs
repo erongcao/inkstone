@@ -41,6 +41,9 @@ pub async fn open_document(app: AppHandle) -> Result<Option<OpenedDocument>, Str
         .map_err(|e| format!("无法解析文件路径: {e}"))?;
     let content = read_text_file(&path).await?;
 
+    // 记入最近文件（失败不影响打开流程）
+    let _ = crate::recent::record(&app, &path);
+
     Ok(Some(OpenedDocument {
         path: path.to_string_lossy().to_string(),
         content,
@@ -86,6 +89,12 @@ pub fn set_document_title(app: AppHandle, title: String) -> Result<(), String> {
         .get_webview_window("main")
         .ok_or_else(|| "找不到主窗口".to_string())?;
     window.set_title(&title).map_err(|e| e.to_string())
+}
+
+/// 读取指定路径的文件内容（用于「从 Finder 双击打开」）
+#[tauri::command]
+pub async fn read_document(path: String) -> Result<String, String> {
+    read_text_file(&PathBuf::from(path)).await
 }
 
 /// 读取文件内容，保留 BOM 语义

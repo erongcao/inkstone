@@ -17,6 +17,25 @@
 2. **不丢失用户的字节**。任何"美化"操作（格式化、转换）默认关闭；保存时不动用户没碰过的字符。
 3. **快**。冷启动 < 1.5s，输入延迟 < 16ms（60fps），空闲内存 < 150MB。
 
+### 当前进度：M0 已完成（2026-10-20）
+
+| 交付项 | 状态 | 实测 |
+| --- | --- | --- |
+| Tauri 2 + React 19 + Vite 8 + TS 5.9 工程骨架 | ✅ | 应用包 **3.70 MiB**（Electron 方案约 200 MB） |
+| 主题系统（CSS 变量令牌层 + 亮暗双模式 + 用户自定义 CSS） | ✅ | 3 套内置主题 |
+| 设置面板（外观/编辑/Markdown/导出/通用，深合并持久化） | ✅ | 组件测试覆盖 |
+| Markdown 解析层（remark + GFM + YAML + 数学 + 脚注） | ✅ | mdast 为唯一语义来源 |
+| round-trip 无损性测试基线 | ✅ | 5 份语料 × 3 断言，**全部通过** |
+| macOS 原生菜单栏（含应用菜单、快捷键、事件转发） | ✅ | Rust `on_menu_event` → 前端 |
+| 文件打开/保存（原子写入）/另存为 | ✅ | 写临时文件 + rename |
+| `.md` 文件关联 + 从 Finder 打开 | ✅ | Info.plist `CFBundleDocumentTypes` 已注册，端到端验证通过 |
+| 最近文件记录（M3 前置） | ✅ | `recent-files.txt` 写入验证通过 |
+| 依赖许可证白名单扫描 | ✅ | 246 条依赖零违规 |
+| CI（lint/test/build/打包 × 4 平台） | ✅ | `.github/workflows/ci.yml` |
+| 组件交互测试（jsdom） | ✅ | 30 个测试全绿 |
+
+**实测数据**：空闲内存 102 MB（目标 < 150 MB）；release 构建 51 s；应用包 3.70 MiB。
+
 ---
 
 ## 1. 为什么现在做 / 为什么是你
@@ -324,7 +343,7 @@ GitHub Alerts / 脚注 / RTL / 插件系统 / 主题市场 / 图片图床 / EPUB
 | R2 | **中文输入法在标记符边界跳光标** | 🔴 高 | 专门写 IME 测试用例；优先用成熟方案的 IME 处理策略（`compositionstart/end` 期间冻结 decoration） |
 | R3 | **单人维护者的持续性** | 🔴 高 | 架构上把"外壳"与"内核"解耦，降低任何一块的退出成本；尽早开源、尽早招人 |
 | R4 | **依赖许可证污染**（引入 AGPL 库） | 🟡 中 | 建立依赖许可证白名单 + CI 自动扫描；只用 MIT/Apache/BSD |
-| R5 | **磁盘空间**（本机仅剩 49GB，Rust 工具链 + target 目录可能吃掉 10GB） | 🟡 中 | **开工前先清理**（见 §9）；`CARGO_TARGET_DIR` 指向专用位置；CI 用缓存而非本地全量构建 |
+| R5 | **磁盘空间** | 🟢 低（已缓解） | **实测：清理 15 GB 后剩余 64 GB**。已清 uv(7.4G)/pip(5.9G)/npm(3.5G)/Homebrew(1.4G) 缓存；模型缓存（modelscope 63G / lm-studio 43G / huggingface 20G）属用户资产，**未动**，需要时用户可自行清理 |
 | R6 | **核心依赖上游停更** | 🟢 低（已下调） | **实测：ProseMirror 主仓库虽 archived（2026-04-01），但 npm 包仍在发版**（view 1.42.6 / 2026-09-25，model 1.25.12 / 2026-09-21）；Milkdown v7.22.3 于 2026-10-10 发布。**锁版本 + 核心层薄封装** |
 | R7 | **Markdown round-trip 有损**（导出后原文变形，用户发现后失去信任） | 🟡 中 | round-trip 测试语料库；默认关闭所有"美化"行为 |
 | R8 | **性能随文档规模劣化** | 🟢 低 | 大文档走"分块渲染 + 虚拟滚动"；先测再优化 |
@@ -360,12 +379,23 @@ GitHub Alerts / 脚注 / RTL / 插件系统 / 主题市场 / 图片图床 / EPUB
 
 ## 9. 开工前检查清单
 
-- [ ] **清理磁盘**（当前仅剩 49GB，Tauri 构建需要 ≥ 10GB 余量）
-      建议：`brew cleanup` + 清 Xcode 缓存 `rm -rf ~/Library/Developer/Xcode/DerivedData/*` + 清理 `~/.cargo/registry`
-- [ ] **安装 Rust**：`brew install rustup && rustup-init`（或 rustup 官网脚本），随后 `rustup default stable`
-- [ ] **初始化仓库**：`~/Documents/GitHub/inkstone`，`git init`，MIT 协议，`.gitignore`（`node_modules` / `target` / `dist` / `.DS_Store`）
-- [ ] **建立 round-trip 测试语料库**：收集 200+ 真实 Markdown 文件（含表格、脚注、公式、图表、YAML、嵌套列表）
-- [ ] **依赖许可证白名单 CI**：自动扫描 `package.json` / `Cargo.toml` / `Cargo.lock`，出现 GPL/AGPL 即失败
+- [x] **清理磁盘** —— 49 GB → 64 GB（已清 uv / pip / npm / Homebrew 缓存，共约 15 GB）
+- [x] **安装 Rust** —— rustup 1.29.1 + stable rustc 1.99.1，PATH 已写入 `~/.zshrc` 与 `~/.bash_profile`
+- [x] **初始化仓库** —— `~/Documents/GitHub/inkstone`，MIT 协议，`.gitignore` 完整
+- [x] **round-trip 测试语料库** —— 5 份真实 Markdown 样本，覆盖表格/任务列表/数学/mermaid/脚注/YAML/边界情况
+- [x] **依赖许可证白名单 CI** —— 自动扫描 `package.json` / `Cargo.lock` / cargo registry 缓存
+- [ ] **M1 前置**：把 `EditorSurface` 的 textarea 替换为 Milkdown 内核，接入 Live Preview 插件
+
+### 本机环境快照（2026-10-20）
+
+| 项 | 值 |
+| --- | --- |
+| Node / pnpm | v26.8.2 / 10.7.1 |
+| Rust | rustc 1.99.1 (stable, aarch64-apple-darwin) |
+| Tauri | CLI 2.12.3，crate tauri 2.12.4 |
+| React / Vite / TS | 19.3.1 / 8.3.4 / 5.9.3（TS 7.0.2 尚未适配 typescript-eslint 8.72，故锁 5.9） |
+| pandoc | 3.8（导出桥立即可用） |
+| 磁盘可用 | 64 GB |
 
 ---
 
