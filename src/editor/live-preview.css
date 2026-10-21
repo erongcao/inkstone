@@ -312,3 +312,40 @@
   color: var(--ink-accent);
   text-decoration: underline;
 }
+
+/* ═══════════════════════════════════════════════════════════
+   块级渲染：数学公式
+   ═══════════════════════════════════════════════════════════ */
+
+.cm-md-math {
+  margin: 0.8em 0;
+  padding: 10px 14px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  color: var(--ink-fg);
+  /* 公式内部不要继承等宽字体——KaTeX 自己按字体度量排版，
+     父级的 font-family 会干扰分数线、上下标的基线对齐 */
+  font-family: KaTeX_Main, "Times New Roman", serif;
+  line-height: normal;
+  text-align: center;
+}
+
+/*
+ * KaTeX 的错误样式。
+ *
+ * KaTeX 用 `throwOnError: false` 把语法错误渲染成
+ * `<span class="katex-error" title="...">` 并内联一个 `color:#cc0000`。
+ * 内联样式优先级高于我们的 CSS 变量，所以这里必须 `!important` 才能接管，
+ * 让错误色跟着亮/暗主题走（暗色下 #cc0000 太暗，看不清）。
+ */
+.cm-md-math .katex-error {
+  color: var(--ink-danger) !important;
+  background-color: var(--ink-danger-bg);
+  border-radius: 3px;
+  padding: 0 3px;
+}
+
+/* 公式块里的错误提示不该把整块撑出横向滚动条 */
+.cm-md-math .katex-error:only-child {
+  display: inline-block;
+}

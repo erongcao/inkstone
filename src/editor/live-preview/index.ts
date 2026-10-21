@@ -17,12 +17,14 @@
  *   - `source` 纯源码，不做渲染（Typora 源码模式 / Bear 通用模式）
  */
 
-import { Decoration, EditorView } from "@codemirror/view";
+import { Decoration, EditorView, ViewPlugin, type ViewUpdate } from "@codemirror/view";
 import type { Extension } from "@codemirror/state";
 import { buildLivePreviewDecorations } from "./decorations";
-import { livePreviewField, setDisplayMode } from "./state";
+import { livePreviewField, setDisplayMode, refreshRendering } from "./state";
 import { registerBlockRenderer } from "../render/registry";
 import { codeBlockRenderer } from "../render/code-block";
+import { mathBlockRenderer } from "../render/math-block";
+import { onMathRendererReady } from "../render/math-loader";
 import type { MarkerDisplayMode } from "@/settings/schema";
 
 /**
@@ -48,6 +50,38 @@ const livePreviewDecorations = EditorView.decorations.from(
 );
 
 /**
+ * KaTeX 按需加载完成 → 强制装饰器重算。
+ *
+ * 问题的形状：文档一个字没变，但公式块的 DOM 必须从「源码」换成「渲染后」。
+ * 而 `livePreviewField.update` 在「无文档变更 + 光标没动 + 模式没变」时会
+ * `return value` 短路掉，字段值身份不变，CM6 就不会重跑装饰器映射
+ *（实测表现：公式一直停在源码形态，直到用户敲下一个字符才刷新）。
+ * 所以只能用一个显式 effect 打破短路（见 `state.ts` 的 `refreshRendering`）。
+ *
+ * 用 ViewPlugin 而不是模块级变量：这里需要拿到 `EditorView` 才能 dispatch，
+ * 而扩展工厂返回的是 Extension，拿不到实例。
+ */
+const mathReadinessWatcher = ViewPlugin.fromClass(
+  class {
+    private readonly unsubscribe: () => void;
+
+    constructor(view: EditorView) {
+      this.unsubscribe = onMathRendererReady(() => {
+        view.dispatch({ effects: refreshRendering.of(null) });
+      });
+    }
+
+    update(_update: ViewUpdate): void {
+      /* 本插件不关心更新，只在构造时订阅一次 */
+    }
+
+    destroy(): void {
+      this.unsubscribe();
+    }
+  },
+);
+
+/**
  * Live Preview 扩展。
  *
  * 初值不通过 StateField 传入（StateField 没有 init 配置项），
@@ -57,10 +91,12 @@ const livePreviewDecorations = EditorView.decorations.from(
 export function livePreview(): Extension {
   // 注册块级渲染器（幂等，重复调用会覆盖）
   registerBlockRenderer(codeBlockRenderer);
+  registerBlockRenderer(mathBlockRenderer);
 
   return [
     livePreviewField,
     livePreviewDecorations,
+    mathReadinessWatcher,
     // 点击渲染后的块 → 把光标移进块内 → 该块切回源码编辑
     EditorView.domEventHandlers({
       mousedown: (event, view) => {

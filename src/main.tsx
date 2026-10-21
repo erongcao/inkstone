@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import { primeHtmlRenderer } from "./parser/html-loader";
+import { primeMathRenderer } from "./editor/render/math-loader";
 import "./styles/base.css";
 
 const container = document.getElementById("root");
@@ -20,3 +21,8 @@ createRoot(container).render(
 // 让「⌘C 复制」在绝大多数时候都能带上 text/html。
 // 见 src/parser/html-loader.ts。
 primeHtmlRenderer();
+
+// 预加载 KaTeX（约 603 KB + 字体，按需加载）。
+// 公式块在 KaTeX 就绪前会显示成源码，就绪后自动切换成渲染形态
+// （见 src/editor/render/math-loader.ts 与 live-preview/state.ts 的 refreshRendering）。
+primeMathRenderer();

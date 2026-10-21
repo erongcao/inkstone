@@ -434,6 +434,79 @@ hljs 的语法也比 Prism 的 `clike` 派生方式准（TS 泛型 / 装饰器 /
 `live-preview.css` 里把 `.hljs-*` 映射到 `--ink-code-*` CSS 变量，
 亮/暗两套令牌（`tokens.css`）各给一组色值，切换主题自动跟随。
 
+## 块级公式：KaTeX（2026-10-22）
+
+### 按需加载
+
+`katex/dist/katex.mjs` 单文件 **603 KB**（raw）+ `katex.min.css` 25 KB + 字体，
+和 remark-rehype 是同一条理由（冷启动有 < 1.5s 的目标），所以沿用 `html-loader.ts` 的模式：
+`main.tsx` 启动后 `primeMathRenderer()`，`math-loader.ts` 缓存实例，
+真正 import KaTeX 的是独立的 `math-render.ts`（静态引入 KaTeX 的只有这一个文件）。
+
+**与 HTML 渲染器的一处关键不同**：`⌘C` 拿不到 HTML 渲染器只是降级，
+但公式拿不到时 `render()` 返回 null → 块级装饰器不生成 → **公式块直接显示成源码**。
+所以加载完成必须主动通知编辑器重算，见下一条。
+
+### `refreshRendering`：为什么空事务不管用
+
+`livePreviewField.update` 在「无文档变更 + 光标没动 + 模式没变」时会 `return value`，
+字段值身份不变 → CM6 认为装饰器输入没变 → **根本不重算**。
+表现是公式一直停在源码形态，直到用户敲下一个字符才刷新。
+所以必须有显式 effect 打破短路（`state.ts` 的 `refreshRendering`），
+由 `live-preview/index.ts` 里的 ViewPlugin 订阅就绪事件后 dispatch。
+（ViewPlugin 是为了拿到 `EditorView` 实例——扩展工厂只返回 Extension，拿不到。）
+
+### 定位规则：全部对着 remark-math 实测过，不要凭直觉
+
+`$$` 不在 CommonMark 里，lezer 不认识（实测 `$$\nx^2\n$$` 就是一个普通 `Paragraph`），
+所以走 `scan.ts` 行扫描。**但规则必须跟语义层对齐**（架构约束 C），
+下列几条都是用本仓库的 `parseMarkdown` 实跑出来的：
+
+| 输入 | remark-math 的判定 | 本渲染器的处理 |
+| --- | --- | --- |
+| `$$\nx^2\n$$` | `math`（块级） | 块级 ✓ |
+| `$$x^2\n$$`（开标记带内容） | `math`（块级） | 块级 ✓ |
+| 行首单行 `$$x^2$$` | `paragraph(inlineMath)` | **按 Typora 习惯当块级渲染**（见下） |
+| 行中 `结尾 $$x^2$$ 结束` | `paragraph(text, inlineMath, text)` | **不是块级** ✓ |
+| **未闭合** `$$\nx^2\n\n后面` | `math`，value = `"x^2\n\n后面"` | **一路吞到文末** ✓ |
+| 3 空格缩进的定界符 | `math` | 块级 ✓ |
+| 4 空格缩进 | `code` | 不是块级 ✓ |
+| 围栏/缩进代码块、HTML 块里的 `$$` | 不是 math | 不是块级 ✓ |
+
+两个容易踩的点：
+
+1. **未闭合的 `$$` 会吞掉整篇文档**。这看着很反直觉，但实测就是这样，
+   和围栏代码块未闭合的行为一致。必须照做，否则编辑器显示源码、导出却按公式渲染。
+2. **公共缩进会被剥掉，行内的相对缩进保留**。
+   实测 3 格缩进的 `\begin{align}` 剥成 0 格，而 `y = a &= b` 与 `z   &= c`
+   的对齐空格原样保留。所以只能剥**公共前缀**，逐行 `trimStart()` 会把 LaTeX 对齐环境彻底抹平。
+
+**已知显示层分歧**：行首单行 `$$x^2$$` 被 remark-math 判为 `inlineMath`，
+本渲染器按 Typora 习惯把它当**块级居中**显示。解析仍以 remark 为准（编辑器的单一真相源是文本），
+差异只在显示。等 HTML 导出的公式渲染（rehype-katex）落地时要复核这处是否需要收敛。
+
+行扫描的禁区用 lezer 划：lezer 认识代码块与 HTML 块（`FencedCode` / `CodeBlock` / `HTMLBlock`）、
+不认识公式，两者互补不打架。
+
+### 字体瘦身：只留 woff2
+
+`katex.min.css` 每个 `@font-face` 都列了 woff2 + woff + ttf，
+Vite 会把**被引用到的全部**字体打进产物：
+
+| 格式 | 数量 | raw | 是否会被下载 |
+| --- | --- | --- | --- |
+| woff2 | 19 | 250 KB | ✅ 浏览器只下载列表里第一个支持的格式 |
+| woff | 20 | 296 KB | ❌ 永不下载 |
+| ttf | 20 | 502 KB | ❌ 永不下载 |
+
+即 **876 KB 打进 .app 但永远用不到**。
+`vite.config.ts` 的 `woff2OnlyFonts()` 插件在 `enforce: "pre"` 阶段
+把 KaTeX CSS 里非 woff2 的 `src` 条目剔掉，`dist` 实测 3.7 MB → **2.9 MB**。
+只针对 KaTeX 的 CSS 做改写，不做通用规则——通用规则容易误伤将来真需要 ttf 回退的字体。
+
+（实测踩坑：插件的匹配正则写成 `/katex[\w-]*\.css/` 时**匹配不到 `katex.min.css`**——
+`.` 不在 `[\w-]` 里，必须写成 `[\w.-]*`。第一版就是这样白装了一次。）
+
 ## Live Preview 性能：实测数据与优化结论（2026-10-21）
 
 ### 成本分布（`scripts/bench-decorations.ts`）
@@ -636,8 +709,13 @@ M2 已完成：
 - **M2-1 块级渲染层骨架**：`src/editor/render/`，代码块已能渲染 + 点击切回源码
 - **M2-2 代码高亮**：highlight.js `lib/core` + 30 语言显式注册，
   生产产物已实证 token 正常（换库理由见上）
+- **M2-3 块级公式**：KaTeX 按需加载 + `refreshRendering` 触发重算；
+  定位规则逐条对着 remark-math 实测对齐（含「未闭合吞到文末」「剥公共缩进保相对缩进」）；
+  生产产物已实证 align 对齐环境 / 上标 / 错误标记三种形态
 
-M2 剩余待办：KaTeX 公式、Mermaid 图表、表格 + 任务列表交互、大纲面板 + 字数统计、
-斜杠菜单 / 命令面板 + 链接浮层、列表续行 / 自动编号、脚注、图片拖放、焦点模式 + Emoji。
-另：装饰器**局部重建**（段落级增量渲染）仍未做，是 M2 的性能项。
+M2 剩余待办：**行内公式**（`$…$`）、Mermaid 图表、表格 + 任务列表交互、
+大纲面板 + 字数统计、斜杠菜单 / 命令面板 + 链接浮层、列表续行 / 自动编号、
+脚注、图片拖放、焦点模式 + Emoji。
+另：装饰器**局部重建**（段落级增量渲染）仍未做，是 M2 的性能项；
+HTML 导出的公式渲染（rehype-katex）也还没接。
 

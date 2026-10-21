@@ -69,6 +69,10 @@
   --ink-code-deleted: #82071e;
   --ink-code-inserted: #116329;
 
+  /* 通用语义色：公式语法错误、危险操作确认 */
+  --ink-danger: #cf222e;
+  --ink-danger-bg: #ffebe9;
+
   --ink-quote-border: #d1d9e0;
   --ink-quote-fg: #59636e;
 
@@ -120,6 +124,10 @@
   --ink-code-regex: #7ee787;
   --ink-code-deleted: #ffdcd7;
   --ink-code-inserted: #aff5b4;
+
+  /* 通用语义色：公式语法错误、危险操作确认 */
+  --ink-danger: #ff7b72;
+  --ink-danger-bg: #490202;
 
   --ink-quote-border: #3d444d;
   --ink-quote-fg: #9198a1;

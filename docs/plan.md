@@ -618,7 +618,7 @@ CM6 的 `EditorView.inputHandler` 扩展点实现，设置项 `editor.autoPairMo
 - [ ] 表格图形化编辑（增删行列、调列宽、对齐）
 - [ ] 任务列表交互（点击勾选写回源码）
 - [x] 代码高亮（highlight.js `lib/core`，亮/暗双主题走 CSS 变量）
-- [ ] 数学公式（KaTeX）
+- [x] 块级公式 KaTeX（行内 `$…$` 仍待做）
 - [ ] Mermaid 图表
 - [ ] 焦点模式 / 打字机模式
 - [ ] Emoji 自动补全

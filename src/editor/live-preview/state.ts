@@ -25,6 +25,20 @@ import type { MarkerDisplayMode } from "@/settings/schema";
 /** 切换标记符显示策略 */
 export const setDisplayMode = StateEffect.define<MarkerDisplayMode>();
 
+/**
+ * 强制装饰器重算（不改变文档、选区或模式）。
+ *
+ * 存在的唯一理由：**块级渲染器的输出可能依赖编辑器之外的东西**。
+ * 目前是 KaTeX——它按需异步加载，加载完成那一刻文档一个字都没变，
+ * 但公式块的 DOM 必须从「源码形态」换成「渲染形态」。
+ *
+ * 为什么不能靠一个空事务：
+ *   `update` 在 `!docChanged && 光标没动 && 模式没变` 时会 `return value`，
+ *   字段值身份不变 → CM6 认为装饰器输入没变 → 根本不重算。
+ *   所以需要一个显式 effect 来打破这个短路。
+ */
+export const refreshRendering = StateEffect.define<null>();
+
 /** Live Preview 需要的全部状态 */
 export interface LivePreviewState {
   /** 当前文档的语法树（增量维护） */
@@ -59,15 +73,20 @@ export const livePreviewField = StateField.define<LivePreviewState>({
   },
 
   update: (value, tr) => {
-    // 显示策略可能被 effect 改掉
+    // 显示策略可能被 effect 改掉；重算请求也要处理
     let mode = value.mode;
+    let forced = false;
     for (const effect of tr.effects) {
       if (effect.is(setDisplayMode)) mode = effect.value;
+      if (effect.is(refreshRendering)) forced = true;
     }
 
     const cursor = tr.state.selection.main.head;
 
     if (!tr.docChanged) {
+      // 强制重算：返回**新对象**（身份变了）让 CM6 重跑装饰器映射。
+      // 注意不能在这里提前 return value，那会把请求吞掉。
+      if (forced) return { ...value, cursor, mode };
       // 只是选区或模式变了：树与片段都保持不变
       if (cursor === value.cursor && mode === value.mode) return value;
       return { ...value, cursor, mode };
