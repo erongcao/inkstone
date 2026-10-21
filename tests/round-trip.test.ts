@@ -35,6 +35,57 @@ describe("round-trip 语料库", () => {
     expect(corpusFiles.length).toBeGreaterThan(0);
   });
 
+  it("语料库规模不低于 10 份（防止被误删）", () => {
+    expect(corpusFiles.length).toBeGreaterThanOrEqual(10);
+  });
+
+  it("语料覆盖关键节点类型", () => {
+    // 把所有语料解析一遍，汇总出现过的节点类型
+    const seen = new Set<string>();
+    for (const file of corpusFiles) {
+      const source = readFileSync(join(corpusDir, file), "utf8");
+      const walk = (node: unknown): void => {
+        if (Array.isArray(node)) {
+          node.forEach(walk);
+          return;
+        }
+        if (node !== null && typeof node === "object") {
+          const obj = node as { type?: string; children?: unknown[] };
+          if (typeof obj.type === "string") seen.add(obj.type);
+          if (obj.children) walk(obj.children);
+        }
+      };
+      walk(parseMarkdown(source));
+    }
+    // 这些是 Live Preview 与渲染层依赖的关键类型，缺一个就说明语料有缺口
+    for (const type of [
+      "heading",
+      "paragraph",
+      "list",
+      "listItem",
+      "blockquote",
+      "code",
+      "inlineCode",
+      "strong",
+      "emphasis",
+      "link",
+      "image",
+      "table",
+      "tableRow",
+      "tableCell",
+      "thematicBreak",
+      "html",
+      "yaml",
+      "math",
+      "inlineMath",
+      "footnoteDefinition",
+      "footnoteReference",
+      "delete",
+    ]) {
+      expect(seen.has(type), `语料里没有出现 ${type} 节点`).toBe(true);
+    }
+  });
+
   for (const file of corpusFiles) {
     describe(file, () => {
       const source = readFileSync(join(corpusDir, file), "utf8");

@@ -25,7 +25,7 @@
 | 主题系统（CSS 变量令牌层 + 亮暗双模式 + 用户自定义 CSS） | ✅ | 3 套内置主题 |
 | 设置面板（外观/编辑/Markdown/导出/通用，深合并持久化） | ✅ | 组件测试覆盖 |
 | Markdown 解析层（remark + GFM + YAML + 数学 + 脚注） | ✅ | mdast 为唯一语义来源 |
-| round-trip 无损性测试基线 | ✅ | 5 份语料 × 3 断言，**全部通过** |
+| round-trip 无损性测试基线 | ✅ | **13 份语料** × 3 断言 + 2 条语料库护栏，**全部通过** |
 | macOS 原生菜单栏（含应用菜单、快捷键、事件转发） | ✅ | Rust `on_menu_event` → 前端 |
 | 文件打开/保存（原子写入）/另存为 | ✅ | 写临时文件 + rename |
 | `.md` 文件关联 + 从 Finder 打开 | ✅ | Info.plist `CFBundleDocumentTypes` 已注册，端到端验证通过 |
@@ -523,7 +523,9 @@ GitHub Alerts / 脚注 / RTL / 插件系统 / 主题市场 / 图片图床 / EPUB
 - [x] **清理磁盘** —— 49 GB → 64 GB（已清 uv / pip / npm / Homebrew 缓存，共约 15 GB）
 - [x] **安装 Rust** —— rustup 1.29.1 + stable rustc 1.99.1，PATH 已写入 `~/.zshrc` 与 `~/.bash_profile`
 - [x] **初始化仓库** —— `~/Documents/GitHub/inkstone`，MIT 协议，`.gitignore` 完整
-- [x] **round-trip 测试语料库** —— 5 份真实 Markdown 样本，覆盖表格/任务列表/数学/mermaid/脚注/YAML/边界情况
+- [x] **round-trip 测试语料库** —— **13 份**真实 Markdown 样本，覆盖表格/任务列表/数学/mermaid/脚注/YAML/边界情况，
+  外加中文技术写作、各类链接与图片、引用与嵌套列表、转义与 HTML 实体、空白敏感内容、混合块结构、
+  Typora 扩展语法，以及一份 470 行的长文档（兼作性能压测样本）
 - [x] **依赖许可证白名单 CI** —— 自动扫描 `package.json` / `Cargo.lock` / cargo registry 缓存
 - [x] **M1 前置**：把 `EditorSurface` 的 textarea 替换为 CodeMirror 6 内核，接入 Live Preview 装饰器插件
 - [x] **M1 剩余**：中文 IME 人工验证 ✅（2026-10-21）、自动配对 ✅、三种标记符显示策略 ✅、

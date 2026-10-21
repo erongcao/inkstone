@@ -290,6 +290,13 @@ cd src-tauri && cargo fmt --check && cargo clippy --all-targets
 
 没有这条约束，Live Preview 会慢慢腐蚀用户文件。
 
+语料库目前 13 份（`tests/corpus/`），除了原有的基础语法、表格任务、数学图表、脚注 HTML、边界情况，
+还覆盖了中文技术写作、各类链接与图片、引用与嵌套列表、转义与 HTML 实体、空白敏感内容、
+混合块结构、Typora 扩展语法，以及一份 470 行的长文档（兼作性能压测样本）。
+
+另有两条**语料库自身的护栏**：语料数量不得少于 10 份；所有语料合起来必须覆盖
+22 种关键 mdast 节点类型（缺一种就说明语料有缺口）。
+
 ### 依赖许可证白名单
 
 只允许 MIT / Apache-2.0 / BSD / ISC / CC0 / Unlicense / Python-2.0 / Zlib / MPL-2.0。
