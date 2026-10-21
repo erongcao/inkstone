@@ -36,6 +36,25 @@ export const MARKER_DISPLAY_MODES: { value: MarkerDisplayMode; label: string }[]
   { value: "source", label: "源码模式（纯 Markdown）" },
 ];
 
+/**
+ * 自动配对的级别。
+ *
+ * 分两级对齐 Typora 官方文档（support.typora.com.cn/Auto-Pair/）：
+ *   - `basic`    只配对括号与引号：`(` `[` `{` `"` `'`
+ *   - `markdown` 在 basic 之上追加 Markdown 符号：`` ` `` `*` `_` `$` `~` `=` `^`
+ *
+ * 之所以是三档而不是一个开关：basic 与 markdown 的手感差别明显，
+ * 有人写技术文档时希望 `*` 原样输出（方便写乘法与通配符），
+ * 那就该能单独关掉 Markdown 级、只留括号引号。
+ */
+export type AutoPairMode = "off" | "basic" | "markdown";
+
+export const AUTO_PAIR_MODES: { value: AutoPairMode; label: string }[] = [
+  { value: "off", label: "关闭" },
+  { value: "basic", label: "括号与引号" },
+  { value: "markdown", label: "Markdown 符号（含括号引号）" },
+];
+
 export interface AppearanceSettings {
   /** 主题 ID，对应 theme/themes.ts 的注册表 */
   theme: string;
@@ -62,8 +81,8 @@ export interface AppearanceSettings {
 export interface EditorSettings {
   /** 行内标记符的显示策略 */
   markerDisplay: MarkerDisplayMode;
-  /** 自动配对符号：*, _, `, ~, =, $, ^ 等 */
-  autoPair: boolean;
+  /** 自动配对级别：off / basic / markdown */
+  autoPairMode: AutoPairMode;
   /** 智能标点：自动引号/破折号 */
   smartPunctuation: boolean;
   /** 严格模式：按严格 CommonMark 解析 */
@@ -160,7 +179,7 @@ export const DEFAULT_SETTINGS: Settings = {
   },
   editor: {
     markerDisplay: "live",
-    autoPair: true,
+    autoPairMode: "markdown",
     smartPunctuation: false,
     strictMode: false,
     indentFirstLine: false,

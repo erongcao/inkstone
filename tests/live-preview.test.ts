@@ -12,7 +12,10 @@
 
 import { describe, expect, it } from "vitest";
 import { EditorState } from "@codemirror/state";
+import { EditorView } from "@codemirror/view";
+import { history, undo, redo } from "@codemirror/commands";
 import { buildLivePreviewDecorations } from "@/editor/live-preview/decorations";
+import { livePreview, setDisplayModeOf } from "@/editor/live-preview";
 import type { MarkerDisplayMode } from "@/settings/schema";
 
 interface Deco {
@@ -217,5 +220,97 @@ describe("标记符显示策略", () => {
       [0, 2],
       [4, 6],
     ]);
+  });
+});
+
+describe("Live Preview 与撤销栈", () => {
+  /** 建一个带 Live Preview 的编辑器 */
+  function createEditor(doc: string, cursor: number) {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const view = new EditorView({
+      state: EditorState.create({
+        doc,
+        selection: { anchor: cursor },
+        extensions: [history(), livePreview()],
+      }),
+      parent: host,
+    });
+    return { view, dispose: () => {
+      view.destroy();
+      host.remove();
+    } };
+  }
+
+  /** 当前状态下被隐藏的标记区间 */
+  function hiddenRanges(view: EditorView): [number, number][] {
+    const set = buildLivePreviewDecorations(view.state, "live");
+    const out: [number, number][] = [];
+    const cursor = set.iter();
+    while (cursor.value !== null) {
+      if (cursor.value.spec.widget) out.push([cursor.from, cursor.to]);
+      cursor.next();
+    }
+    return out;
+  }
+
+  it("撤销后装饰器按撤销后的状态重算", () => {
+    const { view, dispose } = createEditor("**粗体** 后", 8);
+    // 光标在结构外 → 标记隐藏
+    expect(hiddenRanges(view)).toEqual([
+      [0, 2],
+      [4, 6],
+    ]);
+
+    // 删掉整个加粗结构 → 不再有标记可隐藏
+    view.dispatch({ changes: { from: 0, to: 6, insert: "" }, userEvent: "delete.backward" });
+    expect(view.state.doc.toString()).toBe(" 后");
+    expect(hiddenRanges(view)).toEqual([]);
+
+    // 撤销 → 文档回来了，装饰器也要跟着回来
+    undo(view);
+    expect(view.state.doc.toString()).toBe("**粗体** 后");
+    view.dispatch({ selection: { anchor: 8 } });
+    expect(hiddenRanges(view)).toEqual([
+      [0, 2],
+      [4, 6],
+    ]);
+
+    dispose();
+  });
+
+  it("撤销 / 重做能完整还原文档", () => {
+    const { view, dispose } = createEditor("", 0);
+    view.dispatch({
+      changes: { from: 0, to: 0, insert: "**粗体**" },
+      userEvent: "input.type",
+    });
+    expect(view.state.doc.toString()).toBe("**粗体**");
+
+    undo(view);
+    expect(view.state.doc.toString()).toBe("");
+
+    redo(view);
+    expect(view.state.doc.toString()).toBe("**粗体**");
+
+    dispose();
+  });
+
+  it("切换显示模式不影响撤销栈", () => {
+    const { view, dispose } = createEditor("**粗体**", 6);
+    view.dispatch({
+      changes: { from: 6, to: 6, insert: "尾巴" },
+      userEvent: "input.type",
+    });
+
+    // 切到源码模式（只派发 effect，不改文档）
+    setDisplayModeOf(view, "source");
+    expect(view.state.doc.toString()).toBe("**粗体**尾巴");
+
+    // 撤销仍然只回退文档修改，不受模式切换影响
+    undo(view);
+    expect(view.state.doc.toString()).toBe("**粗体**");
+
+    dispose();
   });
 });

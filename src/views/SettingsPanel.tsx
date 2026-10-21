@@ -8,6 +8,7 @@
 import { useState } from "react";
 import { useSettings, resetSettings } from "@/settings/store";
 import {
+  AUTO_PAIR_MODES,
   CONTENT_WIDTH_PRESETS,
   FONT_SIZE_PRESETS,
   MARKER_DISPLAY_MODES,
@@ -220,12 +221,11 @@ function AppearanceSection({ settings, patch }: { settings: Settings; patch: Pat
 
 function EditorSection({ settings, patch }: { settings: Settings; patch: PatchFn }) {
   const e = settings.editor;
-  // markerDisplay 是下拉选择不是开关，单独渲染，所以这里要排除掉
+  // markerDisplay / autoPairMode 是下拉选择不是开关，单独渲染，所以这里要排除掉
   const toggles: {
-    key: Exclude<keyof typeof e, "markerDisplay">;
+    key: Exclude<keyof typeof e, "markerDisplay" | "autoPairMode">;
     label: string;
   }[] = [
-    { key: "autoPair", label: "自动配对符号" },
     { key: "smartPunctuation", label: "智能标点" },
     { key: "strictMode", label: "严格模式（严格 CommonMark）" },
     { key: "indentFirstLine", label: "缩进首行" },
@@ -248,6 +248,22 @@ function EditorSection({ settings, patch }: { settings: Settings; patch: PatchFn
           }
         >
           {MARKER_DISPLAY_MODES.map((mode) => (
+            <option key={mode.value} value={mode.value}>
+              {mode.label}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label className="field">
+        <span>自动配对</span>
+        <select
+          value={e.autoPairMode}
+          onChange={(ev) =>
+            patch("editor", { autoPairMode: ev.target.value as typeof e.autoPairMode })
+          }
+        >
+          {AUTO_PAIR_MODES.map((mode) => (
             <option key={mode.value} value={mode.value}>
               {mode.label}
             </option>

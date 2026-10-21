@@ -7,9 +7,38 @@
  */
 
 import { useCallback, useSyncExternalStore } from "react";
-import { DEFAULT_SETTINGS, type DeepPartial, type Settings } from "./schema";
+import {
+  DEFAULT_SETTINGS,
+  type DeepPartial,
+  type EditorSettings,
+  type Settings,
+} from "./schema";
 
 const STORAGE_KEY = "inkstone.settings.v1";
+
+/**
+ * 设置版本迁移。
+ *
+ * v1 → v2：`editor.autoPair`（布尔）拆成 `editor.autoPairMode`（off/basic/markdown）。
+ *
+ * 必须显式迁移，不能指望 `mergeSettings`：
+ *   - 深合并只做「按 key 覆盖」，旧的 `autoPair` key 不会被自动删掉，
+ *     残留的布尔值会和新字段一起躺在 localStorage 里；
+ *   - 而且布尔值 → 字符串的语义映射（true → markdown / false → off）
+ *     只有迁移层知道该怎么做。
+ */
+function migratePersisted(raw: DeepPartial<Settings>): DeepPartial<Settings> {
+  const editor = raw.editor as
+    (DeepPartial<EditorSettings> & { autoPair?: unknown }) | undefined;
+  if (!editor || editor.autoPair === undefined) return raw;
+
+  const { autoPair, ...rest } = editor;
+  const migrated: DeepPartial<EditorSettings> = { ...rest };
+  if (migrated.autoPairMode === undefined) {
+    migrated.autoPairMode = autoPair === true ? "markdown" : "off";
+  }
+  return { ...raw, editor: migrated };
+}
 
 /** 深度合并：用 partial 覆盖 defaults，保证新增设置项在旧配置文件上也有值 */
 function mergeSettings<T>(base: T, patch: unknown): T {
@@ -43,7 +72,7 @@ function readPersisted(): Partial<Settings> {
   }
 }
 
-let state: Settings = mergeSettings(DEFAULT_SETTINGS, readPersisted());
+let state: Settings = mergeSettings(DEFAULT_SETTINGS, migratePersisted(readPersisted()));
 
 const listeners = new Set<() => void>();
 

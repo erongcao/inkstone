@@ -94,11 +94,11 @@ describe("应用交互", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "设置" }));
     fireEvent.click(screen.getByRole("button", { name: "编辑" }));
-    const autoPair = screen.getByLabelText("自动配对符号") as HTMLInputElement;
-    fireEvent.click(autoPair);
+    const autoPair = screen.getByLabelText("自动配对") as HTMLSelectElement;
+    fireEvent.change(autoPair, { target: { value: "off" } });
 
     const raw = localStorage.getItem("inkstone.settings.v1");
     expect(raw).toBeTruthy();
-    expect(JSON.parse(raw!).editor.autoPair).toBe(false);
+    expect(JSON.parse(raw!).editor.autoPairMode).toBe("off");
   });
 });

@@ -19,6 +19,7 @@ export function EditorSurface({ onOpenSettings }: Props) {
   const { doc, save, create, setContent } = useDocument();
   const [settings, updateSettings] = useSettings();
   const markerDisplay = settings.editor.markerDisplay;
+  const autoPairMode = settings.editor.autoPairMode;
   const hostRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<MarkdownEditorHandle | null>(null);
   /** 上一次同步进编辑器的值，用来避免回环更新 */
@@ -31,6 +32,7 @@ export function EditorSurface({ onOpenSettings }: Props) {
       parent: hostRef.current,
       doc: "",
       displayMode: markerDisplay,
+      autoPairMode,
       onChange: (value) => {
         lastSyncedRef.current = value;
         setContent(value);
@@ -41,7 +43,7 @@ export function EditorSurface({ onOpenSettings }: Props) {
       editor.destroy();
       editorRef.current = null;
     };
-    // 只在挂载时创建一次；markerDisplay 的变化由下面的 effect 单独同步
+    // 只在挂载时创建一次；markerDisplay / autoPairMode 的变化由下面的 effect 单独同步
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setContent]);
 
@@ -59,6 +61,11 @@ export function EditorSurface({ onOpenSettings }: Props) {
   useEffect(() => {
     editorRef.current?.setDisplayMode(markerDisplay);
   }, [markerDisplay]);
+
+  // 设置里的自动配对级别变化 → 同步到编辑器
+  useEffect(() => {
+    editorRef.current?.setAutoPairMode(autoPairMode);
+  }, [autoPairMode]);
 
   // 工具栏按钮：在三种显示策略之间循环
   const cycleDisplayMode = () => {

@@ -7,7 +7,7 @@
  *   - 对外只暴露文本的读写，不泄露 CM6 内部结构
  */
 
-import { EditorState, Transaction, type Extension } from "@codemirror/state";
+import { EditorState, Transaction, Compartment, type Extension } from "@codemirror/state";
 import { EditorView, keymap, lineNumbers, highlightActiveLine } from "@codemirror/view";
 import {
   defaultKeymap,
@@ -19,7 +19,8 @@ import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import { languages } from "@codemirror/language-data";
 import { livePreview, setDisplayModeOf } from "./live-preview";
-import type { MarkerDisplayMode } from "@/settings/schema";
+import { autoPair } from "./auto-pair";
+import type { AutoPairMode, MarkerDisplayMode } from "@/settings/schema";
 
 export interface MarkdownEditorOptions {
   /** 初始内容 */
@@ -28,14 +29,24 @@ export interface MarkdownEditorOptions {
   parent: HTMLElement;
   /** 初始标记符显示策略 */
   displayMode?: MarkerDisplayMode;
+  /** 初始自动配对级别 */
+  autoPairMode?: AutoPairMode;
   /** 内容变化回调 */
   onChange?: (value: string) => void;
   /** 选区变化回调 */
   onSelectionChange?: (value: string) => void;
 }
 
-/** 构造编辑器扩展列表 */
-function buildExtensions(options: MarkdownEditorOptions): Extension[] {
+/**
+ * 构造编辑器扩展列表。
+ *
+ * `autoPairBox` 是 Compartment：自动配对要在运行时切换（设置面板改一下就生效），
+ * 而 Compartment 可以在不重建编辑器的前提下换掉一组扩展。
+ */
+function buildExtensions(
+  options: MarkdownEditorOptions,
+  autoPairBox: Compartment,
+): Extension[] {
   return [
     // 编辑历史（撤销/重做）
     history(),
@@ -49,6 +60,8 @@ function buildExtensions(options: MarkdownEditorOptions): Extension[] {
     }),
     // Live Preview：行内标记的实时隐藏/展开
     livePreview(),
+    // 自动配对（可在运行时切换级别）
+    autoPairBox.of(autoPair(options.autoPairMode ?? "off")),
     // 键盘映射
     keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
     // 视图
@@ -102,6 +115,8 @@ export interface MarkdownEditorHandle {
   focus(): void;
   /** 切换标记符显示策略 */
   setDisplayMode(mode: MarkerDisplayMode): void;
+  /** 切换自动配对级别 */
+  setAutoPairMode(mode: AutoPairMode): void;
   /** 销毁编辑器 */
   destroy(): void;
   /** 底层视图（高级用法：查找替换面板、滚动定位等） */
@@ -111,9 +126,10 @@ export interface MarkdownEditorHandle {
 export function createMarkdownEditor(
   options: MarkdownEditorOptions,
 ): MarkdownEditorHandle {
+  const autoPairBox = new Compartment();
   const state = EditorState.create({
     doc: options.doc ?? "",
-    extensions: buildExtensions(options),
+    extensions: buildExtensions(options, autoPairBox),
   });
 
   const view = new EditorView({
@@ -139,6 +155,9 @@ export function createMarkdownEditor(
     },
     focus: () => view.focus(),
     setDisplayMode: (mode: MarkerDisplayMode) => setDisplayModeOf(view, mode),
+    setAutoPairMode: (mode: AutoPairMode) => {
+      view.dispatch({ effects: autoPairBox.reconfigure(autoPair(mode)) });
+    },
     destroy: () => view.destroy(),
     view,
   };
