@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Inkstone · 剪贴板自检</title>
+    <style>
+      body {
+        font-family: -apple-system, "PingFang SC", sans-serif;
+        margin: 0;
+        padding: 20px;
+        background: #f6f7f9;
+        color: #1f2328;
+      }
+      h1 {
+        font-size: 18px;
+        margin: 0 0 4px;
+      }
+      .hint {
+        font-size: 13px;
+        color: #59636e;
+        margin-bottom: 16px;
+        line-height: 1.7;
+      }
+      .box {
+        background: #fff;
+        border: 1px solid #d1d9e0;
+        border-radius: 6px;
+        padding: 12px 14px;
+        margin-bottom: 14px;
+      }
+      .box h2 {
+        font-size: 13px;
+        margin: 0 0 8px;
+        color: #59636e;
+        font-weight: 600;
+      }
+      pre {
+        margin: 0;
+        font-size: 12px;
+        line-height: 1.6;
+        white-space: pre-wrap;
+        word-break: break-all;
+        max-height: 220px;
+        overflow: auto;
+      }
+      button {
+        font: inherit;
+        padding: 6px 12px;
+        border: 1px solid #d1d9e0;
+        border-radius: 6px;
+        background: #f6f8fa;
+        cursor: pointer;
+      }
+      #drop {
+        border: 2px dashed #d1d9e0;
+        border-radius: 6px;
+        padding: 24px;
+        text-align: center;
+        color: #59636e;
+        background: #fff;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Inkstone · 剪贴板自检</h1>
+    <div class="hint">
+      1. 在 Inkstone 里选中内容并按 ⌘C<br />
+      2. 点下面的「读取剪贴板」，看 text/plain 与 text/html 是否都写进去了<br />
+      3. 也可以点下面的框，用 ⌘V 粘贴，看 paste 事件收到哪些 MIME 类型
+    </div>
+
+    <div class="box">
+      <h2>读取剪贴板</h2>
+      <button id="read">读取剪贴板</button>
+    </div>
+
+    <div class="box">
+      <h2>text/plain</h2>
+      <pre id="plain">（空）</pre>
+    </div>
+
+    <div class="box">
+      <h2>text/html</h2>
+      <pre id="html">（空）</pre>
+    </div>
+
+    <div class="box">
+      <h2>paste 事件收到的 MIME 类型</h2>
+      <pre id="types">（还没有粘贴）</pre>
+    </div>
+
+    <div id="drop">点这里然后按 ⌘V</div>
+
+    <script type="module" src="/src/dev/clipboard-check.ts"></script>
+  </body>
+</html>

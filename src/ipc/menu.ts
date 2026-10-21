@@ -14,6 +14,8 @@ export type MenuAction =
   | "find"
   | "replace"
   | "copy-as-markdown"
+  | "copy-as-html"
+  | "paste-as-plain-text"
   | "toggle-sidebar"
   | "toggle-source-mode"
   | "toggle-focus-mode"
@@ -64,6 +66,8 @@ export async function initMenuBridge(): Promise<void> {
     "find",
     "replace",
     "copy-as-markdown",
+    "copy-as-html",
+    "paste-as-plain-text",
     "toggle-sidebar",
     "toggle-source-mode",
     "toggle-focus-mode",

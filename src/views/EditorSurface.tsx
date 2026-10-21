@@ -8,6 +8,7 @@
 import { useEffect, useRef } from "react";
 import { createMarkdownEditor, type MarkdownEditorHandle } from "@/editor/MarkdownEditor";
 import { useDocument } from "@/ipc/document";
+import { onMenuAction } from "@/ipc/menu";
 import { useSettings } from "@/settings/store";
 import { MARKER_DISPLAY_MODES } from "@/settings/schema";
 
@@ -66,6 +67,18 @@ export function EditorSurface({ onOpenSettings }: Props) {
   useEffect(() => {
     editorRef.current?.setAutoPairMode(autoPairMode);
   }, [autoPairMode]);
+
+  // 菜单动作：剪贴板相关（作用在编辑器实例上，所以订阅放在这一层）
+  useEffect(() => {
+    const offs = [
+      onMenuAction("copy-as-html", () => void editorRef.current?.copyAsHtml()),
+      onMenuAction("copy-as-markdown", () => void editorRef.current?.copyAsMarkdown()),
+      onMenuAction("paste-as-plain-text", () => editorRef.current?.pasteAsPlainText()),
+    ];
+    return () => {
+      for (const off of offs) off();
+    };
+  }, []);
 
   // 工具栏按钮：在三种显示策略之间循环
   const cycleDisplayMode = () => {

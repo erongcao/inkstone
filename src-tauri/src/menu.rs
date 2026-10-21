@@ -122,6 +122,13 @@ fn build_edit_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Submenu<tauri:
         "复制为 Markdown 源码",
         Some("CmdOrCtrl+Shift+C"),
     )?;
+    let copy_as_html = action(app, "copy-as-html", "复制为 HTML", None)?;
+    let paste_as_plain_text = action(
+        app,
+        "paste-as-plain-text",
+        "粘贴为纯文本",
+        Some("CmdOrCtrl+Shift+V"),
+    )?;
 
     SubmenuBuilder::new(app, "编辑")
         .undo()
@@ -136,6 +143,8 @@ fn build_edit_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Submenu<tauri:
         .item(&replace)
         .separator()
         .item(&copy_as_md)
+        .item(&copy_as_html)
+        .item(&paste_as_plain_text)
         .build()
 }
 

@@ -10,6 +10,9 @@
     "core:event:default",
     "dialog:default",
     "fs:default",
-    "opener:default"
+    "opener:default",
+    "clipboard-manager:allow-write-text",
+    "clipboard-manager:allow-write-html",
+    "clipboard-manager:allow-read-text"
   ]
 }

@@ -21,6 +21,12 @@ import { languages } from "@codemirror/language-data";
 import { livePreview, setDisplayModeOf } from "./live-preview";
 import { autoPair } from "./auto-pair";
 import { markdownPaste } from "./paste";
+import {
+  armPlainTextPaste,
+  copySelectionAsHtml,
+  copySelectionAsMarkdown,
+  markdownCopy,
+} from "./clipboard";
 import type { AutoPairMode, MarkerDisplayMode } from "@/settings/schema";
 
 export interface MarkdownEditorOptions {
@@ -65,8 +71,32 @@ function buildExtensions(
     autoPairBox.of(autoPair(options.autoPairMode ?? "off")),
     // 粘贴：网页富文本 → Markdown
     markdownPaste(),
+    // 复制：同时写 Markdown 源码与渲染后的 HTML
+    markdownCopy(),
     // 键盘映射
-    keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
+    // 剪贴板快捷键：Tauri 里原生菜单的 accelerator 也会响应，
+    // 重复执行是无害的（复制幂等、纯文本标志是幂等的置位），
+    // 但在浏览器开发模式（无原生菜单）下这两个快捷键是唯一入口。
+    keymap.of([
+      ...defaultKeymap,
+      ...historyKeymap,
+      ...searchKeymap,
+      indentWithTab,
+      {
+        key: "Mod-Shift-c",
+        run: (view) => {
+          void copySelectionAsHtml(view);
+          return true;
+        },
+      },
+      {
+        key: "Mod-Shift-v",
+        run: (view) => {
+          armPlainTextPaste(view);
+          return true;
+        },
+      },
+    ]),
     // 视图
     lineNumbers(),
     highlightActiveLine(),
@@ -120,6 +150,12 @@ export interface MarkdownEditorHandle {
   setDisplayMode(mode: MarkerDisplayMode): void;
   /** 切换自动配对级别 */
   setAutoPairMode(mode: AutoPairMode): void;
+  /** 复制为渲染后的 HTML（同时附带 Markdown 源码作为纯文本兜底） */
+  copyAsHtml(): Promise<void>;
+  /** 复制为 Markdown 源码（纯文本） */
+  copyAsMarkdown(): Promise<void>;
+  /** 让下一次粘贴只用纯文本（一次性） */
+  pasteAsPlainText(): void;
   /** 销毁编辑器 */
   destroy(): void;
   /** 底层视图（高级用法：查找替换面板、滚动定位等） */
@@ -160,6 +196,13 @@ export function createMarkdownEditor(
     setDisplayMode: (mode: MarkerDisplayMode) => setDisplayModeOf(view, mode),
     setAutoPairMode: (mode: AutoPairMode) => {
       view.dispatch({ effects: autoPairBox.reconfigure(autoPair(mode)) });
+    },
+    copyAsHtml: () => copySelectionAsHtml(view),
+    copyAsMarkdown: () => copySelectionAsMarkdown(view),
+    pasteAsPlainText: () => {
+      // 置位一次性标志；下一次 paste 事件会消费它
+      armPlainTextPaste(view);
+      view.focus();
     },
     destroy: () => view.destroy(),
     view,

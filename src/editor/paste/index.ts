@@ -6,13 +6,15 @@
  * 从网页复制过来的内容会变成一坨裸 HTML 源码直接塞进文档
  * （`&lt;p&gt;&lt;strong&gt;粗体&lt;/strong&gt;&lt;/p&gt;` 这种）。
  *
- * 三种来源，三种处理：
+ * 来源判定，按优先级：
  *
- * | 剪贴板内容 | 处理 |
- * | --- | --- |
- * | 只有纯文本 | 原样插入 |
- * | 纯文本本身就是 Markdown | 原样插入（**Markdown 原样保留**） |
- * | 网页 / Word 的富文本 | 用 `text/html` 转成 Markdown（**样式净化**） |
+ * | 优先级 | 剪贴板内容 | 处理 |
+ * | --- | --- | --- |
+ * | 1 | `text/x-inkstone-markdown`（Inkstone 内部复制） | **原样插入**，逐字节无损 |
+ * | 2 | 「粘贴为纯文本」标志已置位 | 只取 `text/plain`，忽略 HTML |
+ * | 3 | 只有纯文本 | 原样插入 |
+ * | 4 | 纯文本本身就是 Markdown | 原样插入（**Markdown 原样保留**） |
+ * | 5 | 网页 / Word 的富文本 | 用 `text/html` 转成 Markdown（**样式净化**） |
  *
  * 实现要点：
  *   - 扩展用 `EditorView.domEventHandlers`：插件的 handler 排在 CM6 内置
@@ -24,6 +26,11 @@ import { EditorView } from "@codemirror/view";
 import type { Extension } from "@codemirror/state";
 import { htmlToMarkdown } from "./html-to-markdown";
 import { looksLikeMarkdown } from "./detect";
+import {
+  INKSTONE_MARKDOWN_MIME,
+  clearPlainTextPaste,
+  isPlainTextPasteArmed,
+} from "@/editor/clipboard";
 
 /** 读剪贴板：个别浏览器对某些类型会抛异常，兜住 */
 function readClipboard(data: DataTransfer, type: string): string {
@@ -51,12 +58,20 @@ export function handlePaste(view: EditorView, event: ClipboardEvent): boolean {
 
   const html = readClipboard(data, "text/html");
   const text = readClipboard(data, "text/plain");
+  const inkstoneMarkdown = readClipboard(data, INKSTONE_MARKDOWN_MIME);
+  const forcePlainText = isPlainTextPasteArmed(view.state);
 
-  if (!text.trim() && !html.trim()) return false;
+  if (!text.trim() && !html.trim() && !inkstoneMarkdown.trim()) return false;
 
   // ── 选内容 ───────────────────────────────────────────────────
   let markdown: string;
-  if (!html.trim()) {
+  if (inkstoneMarkdown) {
+    // Inkstone 内部复制：逐字节无损，不做任何转换
+    markdown = inkstoneMarkdown;
+  } else if (forcePlainText) {
+    // 用户明确要求「粘贴为纯文本」：忽略 HTML，只取纯文本
+    markdown = text;
+  } else if (!html.trim()) {
     // 纯文本：原样插入
     markdown = text;
   } else if (looksLikeMarkdown(text)) {
@@ -72,6 +87,11 @@ export function handlePaste(view: EditorView, event: ClipboardEvent): boolean {
   // replaceSelection 会把每个选区都替换掉，并把光标放到插入内容之后
   const spec = view.state.replaceSelection(markdown);
   view.dispatch({ ...spec, userEvent: "input.paste", scrollIntoView: true });
+
+  // 「粘贴为纯文本」是一次性标志，用完即焚
+  if (forcePlainText) {
+    view.dispatch({ effects: clearPlainTextPaste.of(null) });
+  }
   return true;
 }
 

@@ -305,6 +305,34 @@ ProseMirror 内核**，理由和我们完全一样——mark 不含标记符文�
 25. **`EditorState.update()` 返回的是 `Transaction`，不是 `EditorState`**——
     要拿新状态得写 `state.update({...}).state`。写错会得到一个没有 `.field()` 方法的对象。
 
+26. **unified 的「转换」和「编译」是两个阶段，不能混用**（2026-10-21 实测）：
+    - `processor.runSync(tree)` 跑的是 **transformer**，返回的是**新树本身**（不是 VFile）。
+      `remark-rehype` 的 transformer 直接返回 hast 树，所以 `runSync` 的返回值就是 hast 树。
+    - `processor.stringify(doc)` 跑的是 **compiler**，`run` 阶段**不会**执行它。
+      `rehype-stringify` 是 compiler，所以必须 `run` → `stringify` 两步。
+    - `processSync(source)` 一步到位（parse → run → stringify），但会重新解析源码。
+
+27. **rehype-stringify 的产物是字符串，`String(vfile)` 会得到 `"[object Object]"`**——
+    它的 compiler 返回 VFile，但 `contents` 在某些路径下是 undefined。
+    最稳的是直接用 `String(processor.stringify(hast))`（compiler 返回的就是字符串）。
+
+28. **`arboard::set_html(html, Some(alt_text))` 在 macOS 上会同时写两种 UTI**：
+    `public.html` 与 `public.utf8-plain-text`（源码 `arboard-3.7.0/src/platform/osx.rs` 的
+    `set_html`：`setString_forType(html, NSPasteboardTypeHTML)` + `setString_forType(alt, NSPasteboardTypeString)`）。
+    所以「复制为 HTML」一次调用就能同时给富文本和纯文本。
+    **已用独立 Rust 程序实证**：写 HTML + alt 后，`get_text()` 读回 alt、`get().html()` 读回带 `<strong>` 的 HTML。
+    注意 `arboard` 的 `get_html` 不存在，要用 `clipboard.get().html()`。
+
+29. **合成键盘事件不会写入系统剪贴板**（浏览器工具的固有限制）：
+    自动化里按 ⌘C 会触发 copy 事件处理，但 Chromium 不允许合成事件写剪贴板，
+    `pbpaste` 读出来是空的。**剪贴板写入只能在真实用户操作下验证。**
+
+30. **`EditorState.create()` 的 selection spec 只支持单选区**——
+    `EditorSelection.fromJSON` 要求 `{anchor, head}`，多选区必须用
+    `EditorSelection.create([EditorSelection.range(a, b), ...])` 显式构造。
+    而且 jsdom 没有 layout，多选区会触发 CM6 视口计算崩溃
+    （`TextLeaf.lineAt` 报错），所以多选区相关的测试要用 `EditorState` 而不是 `EditorView`。
+
 ## Live Preview 性能：实测数据与优化结论（2026-10-21）
 
 ### 成本分布（`scripts/bench-decorations.ts`）
@@ -386,6 +414,44 @@ HTML 实体解码这些坑都很深，自己写的转换器会长期持续产出
    CommonMark 与 Typora 的惯例是 `- 项目`。
 
 `<mark>` 标签转成 `==高亮==`（Typora 的高亮语法）。
+
+## 剪贴板：复制为 HTML / 粘贴为纯文本（2026-10-21）
+
+Typora 的复制行为是**同时写两种 MIME**：
+- `text/plain` → Markdown 源码（粘到别的 Markdown 编辑器是对的）
+- `text/html` → 渲染后的 HTML（粘到 Word / 邮件是富文本）
+
+实现分两条路：
+
+| 触发方式 | 机制 | 能拿到 HTML 吗 |
+| --- | --- | --- |
+| 按 ⌘C | 接管 CM6 的 `copy` 事件 | 渲染器就绪时才有（见下） |
+| 菜单「复制为 HTML」 | 直接写系统剪贴板（`tauri-plugin-clipboard-manager`） | **总是有**（异步等渲染器） |
+
+**copy 事件必须是同步的**——浏览器在事件处理结束的那一刻就读剪贴板数据，
+不能 await。所以 `remark-rehype`（约 180 KB）只能**按需加载**
+（`src/parser/html-loader.ts`）：应用启动后立刻 `primeHtmlRenderer()` 预热，
+之后同步调用点就能直接拿到结果。极少数「刚启动就立刻复制」会退化成只有纯文本。
+
+**Inkstone 内部复制粘贴的无损通道**：额外写一个自定义 MIME
+`text/x-inkstone-markdown`，粘贴时优先用它。
+否则剪贴板里的 `text/html`（渲染后的 HTML）会被转回 Markdown，
+遇到表格、嵌套列表、代码块就会丢结构。
+自定义 MIME 跨应用会被系统丢弃——这正是我们要的，
+对外的语义交给 `text/plain` 与 `text/html`。
+
+**「粘贴为纯文本」是一次性标志**：菜单动作置位，下一次 paste 只取 `text/plain`，
+用完即焚。
+
+### 粘贴来源判定优先级
+
+| 优先级 | 剪贴板内容 | 处理 |
+| --- | --- | --- |
+| 1 | `text/x-inkstone-markdown` | 原样插入，逐字节无损 |
+| 2 | 「粘贴为纯文本」标志已置位 | 只取 `text/plain`，忽略 HTML |
+| 3 | 只有纯文本 | 原样插入 |
+| 4 | 纯文本本身就是 Markdown | 原样保留 |
+| 5 | 网页 / Word 的富文本 | `text/html` → Markdown（turndown + 样式净化）|
 
 ## 质量闸门（CI 强制，提交前本地也要跑）
 

@@ -257,8 +257,12 @@ describe("markdownPaste 扩展：真实 DOM 事件", () => {
     const event = new Event("paste", { bubbles: true, cancelable: true });
     Object.defineProperty(event, "clipboardData", {
       value: {
-        getData: (type: string) =>
-          type === "text/html" ? "<p><strong>粗体</strong></p>" : "粗体",
+        // 真实的 DataTransfer 对不存在的类型返回空串，这里要照实模拟
+        getData: (type: string) => {
+          if (type === "text/html") return "<p><strong>粗体</strong></p>";
+          if (type === "text/plain") return "粗体";
+          return "";
+        },
       },
     });
     view.contentDOM.dispatchEvent(event);
