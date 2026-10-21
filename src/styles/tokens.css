@@ -54,6 +54,21 @@
   --ink-code-fg: #1f2328;
   --ink-code-border: #d1d9e0;
 
+  /* 代码高亮 token（亮色，参考 GitHub Light） */
+  --ink-code-comment: #6e7781;
+  --ink-code-keyword: #cf222e;
+  --ink-code-string: #0a3069;
+  --ink-code-number: #0550ae;
+  --ink-code-function: #8250df;
+  --ink-code-type: #953800;
+  --ink-code-variable: #24292f;
+  --ink-code-punctuation: #57606a;
+  --ink-code-tag: #116329;
+  --ink-code-attr: #0550ae;
+  --ink-code-regex: #116329;
+  --ink-code-deleted: #82071e;
+  --ink-code-inserted: #116329;
+
   --ink-quote-border: #d1d9e0;
   --ink-quote-fg: #59636e;
 
@@ -90,6 +105,21 @@
   --ink-code-bg: #161b22;
   --ink-code-fg: #e6edf3;
   --ink-code-border: #30363d;
+
+  /* 代码高亮 token（暗色，参考 GitHub Dark） */
+  --ink-code-comment: #8b949e;
+  --ink-code-keyword: #ff7b72;
+  --ink-code-string: #a5d6ff;
+  --ink-code-number: #79c0ff;
+  --ink-code-function: #d2a8ff;
+  --ink-code-type: #ffa657;
+  --ink-code-variable: #e6edf3;
+  --ink-code-punctuation: #8b949e;
+  --ink-code-tag: #7ee787;
+  --ink-code-attr: #79c0ff;
+  --ink-code-regex: #7ee787;
+  --ink-code-deleted: #ffdcd7;
+  --ink-code-inserted: #aff5b4;
 
   --ink-quote-border: #3d444d;
   --ink-quote-fg: #9198a1;

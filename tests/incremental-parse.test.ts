@@ -16,7 +16,7 @@
 import { describe, expect, it } from "vitest";
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
-import { syntaxTreeField } from "@/editor/live-preview/syntax-tree";
+import { livePreviewField } from "@/editor/live-preview/state";
 import { parseSyntax } from "@/editor/live-preview/syntax";
 import { buildLivePreviewDecorations } from "@/editor/live-preview/decorations";
 import type { Tree } from "@lezer/common";
@@ -74,7 +74,7 @@ describe("增量语法树", () => {
     const rand = makeRandom(20261021);
     let state = EditorState.create({
       doc: BASE_DOC,
-      extensions: [syntaxTreeField],
+      extensions: [livePreviewField],
     });
 
     // 常见的破坏性编辑：插入标记符、插入结构化文本、删除片段
@@ -114,7 +114,7 @@ describe("增量语法树", () => {
         state = state.update({ changes: { from: at, to: at + del } }).state;
       }
 
-      const incremental = state.field(syntaxTreeField).tree;
+      const incremental = state.field(livePreviewField).tree;
       const full = parseSyntax(state.doc.toString());
       expect(snapshot(incremental)).toEqual(snapshot(full));
     }
@@ -123,31 +123,31 @@ describe("增量语法树", () => {
   it("纯选区变更不触发重新解析（树对象引用不变）", () => {
     const state = EditorState.create({
       doc: BASE_DOC,
-      extensions: [syntaxTreeField],
+      extensions: [livePreviewField],
     });
 
-    const before = state.field(syntaxTreeField).tree;
+    const before = state.field(livePreviewField).tree;
     const after = state.update({ selection: { anchor: 10 } }).state;
-    const afterTree = after.field(syntaxTreeField).tree;
+    const afterTree = after.field(livePreviewField).tree;
 
     // 文档没变 → 不该重新解析，树对象应当是同一个
     expect(afterTree).toBe(before);
-    expect(after.field(syntaxTreeField).fragments).toBe(
-      state.field(syntaxTreeField).fragments,
+    expect(after.field(livePreviewField).fragments).toBe(
+      state.field(livePreviewField).fragments,
     );
   });
 
   it("文档变更后树确实更新了（不是旧树的复用）", () => {
     const state = EditorState.create({
       doc: BASE_DOC,
-      extensions: [syntaxTreeField],
+      extensions: [livePreviewField],
     });
 
-    const before = state.field(syntaxTreeField).tree;
+    const before = state.field(livePreviewField).tree;
     const after = state
       .update({ changes: { from: 0, to: 2, insert: "##" } })
       .state;
-    const afterTree = after.field(syntaxTreeField).tree;
+    const afterTree = after.field(livePreviewField).tree;
 
     expect(afterTree).not.toBe(before);
     expect(snapshot(afterTree)).toEqual(snapshot(parseSyntax(after.doc.toString())));
@@ -156,16 +156,16 @@ describe("增量语法树", () => {
   it("撤销后树回到修改前的状态", () => {
     let state = EditorState.create({
       doc: BASE_DOC,
-      extensions: [syntaxTreeField],
+      extensions: [livePreviewField],
     });
-    const original = snapshot(state.field(syntaxTreeField).tree);
+    const original = snapshot(state.field(livePreviewField).tree);
 
     state = state.update({ changes: { from: 0, insert: "x" } }).state;
-    expect(snapshot(state.field(syntaxTreeField).tree)).not.toEqual(original);
+    expect(snapshot(state.field(livePreviewField).tree)).not.toEqual(original);
 
     // 手工反向变更（不依赖 @codemirror/commands 的 history，保持测试聚焦）
     state = state.update({ changes: { from: 0, to: 1 } }).state;
-    expect(snapshot(state.field(syntaxTreeField).tree)).toEqual(original);
+    expect(snapshot(state.field(livePreviewField).tree)).toEqual(original);
   });
 
   it("大文档下增量解析显著快于全量解析", () => {
@@ -176,7 +176,7 @@ describe("增量语法树", () => {
 
     const state = EditorState.create({
       doc: big,
-      extensions: [syntaxTreeField],
+      extensions: [livePreviewField],
     });
 
     const at = Math.floor(big.length / 2);
@@ -205,7 +205,12 @@ describe("增量语法树", () => {
 
 /** 把装饰器集合摊平成可比较的数组（区间 + 类型 + class） */
 function snapshotDecorations(state: EditorState, tree?: Tree): string[] {
-  const set = buildLivePreviewDecorations(state, "live", tree);
+  const set = buildLivePreviewDecorations(
+    state.doc.toString(),
+    state.selection.main.head,
+    "live",
+    tree ?? parseSyntax(state.doc.toString()),
+  );
   const out: string[] = [];
   const it = set.iter();
   while (it.value !== null) {
@@ -222,10 +227,10 @@ describe("增量路径与全量路径的装饰器一致性", () => {
   it("增量维护的树产出的装饰器与全量解析完全一致", () => {
     const rand = makeRandom(778899);
 
-    // 增量路径：带 syntaxTreeField
+    // 增量路径：带 livePreviewField
     let incr = EditorState.create({
       doc: BASE_DOC,
-      extensions: [syntaxTreeField],
+      extensions: [livePreviewField],
     });
     // 全量路径：每次都现场全量解析
     let full = EditorState.create({ doc: BASE_DOC });
@@ -239,7 +244,7 @@ describe("增量路径与全量路径的装饰器一致性", () => {
       incr = incr.update({ changes: { from: at, insert: s } }).state;
       full = full.update({ changes: { from: at, insert: s } }).state;
 
-      const incrTree = incr.field(syntaxTreeField).tree;
+      const incrTree = incr.field(livePreviewField).tree;
       const fullTree = parseSyntax(full.doc.toString());
 
       // 光标位置也要跟着走，否则两边的展开状态不同
@@ -260,13 +265,13 @@ describe("增量路径与全量路径的装饰器一致性", () => {
     const view = new EditorView({
       state: EditorState.create({
         doc: "这是 **粗体** 和 *斜体* 文字。",
-        extensions: [syntaxTreeField],
+        extensions: [livePreviewField],
       }),
       parent: host,
     });
 
     // 初始：光标在文档开头，两个标记都应隐藏
-    const initial = snapshotDecorations(view.state, view.state.field(syntaxTreeField).tree);
+    const initial = snapshotDecorations(view.state, view.state.field(livePreviewField).tree);
     const hiddenCount = initial.filter((d) => d.includes(":replace:")).length;
     expect(hiddenCount).toBe(4); // ** × 2 + * × 2
 
@@ -275,14 +280,14 @@ describe("增量路径与全量路径的装饰器一致性", () => {
     //        0123456789...
     // "粗"字在位置 5，落在 StrongEmphasis（3..8）内且 > 3
     view.dispatch({ selection: { anchor: 5 } });
-    const inBold = snapshotDecorations(view.state, view.state.field(syntaxTreeField).tree);
+    const inBold = snapshotDecorations(view.state, view.state.field(livePreviewField).tree);
     const stillHidden = inBold.filter((d) => d.includes(":replace:")).length;
     expect(stillHidden).toBe(2); // 只剩斜体的两个 *
 
     // 在**结构之外**（文档末尾）敲一个字，触发增量解析
     // → 前面结构的标记状态与区间都应当保持不变
     view.dispatch({ changes: { from: view.state.doc.length, insert: "新" } });
-    const afterType = snapshotDecorations(view.state, view.state.field(syntaxTreeField).tree);
+    const afterType = snapshotDecorations(view.state, view.state.field(livePreviewField).tree);
     expect(afterType).toEqual(inBold);
 
     view.destroy();
@@ -296,14 +301,14 @@ describe("增量路径与全量路径的装饰器一致性", () => {
     const view = new EditorView({
       state: EditorState.create({
         doc: "这是 **粗体** 和 *斜体* 文字。",
-        extensions: [syntaxTreeField],
+        extensions: [livePreviewField],
       }),
       parent: host,
     });
 
     // 在粗体的第一个 `*` 之后插入字符 → `**` 被打断，结构变成斜体
     view.dispatch({ changes: { from: 4, insert: "新" } });
-    const deco = snapshotDecorations(view.state, view.state.field(syntaxTreeField).tree);
+    const deco = snapshotDecorations(view.state, view.state.field(livePreviewField).tree);
 
     // 文档变成 "这是 *新*粗体** 和 *斜体* 文字。"
     // → "*新*" 是斜体（1 组 replace），原来的 ** 变成字面文本

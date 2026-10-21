@@ -164,3 +164,151 @@
   border-radius: var(--ink-radius-sm);
   padding: 2px 6px;
 }
+
+/* ═══════════════════════════════════════════════════════════
+   编辑器宽度约束
+   ═══════════════════════════════════════════════════════════ */
+
+/*
+ * 把内容宽度锁在编辑器宽度上。
+ *
+ * 背景：CM6 的 `.cm-content` 是 `flex-shrink: 0`，宽度取 max-content
+ * （见 @codemirror/view 的 baseStyle）。而代码块里的 `white-space: pre`
+ * 长行会把 max-content 撑大——块级 widget 又是 `.cm-content` 的块级子元素，
+ * `overflow-x: auto` 在这种「父宽度由内容决定」的上下文里不起作用，
+ * 结果是**整个文档**出现横向滚动条，而不是代码块内部滚动。
+ *
+ * 我们开了 `EditorView.lineWrapping`（正文本来就该折行），
+ * 所以文档级的横向滚动永远不该出现：
+ * 长正文 → 折行，长代码 → 在 `.cm-md-code` 内部滚动。
+ *
+ * 注意必须用 flex 而不是 `width: 100%`：
+ *   `.cm-scroller` 是 `display: flex`，`.cm-gutter`（行号槽）与 `.cm-content`
+ *   是**兄弟节点**。`width: 100%` 按「滚动容器的宽度」解析，
+ *   撑满容器再加上行号槽宽度就会溢出（实测正好多出一个行号槽的宽度）。
+ *   `flex: 1 1 auto` 才是「占满行号槽之外的剩余宽度」。
+ *   `min-width: 0` 不能省——flex item 的 min-width 默认是 auto（= min-content），
+ *   不置 0 就缩不下去。
+ */
+.cm-editor .cm-content {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   块级渲染：代码块
+   ═══════════════════════════════════════════════════════════ */
+
+.cm-md-code {
+  margin: 0.6em 0;
+  padding: 12px 14px;
+  border: 1px solid var(--ink-code-border);
+  border-radius: var(--ink-radius-md);
+  background-color: var(--ink-code-bg);
+  color: var(--ink-code-fg);
+  font-family: var(--ink-mono-family);
+  font-size: 0.875em;
+  line-height: 1.55;
+  overflow-x: auto;
+  tab-size: 4;
+}
+
+.cm-md-code code {
+  font: inherit;
+  background: none;
+  padding: 0;
+  border: 0;
+  white-space: pre;
+}
+
+/*
+ * highlight.js token 配色。
+ *
+ * 全部走 CSS 变量，这样跟随亮/暗主题切换——highlight.js 自带主题是
+ * 写死的 class 规则，跟我们的亮/暗两套令牌对不上，所以自己写一份。
+ *
+ * 类名与 highlight.js 的 emitter 一一对应（`hljs-` 前缀）：
+ *   https://github.com/highlightjs/highlight.js/blob/main/src/lib/emitter.js
+ */
+.cm-md-code .hljs-comment,
+.cm-md-code .hljs-quote {
+  color: var(--ink-code-comment);
+  font-style: italic;
+}
+
+.cm-md-code .hljs-punctuation {
+  color: var(--ink-code-punctuation);
+}
+
+.cm-md-code .hljs-operator {
+  color: var(--ink-code-punctuation);
+}
+
+.cm-md-code .hljs-keyword,
+.cm-md-code .hljs-selector-tag,
+.cm-md-code .hljs-literal,
+.cm-md-code .hljs-section,
+.cm-md-code .hljs-doctag,
+.cm-md-code .hljs-name {
+  color: var(--ink-code-keyword);
+}
+
+.cm-md-code .hljs-string,
+.cm-md-code .hljs-attribute,
+.cm-md-code .hljs-symbol,
+.cm-md-code .hljs-bullet,
+.cm-md-code .hljs-subst,
+.cm-md-code .hljs-regexp {
+  color: var(--ink-code-string);
+}
+
+.cm-md-code .hljs-number,
+.cm-md-code .hljs-meta,
+.cm-md-code .hljs-params {
+  color: var(--ink-code-number);
+}
+
+.cm-md-code .hljs-title,
+.cm-md-code .hljs-title.function_ {
+  color: var(--ink-code-function);
+}
+
+.cm-md-code .hljs-title.class_,
+.cm-md-code .hljs-class,
+.cm-md-code .hljs-type,
+.cm-md-code .hljs-built_in,
+.cm-md-code .hljs-builtin-name {
+  color: var(--ink-code-type);
+}
+
+.cm-md-code .hljs-tag {
+  color: var(--ink-code-tag);
+}
+
+.cm-md-code .hljs-attr,
+.cm-md-code .hljs-variable,
+.cm-md-code .hljs-template-variable,
+.cm-md-code .hljs-property {
+  color: var(--ink-code-attr);
+}
+
+.cm-md-code .hljs-deletion {
+  color: var(--ink-code-deleted);
+}
+
+.cm-md-code .hljs-addition {
+  color: var(--ink-code-inserted);
+}
+
+.cm-md-code .hljs-emphasis {
+  font-style: italic;
+}
+
+.cm-md-code .hljs-strong {
+  font-weight: 600;
+}
+
+.cm-md-code .hljs-link {
+  color: var(--ink-accent);
+  text-decoration: underline;
+}

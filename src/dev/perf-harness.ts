@@ -14,7 +14,7 @@ import { EditorView, lineNumbers, highlightActiveLine } from "@codemirror/view";
 import { history } from "@codemirror/commands";
 import { livePreview } from "@/editor/live-preview";
 import { buildLivePreviewDecorations } from "@/editor/live-preview/decorations";
-import { syntaxTreeField } from "@/editor/live-preview/syntax-tree";
+import { livePreviewField } from "@/editor/live-preview/state";
 
 /** 生成一份带各种行内标记的 Markdown 文档 */
 function makeDoc(paragraphs: number): string {
@@ -103,8 +103,8 @@ async function runScenario(
   await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
 
   // 统计装饰器数量
-  const tree = view.state.field(syntaxTreeField).tree;
-  const decoSet = buildLivePreviewDecorations(view.state, "live", tree);
+  const lp = view.state.field(livePreviewField);
+  const decoSet = buildLivePreviewDecorations(lp.source, lp.cursor, "live", lp.tree);
   let decoCount = 0;
   const it = decoSet.iter();
   while (it.value !== null) {

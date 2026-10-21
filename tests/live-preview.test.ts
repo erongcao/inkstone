@@ -15,6 +15,8 @@ import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { history, undo, redo } from "@codemirror/commands";
 import { buildLivePreviewDecorations } from "@/editor/live-preview/decorations";
+import { parseSyntax } from "@/editor/live-preview/syntax";
+import { livePreviewField } from "@/editor/live-preview/state";
 import { livePreview, setDisplayModeOf } from "@/editor/live-preview";
 import type { MarkerDisplayMode } from "@/settings/schema";
 
@@ -27,11 +29,7 @@ interface Deco {
 
 /** 把装饰器集合摊平成可断言的数组 */
 function collect(doc: string, cursor: number, mode: MarkerDisplayMode = "live"): Deco[] {
-  const state = EditorState.create({
-    doc,
-    selection: { anchor: cursor },
-  });
-  const set = buildLivePreviewDecorations(state, mode);
+  const set = buildLivePreviewDecorations(doc, cursor, mode, parseSyntax(doc));
   const out: Deco[] = [];
   // 注意：`RangeSet.iter()` 返回的是 RangeCursor，它**不是可迭代对象**，
   // 必须手动 next() 推进，value 为 null 表示遍历结束。
@@ -244,7 +242,8 @@ describe("Live Preview 与撤销栈", () => {
 
   /** 当前状态下被隐藏的标记区间 */
   function hiddenRanges(view: EditorView): [number, number][] {
-    const set = buildLivePreviewDecorations(view.state, "live");
+    const lp = view.state.field(livePreviewField);
+    const set = buildLivePreviewDecorations(lp.source, lp.cursor, "live", lp.tree);
     const out: [number, number][] = [];
     const cursor = set.iter();
     while (cursor.value !== null) {

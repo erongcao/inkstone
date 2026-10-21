@@ -48,7 +48,7 @@ Inkstone（砚）是一个**开源 Markdown 编辑器**，对标 Typora 的 Live
 | 编辑内核 | **CodeMirror 6** | M1 实测后从 Milkdown 改选，理由见下方「M1 选型结论」 |
 | 语义解析 | remark / unified / mdast | 渲染、导出、大纲、脚注编号的唯一来源 |
 | 编辑视图布局 | lezer / @lezer/markdown | 增量快 10–15 倍，只回答「标记在哪」 |
-| 高亮/公式/图表 | Shiki / KaTeX / Mermaid | KaTeX 而非 MathJax——同步渲染，编辑器里不抖 |
+| 高亮/公式/图表 | **highlight.js** / KaTeX / Mermaid | 高亮用 `highlight.js/lib/core` + 显式注册（**不是** Prism——生产构建下会静默失效，见「块级渲染层与代码高亮」）；KaTeX 而非 MathJax——同步渲染，编辑器里不抖 |
 | 前端 | React 19 + Vite 8 + TypeScript 5.9 | TS 锁 5.9：typescript-eslint 8.72 尚未适配 TS 7 |
 
 ## M1 选型结论：为什么是 CodeMirror 6 而不是 Milkdown（2026-10-20 实测 / 2026-10-21 正式拍板）
@@ -333,6 +333,107 @@ ProseMirror 内核**，理由和我们完全一样——mark 不含标记符文�
     而且 jsdom 没有 layout，多选区会触发 CM6 视口计算崩溃
     （`TextLeaf.lineAt` 报错），所以多选区相关的测试要用 `EditorState` 而不是 `EditorView`。
 
+31. **lezer 的 `SyntaxNode.toString()` 返回的是节点类型名列表，不是文本**——
+    它其实是 `Tree.toString()`（`"CodeInfo"` 这种）。
+    取节点文本必须用 `source.slice(node.from, node.to)`。
+
+32. **块级装饰器必须走 `EditorView.decorations` facet，不能走 ViewPlugin**——
+    走 ViewPlugin 会抛
+    `RangeError: Block decorations may not be specified via plugins`。
+    但 `EditorView.decorations.from(field, fn)` **只接受一个 StateField 作为依赖**，
+    而块级渲染需要「语法树 + 显示模式 + 光标 + 全文」四个输入。
+    解法是把它们合并进**同一个** `livePreviewField`（`live-preview/state.ts`），
+    而不是配四个字段。
+
+33. **`.cm-content` 的宽度是 max-content，长代码行会把整个文档撑出横向滚动条**（2026-10-22 实测）：
+    CM6 baseStyle 里 `.cm-content` 是 `flex-shrink: 0` + `display: block`，
+    宽度由内容决定；`.cm-scroller` 是 `display: flex`，且
+    **`.cm-gutter`（行号槽）与 `.cm-content` 是兄弟节点**。
+    所以给 `.cm-content` 写 `width: 100%` 是错的——它按滚动容器宽度解析，
+    撑满容器后再加行号槽宽度就溢出了（实测正好多出一个行号槽的宽度）。
+    正确写法（`live-preview.css`）：
+    ```css
+    .cm-editor .cm-content { flex: 1 1 auto; min-width: 0; }
+    ```
+    `min-width: 0` 不能省：flex item 的 `min-width` 默认是 `auto`（= min-content），
+    不置 0 就缩不下去。
+    前提是我们开了 `EditorView.lineWrapping`——文档级横向滚动本来就不该出现，
+    长正文折行，长代码在 `.cm-md-code`（`overflow-x: auto`）内部滚。
+
+## 块级渲染层与代码高亮（2026-10-22）
+
+### 块级渲染：lezer 节点 → widget 的通用机制
+
+`src/editor/render/` 是 M2 所有「整块」渲染的骨架（代码块 / 表格 / 公式 / 图表共用）：
+
+| 文件 | 职责 |
+| --- | --- |
+| `types.ts` | `BlockRenderer` 接口：`find(tree, source)` 找块、`render(match)` 出 DOM |
+| `registry.ts` | 幂等注册表（同 id 覆盖而非报错） |
+| `scan.ts` | 逐行扫描工具——给 **lezer 不支持**的块结构用 |
+| `code-block.ts` | 围栏代码块定位（lezer `FencedCode`）+ 高亮 |
+
+两种识别方式并存是有原因的：
+**`@lezer/markdown` 的 GFM 扩展不识别表格与任务列表**（表格被当成普通 Paragraph），
+数学公式更不在 CommonMark 内——所以这些块必须用 `scan.ts` 行扫描，
+围栏代码块则用语法树（准，且能正确处理四反引号围栏与块内反引号）。
+
+块级展开判定用**严格开区间** `from < cursor < to`：
+打开文件时光标在 0，第一个代码块是收起的（与 Typora 一致）；
+点击渲染块 → mousedown 把光标 dispatch 到 `from + 1` → 块切回源码。
+
+### 代码高亮：Prism → highlight.js（**发布级 bug，不是口味问题**）
+
+先用 Prism（Typora 同款，MIT），实测翻车：
+
+| 环境 | 结果 |
+| --- | --- |
+| vite dev | 高亮正常 |
+| vitest | 失效 |
+| **rollup 生产产物（`vite preview`）** | **静默降级成纯文本** |
+
+根因：**Prism 的语言组件是副作用式注册到全局的**。
+`prism-javascript.js` 执行时往**全局** `Prism` 上挂 `Prism.languages.javascript`，
+而 `prismjs` 的 ESM interop 在不同环境下给出的是**不同对象**。
+rollup 生产构建改变模块执行顺序后，「注册在一个实例、读取在另一个实例」，
+`Prism.highlight` 找不到 grammar 就**静默返回纯文本，不报错**。
+（附带坑：`Prism.highlight` 第二个参数是 **grammar 对象**，传语言名字符串同样静默降级。）
+
+换成 **highlight.js `lib/core`**（`highlight.js@11.12.0`，BSD-3-Clause）：
+单例由模块自己持有，`registerLanguage` 是**显式**调用，语言模块是**纯函数**，
+不碰任何全局对象 → dev / 生产构建 / vitest 三处行为一致。
+**生产产物已实证**：`<code class="hljs language-typescript">` 下有完整的
+`hljs-keyword` / `hljs-title function_` / `hljs-attr` / `hljs-built_in` token。
+
+注册方式（`ensureHighlighter()`，幂等）：
+`lib/core` + 显式 `import xxx from "highlight.js/lib/languages/xxx"`，
+**不用**全量入口（193 语言，1474 KB raw）。注册 30 个常用语言 = 269.3 KB raw。
+`registerLanguage` 会顺带注册语言定义里的 `aliases`，所以 `js`/`ts`/`py` 自动可认。
+
+`resolveLanguage()` 返回**规范名**而不是原样透传——注意
+`hljs.getLanguage("js")` 会返回 JavaScript 的语法对象（它吃别名），
+所以不能拿它当规范名；highlight.js 不提供「别名 → 规范名」的公开 API，
+注册完自己扫一遍 `listLanguages()` 和各自的 `aliases` 建反向表。
+
+### 包体代价（实测，raw 未压缩）
+
+| 方案 | 语言数 | raw |
+| --- | --- | --- |
+| Prism 等价集（31 语言 + 核心） | 31 | 172.2 KB |
+| **highlight.js 常用集（30 语言 + 核心）** | 30 | **269.3 KB** |
+| highlight.js 全量 | 193 | 1474 KB |
+
+换库代价约 **+97 KB raw / +40 KB gzip**（主 chunk 523 → 669.75 kB，gzip 225.53 kB）。
+**判断：值得。** 买的是一个「生产构建里不会静默失效」的正确性，
+对一个本地桌面应用来说 40 KB gzip 无关痛痒，而高亮静默失效是发布阻断级缺陷。
+hljs 的语法也比 Prism 的 `clike` 派生方式准（TS 泛型 / 装饰器 / JSX / 模板字符串）。
+
+### 亮/暗双主题
+
+**不用 highlight.js 自带主题**（class 规则写死，跟我们的令牌对不上）。
+`live-preview.css` 里把 `.hljs-*` 映射到 `--ink-code-*` CSS 变量，
+亮/暗两套令牌（`tokens.css`）各给一组色值，切换主题自动跟随。
+
 ## Live Preview 性能：实测数据与优化结论（2026-10-21）
 
 ### 成本分布（`scripts/bench-decorations.ts`）
@@ -494,6 +595,7 @@ pandoc 是 GPL-2.0，但**以独立进程调用、不链接**，与 Typora 的�
 ```
 src/parser/     Markdown 解析层（唯一语义来源，remark/mdast）
 src/editor/     编辑内核（CM6 封装 + live-preview 装饰器插件）
+  └ render/     块级渲染层（M2：代码块 / 表格 / 公式 / 图表 共用的机制）
 src/renderer/   渲染层（高亮/公式/图表）
 src/export/     导出管线
 src/settings/   设置模型与存储
@@ -509,7 +611,7 @@ docs/           计划书与调研文档
 
 ## 当前状态
 
-M0 已完成（2026-10-20），M1 编辑内核实施中（2026-10-21）：
+M0 已完成（2026-10-20），**M1 已收官（2026-10-21）**，M2 写作体验实施中（2026-10-22）：
 
 - 编辑内核从 Milkdown 改选 **CodeMirror 6**（理由见上）；
   **2026-10-21 用户正式拍板选 B**，判据是三条架构红线
@@ -522,13 +624,20 @@ M0 已完成（2026-10-20），M1 编辑内核实施中（2026-10-21）：
 - 自动配对已实现（`off` / `basic` / `markdown` 三档，运行时可切换）
 - 撤销/重做与 Live Preview 装饰器重算的交互已补测试
 - 复制粘贴已实现：HTML → Markdown（turndown + 样式净化）、纯 Markdown 原样保留
-- **lezer 增量解析已落地**（`syntax-tree.ts`）：击键成本降 3 倍
+- **lezer 增量解析已落地**：击键成本降 3 倍
   （4000 行 4.58ms → 1.53ms；浏览器实测 6798 行 dispatch p95 = 2.90ms），
   900 轮随机编辑对拍与全量解析 **0% 不一致**
+- **剪贴板已收官**：⌘C 同时写 `text/plain`（Markdown 源码）+
+  `text/html`（渲染后 HTML）+ 内部 MIME `text/x-inkstone-markdown`（逐字节无损）；
+  「粘贴为纯文本」用一次性 StateField 标志，用完即焚
 
-M1 剩余待办：
+M2 已完成：
 
-- 复制为 HTML / 粘贴为纯文本（Typora 功能清单第 10 节）
-- M2 承接：段落级增量渲染（局部重建装饰器，而非裁剪）
-- 表格、公式、图表的渲染层尚未实现（按计划推到 M2）
+- **M2-1 块级渲染层骨架**：`src/editor/render/`，代码块已能渲染 + 点击切回源码
+- **M2-2 代码高亮**：highlight.js `lib/core` + 30 语言显式注册，
+  生产产物已实证 token 正常（换库理由见上）
+
+M2 剩余待办：KaTeX 公式、Mermaid 图表、表格 + 任务列表交互、大纲面板 + 字数统计、
+斜杠菜单 / 命令面板 + 链接浮层、列表续行 / 自动编号、脚注、图片拖放、焦点模式 + Emoji。
+另：装饰器**局部重建**（段落级增量渲染）仍未做，是 M2 的性能项。
 

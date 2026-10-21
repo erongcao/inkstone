@@ -17,83 +17,35 @@
  *   - `source` 纯源码，不做渲染（Typora 源码模式 / Bear 通用模式）
  */
 
-import {
-  Decoration,
-  ViewPlugin,
-  type EditorView,
-  type ViewUpdate,
-  type DecorationSet,
-} from "@codemirror/view";
-import { StateEffect, StateField, type Extension } from "@codemirror/state";
+import { Decoration, EditorView } from "@codemirror/view";
+import type { Extension } from "@codemirror/state";
 import { buildLivePreviewDecorations } from "./decorations";
-import { syntaxTreeField } from "./syntax-tree";
+import { livePreviewField, setDisplayMode } from "./state";
+import { registerBlockRenderer } from "../render/registry";
+import { codeBlockRenderer } from "../render/code-block";
 import type { MarkerDisplayMode } from "@/settings/schema";
 
-/** 切换标记符显示策略 */
-export const setDisplayMode = StateEffect.define<MarkerDisplayMode>();
-
-/** 当前显示策略（存在 state 里，切换是事务的一部分） */
-const displayModeField = StateField.define<MarkerDisplayMode>({
-  create: () => "live",
-  update(value, tr) {
-    for (const effect of tr.effects) {
-      if (effect.is(setDisplayMode)) {
-        return effect.value;
-      }
-    }
-    return value;
-  },
-});
-
 /**
- * Live Preview 视图插件。
+ * Live Preview 装饰器。
  *
- * 为什么用 ViewPlugin 而不是 `EditorView.decorations.compute`？
+ * 为什么走 `EditorView.decorations` facet 而不是 ViewPlugin：
+ *   CM6 明确规定**块级装饰器**（`Decoration.replace({ block: true })`）
+ *   不能通过插件提供——插件的装饰器不参与文档高度计算，
+ *   而块级 widget 会改变行高，必须走 facet 这条静态路径。
+ *   实测报错：`RangeError: Block decorations may not be specified via plugins`。
  *
- *   `Facet.compute` 的文档原话是「your function is only called again for a new
- *   state when one of those parts changed」——它**只在依赖的字段变化时**才重算。
- *   而装饰器真正依赖的是「文档内容 + 光标位置」，这两个每次击键都在变，
- *   却不是任何一个 StateField。
- *
- *   如果把依赖写成「是否实时预览」（只在切换模式时变），
- *   装饰器就只会在初始化时算一次，之后再也不更新——这是实测踩过的坑。
- *
- *   ViewPlugin 的 `update()` 则由 CM6 在**每个事务**后调用，
- *   我们在这里显式决定何时重算，行为最清晰、也不依赖 CM6 的依赖追踪细节。
+ * `decorations.from(field, get)` 的 get 只接受一个字段作为依赖，
+ * 所以 `livePreviewField` 把语法树、显示策略、光标位置收在一起（见 state.ts）。
+ * 字段值每次事务都返回新对象 → 装饰器每次都重算，行为与 ViewPlugin 版一致。
  */
-class LivePreviewPlugin {
-  decorations: DecorationSet;
-
-  constructor(view: EditorView) {
-    this.decorations = computeDecorations(view);
-  }
-
-  update(update: ViewUpdate): void {
-    // 两种情况需要重算：
-    //   1. 有事务（打字、移动光标、切换模式）
-    //   2. 视口变化（滚动）—— CM6 在 measure 循环里会用**空事务**创建
-    //      一个 ViewUpdate 并通知插件，此时 `transactions.length === 0`
-    //      但 `viewportChanged === true`（`viewportMoved` 表示是纯滚动而非
-    //      文档变更导致的位置映射）。
-    if (update.transactions.length > 0 || update.viewportChanged) {
-      this.decorations = computeDecorations(update.view);
-    }
-  }
-}
-
-/** 根据当前状态算出装饰器集合；源码模式返回空集 */
-function computeDecorations(view: EditorView): DecorationSet {
-  const state = view.state;
-  const mode = state.field(displayModeField);
-  if (mode === "source") return Decoration.none;
-  // 语法树由 `syntaxTreeField` 增量维护，命中即复用，不再全量重解析
-  const tree = state.field(syntaxTreeField).tree;
-  return buildLivePreviewDecorations(state, mode, tree);
-}
-
-const livePreviewPlugin = ViewPlugin.fromClass(LivePreviewPlugin, {
-  decorations: (v) => v.decorations,
-});
+const livePreviewDecorations = EditorView.decorations.from(
+  livePreviewField,
+  ({ source, cursor, mode, tree }) => {
+    // 源码模式：不做任何渲染
+    if (mode === "source") return Decoration.none;
+    return buildLivePreviewDecorations(source, cursor, mode, tree);
+  },
+);
 
 /**
  * Live Preview 扩展。
@@ -103,10 +55,35 @@ const livePreviewPlugin = ViewPlugin.fromClass(LivePreviewPlugin, {
  * 见 `createMarkdownEditor` 里的 `initialDisplayMode`。
  */
 export function livePreview(): Extension {
-  return [displayModeField, syntaxTreeField, livePreviewPlugin];
+  // 注册块级渲染器（幂等，重复调用会覆盖）
+  registerBlockRenderer(codeBlockRenderer);
+
+  return [
+    livePreviewField,
+    livePreviewDecorations,
+    // 点击渲染后的块 → 把光标移进块内 → 该块切回源码编辑
+    EditorView.domEventHandlers({
+      mousedown: (event, view) => {
+        const target = event.target as HTMLElement | null;
+        const block = target?.closest?.("[data-block-from]") as HTMLElement | null;
+        if (!block) return false;
+        const from = Number(block.dataset.blockFrom);
+        if (!Number.isFinite(from)) return false;
+        // 阻止默认行为（否则浏览器会放置原生选区）
+        event.preventDefault();
+        // 光标放到块的第一个字符之后——正好落在「块内」，
+        // 装饰器重算后该块就展开成源码了
+        view.dispatch({ selection: { anchor: from + 1 } });
+        view.focus();
+        return true;
+      },
+    }),
+  ];
 }
 
 /** 编程式切换显示策略 */
 export function setDisplayModeOf(view: EditorView, mode: MarkerDisplayMode): void {
   view.dispatch({ effects: setDisplayMode.of(mode) });
 }
+
+export { setDisplayMode };

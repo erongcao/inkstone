@@ -23,7 +23,7 @@ import { GFM } from "@lezer/markdown";
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { buildLivePreviewDecorations } from "../src/editor/live-preview/decorations";
-import { syntaxTreeField } from "../src/editor/live-preview/syntax-tree";
+import { livePreviewField } from "../src/editor/live-preview/state";
 
 const corpusDir = join(process.cwd(), "tests/corpus");
 const gfmParser = baseParser.configure(GFM);
@@ -107,12 +107,12 @@ for (const lines of [500, 1500, 4000]) {
 
   // 4+5. 完整管线
   bench("4+5. 完整 buildLivePreviewDecorations", 30, () => {
-    buildLivePreviewDecorations(state, "live");
+    buildLivePreviewDecorations(text, 0, "live", tree);
   });
 
   // 单独看装饰器构造
   const decoCount = (() => {
-    const set = buildLivePreviewDecorations(state, "live");
+    const set = buildLivePreviewDecorations(text, 0, "live", tree);
     let n = 0;
     const it = set.iter();
     while (it.value !== null) {
@@ -136,18 +136,19 @@ for (const lines of [500, 1500, 4000]) {
   const incrState = EditorState.create({
     doc,
     selection: { anchor: 0 },
-    extensions: [syntaxTreeField],
+    extensions: [livePreviewField],
   });
 
   bench("  [全量] 一次击键：解析 + 装饰器", 30, () => {
     const next = plainState.update({ changes: { from: at, insert: "X" } }).state;
-    buildLivePreviewDecorations(next, "live");
+    const nextText = next.doc.toString();
+    buildLivePreviewDecorations(nextText, 0, "live", gfmParser.parse(nextText));
   });
 
   bench("  [增量] 一次击键：解析 + 装饰器", 30, () => {
     const next = incrState.update({ changes: { from: at, insert: "X" } }).state;
-    const tree = next.field(syntaxTreeField).tree;
-    buildLivePreviewDecorations(next, "live", tree);
+    const lp = next.field(livePreviewField);
+    buildLivePreviewDecorations(lp.source, lp.cursor, "live", lp.tree);
   });
 }
 

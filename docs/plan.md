@@ -81,7 +81,7 @@
 | **编辑内核** | **CodeMirror 6** | `@codemirror/view` 6.43.15 | MIT | 事实标准（VSCode 同源） |
 | **语义解析** | **remark / unified / mdast** | remark 9.0k★ | MIT | 事实标准 |
 | **编辑视图布局** | **lezer / @lezer/markdown** | 1.8.1 | MIT | 活跃（CodeMirror 同源） |
-| **语法高亮** | **Shiki** | v4.5.0（2026-10-01） | MIT | 活跃 |
+| **语法高亮** | **highlight.js** | 11.12.0（2026-10-22） | BSD-3-Clause | 活跃（190 语言，§8 D8） |
 | **数学公式** | **KaTeX** | v0.19.0（2026-10-01） | MIT | 活跃 |
 | **图表** | **Mermaid** | 12.2.0（2026-10-13） | MIT | 活跃（90k★） |
 | **HTML 净化** | **DOMPurify** | — | Apache-2.0 | 活跃 |
@@ -371,7 +371,7 @@ Milkdown 不进依赖树，但它的设计仍是 M2 自建写作 UI 时的现成
 
 ### 2.5 渲染组件
 
-- **代码高亮：Shiki v4.5.0**（TextMate 语法，VSCode 同款效果，支持亮/暗双主题）。体积大 → 用 `createHighlighter` 加载 **约 40 种精选语言**，其余按需加载。
+- **代码高亮：highlight.js 11.12.0** 的 `lib/core` 入口 + 显式注册 30 个常用语言（见 §8 D8 的选型过程）。不用全量入口（193 语言 / 1474 KB raw），不用 Shiki（wasm + 异步，编辑器里会抖），不用 Prism（生产构建下静默失效）。体积：30 语言 + 核心 = 269.3 KB raw。亮/暗双主题不用 hljs 自带主题，而是把 `.hljs-*` 映射到我们的 `--ink-code-*` CSS 变量。
 - **数学：KaTeX v0.19.0**，不用 MathJax 4。理由：**同步渲染**——编辑器里每敲一个字符都要重排公式，MathJax 的异步布局会造成明显抖动；KaTeX 快一个数量级且体积小。Typora 选 MathJax 是因为它把公式做成了独立编辑面板，我们不做那个。
 - **图表：Mermaid 12.2.0**（90k★，MIT，Typora 1.13 同款大版本）。
 - **HTML 净化：DOMPurify**（Apache-2.0）。对标 Typora 的安全策略：剥离 `<script>`、`onload` 等事件属性、`class`/`id`/`data-*`；`<iframe>` 强制 `sandbox`。
@@ -617,7 +617,7 @@ CM6 的 `EditorView.inputHandler` 扩展点实现，设置项 `editor.autoPairMo
 - [ ] 字数统计（总计 / 选区 / 常驻显示）
 - [ ] 表格图形化编辑（增删行列、调列宽、对齐）
 - [ ] 任务列表交互（点击勾选写回源码）
-- [ ] 代码高亮（Shiki，亮/暗双主题）
+- [x] 代码高亮（highlight.js `lib/core`，亮/暗双主题走 CSS 变量）
 - [ ] 数学公式（KaTeX）
 - [ ] Mermaid 图表
 - [ ] 焦点模式 / 打字机模式
@@ -719,6 +719,7 @@ GitHub Alerts / 脚注 / RTL / 插件系统 / 主题市场 / 图片图床 / EPUB
 | D5 | **首版差异化** | 通用写作 / 学术写作（公式+文献+引用管理） | **通用打地基，把学术写作作为首个差异化亮点**——公式/脚注/引用是 Typora 用户最常吐槽的部分，也最契合您的实际需求 |
 | D6 | **pandoc 依赖方式** | 内置 / 调用系统安装 / 两者 | **调用系统安装**（本机已有 3.8），检测不到时给安装引导，保持安装包小 |
 | D7 | **是否现在就装 Rust** | 先装 / 先用 Electron 起步 / 用 Wails | **先装 Rust**（`brew install rustup`，约 1.5GB）。若您觉得这一步麻烦，Electron 是零摩擦替代 |
+| D8 | **语法高亮库** | Shiki / Prism / highlight.js | ✅ **已定：highlight.js `lib/core`**（2026-10-22）。原计划 Shiki → 先试 Prism → 换 highlight.js。**Shiki 出局**：要 wasm + 异步 `createHighlighter`，编辑器里每敲一个字符都要重排高亮，异步会抖。**Prism 出局**（实测翻车）：语言组件是副作用式注册到**全局** `Prism`，rollup 生产构建改变模块执行顺序后「注册在一个实例、读取在另一个实例」，`Prism.highlight` **静默降级成纯文本不报错**（dev 正常、preview 产物无 token）——发布阻断级缺陷。**highlight.js** 的 `lib/core` 是干净单例，`registerLanguage` 显式注册，语言模块是纯函数，不碰全局，三处行为一致；生产产物已实证。代价：raw 比 Prism 等价集多 97 KB（172.2 → 269.3 KB / gzip ≈ +40 KB），判断为「买正确性，值得」。详见 §2.5 与 AGENTS.md |
 
 ---
 

@@ -14,10 +14,12 @@
  */
 
 import { Decoration, WidgetType, type DecorationSet } from "@codemirror/view";
-import type { EditorState, Range } from "@codemirror/state";
+import type { Range } from "@codemirror/state";
 import type { SyntaxNode, Tree } from "@lezer/common";
-import { parseSyntax, INLINE_MARKERS, BLOCK_MARKERS, HEADING_CLASSES } from "./syntax";
-import { syntaxTreeField } from "./syntax-tree";
+import { INLINE_MARKERS, BLOCK_MARKERS, HEADING_CLASSES } from "./syntax";
+import { BlockWidget } from "./block-widget";
+import { blockRenderers } from "../render/registry";
+import type { BlockMatch, BlockRenderer } from "../render/types";
 import type { MarkerDisplayMode } from "@/settings/schema";
 
 /**
@@ -168,19 +170,24 @@ function analyze(
 /**
  * 生成 Live Preview 装饰器集合。
  *
- * @param state 编辑器状态
- * @param mode  标记符显示策略：
+ * 这是一个**纯函数**——不依赖 EditorState，只吃四个显式参数。
+ * 原因是 CM6 的 `EditorView.decorations.from(field, get)` 的 get 拿不到 state，
+ * 而块级装饰器必须走 facet（见 `state.ts` 的说明）。
+ *
+ * @param source 文档全文
+ * @param cursor 主选区光标位置
+ * @param mode   标记符显示策略：
  *   - `live`   标记隐藏（零宽 widget 顶替），光标进入该结构才显露
  *   - `dimmed` 标记始终可见，但弱化着色（Ulysses 式）
- * @param tree  可选的语法树。生产路径传入增量维护的树（见 `syntax-tree.ts`）；
- *   省略时从 state 里取，取不到就现场全量解析（测试用）。
+ * @param tree   增量维护的语法树
  */
 export function buildLivePreviewDecorations(
-  state: EditorState,
+  source: string,
+  cursor: number,
   mode: MarkerDisplayMode = "live",
-  tree?: Tree,
+  tree: Tree,
 ): DecorationSet {
-  const syntaxTree = tree ?? resolveTree(state);
+  const syntaxTree = tree;
 
   // 注意：`Decoration.mark(...).range(a, b)` 返回的是 `Range<Decoration>`（带 from/to 的区间），
   // 不是 `Decoration` 本身；`DecorationSet.create` 需要的正是这种区间数组。
@@ -190,9 +197,7 @@ export function buildLivePreviewDecorations(
   const inlineDecos: Range<Decoration>[] = [];
   const blockDecos: Range<Decoration>[] = [];
   const headingDecos: Range<Decoration>[] = [];
-
-  // 主选区的光标位置（多选区时取主选区）
-  const cursor = state.selection.main.head;
+  const renderedDecos: Range<Decoration>[] = [];
 
   // 一次遍历收集全部三类装饰。
   // 重构前这里是三次独立的 `tree.iterate()`（实测 4000 行文档 0.78ms），
@@ -265,20 +270,54 @@ export function buildLivePreviewDecorations(
     },
   });
 
+  // ── 块级渲染（代码块 / 表格 / 公式 / 图表）──
+  // 光标在块内 → 显示源码（可编辑）；光标在块外 → 显示渲染结果。
+  for (const { match, renderer } of collectBlockMatches(syntaxTree, source)) {
+    if (isBlockExpanded(match, cursor)) continue;
+    const result = renderer.render(match, source);
+    if (!result) continue;
+    renderedDecos.push(
+      Decoration.replace({
+        widget: new BlockWidget(result, match.from),
+        block: true,
+      }).range(match.from, match.to),
+    );
+  }
+
   // `DecorationSet` 只是类型别名（= RangeSet<Decoration>），
   // 真正的构造入口是静态方法 `Decoration.set(ranges, sort)`。
-  return Decoration.set([...inlineDecos, ...blockDecos, ...headingDecos], true);
+  return Decoration.set(
+    [...inlineDecos, ...blockDecos, ...headingDecos, ...renderedDecos],
+    true,
+  );
+}
+
+/** 收集所有渲染器匹配到的块 */
+function collectBlockMatches(
+  tree: Tree,
+  source: string,
+): { match: BlockMatch; renderer: BlockRenderer }[] {
+  const result: { match: BlockMatch; renderer: BlockRenderer }[] = [];
+  for (const renderer of blockRenderers()) {
+    for (const match of renderer.find(tree, source)) {
+      result.push({ match, renderer });
+    }
+  }
+  return result;
 }
 
 /**
- * 取语法树：优先用 state 里增量维护的那棵。
+ * 判断一个块当前是否应当「展开」（显示源码、可编辑）。
  *
- * `state.field(field, false)` 的第二个参数为 false 时，
- * 字段不存在会返回 undefined 而不是抛错——测试里直接 `EditorState.create()`
- * 造的 state 没有这个字段，靠这个兜底。
+ * 规则是**严格开区间** `from < cursor < to`：
+ *   - 光标在块内 → 展开
+ *   - 光标正好落在块首 → 不展开。这样打开文件时（光标在 0）
+ *     第一个代码块是收起的，与 Typora 一致
+ *   - 光标正好落在块尾（= 下一行开头）→ 不展开
+ *
+ * 进入编辑态的路径：点击渲染后的块 → 把光标移到 `from + 1`（块内）→
+ * 装饰器重算 → 该块切回源码。见 live-preview/index.ts 的 mousedown 处理。
  */
-function resolveTree(state: EditorState): Tree {
-  const field = state.field(syntaxTreeField, false);
-  if (field) return field.tree;
-  return parseSyntax(state.doc.toString());
+function isBlockExpanded(match: BlockMatch, cursor: number): boolean {
+  return cursor > match.from && cursor < match.to;
 }
