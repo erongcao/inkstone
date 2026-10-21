@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Inkstone · Live Preview 性能测量台</title>
+    <style>
+      body {
+        font-family: -apple-system, "PingFang SC", sans-serif;
+        margin: 0;
+        padding: 20px;
+        background: #f6f7f9;
+        color: #1f2328;
+      }
+      h1 {
+        font-size: 18px;
+        margin: 0 0 4px;
+      }
+      .hint {
+        font-size: 13px;
+        color: #59636e;
+        margin-bottom: 16px;
+      }
+      pre {
+        background: #fff;
+        border: 1px solid #d1d9e0;
+        border-radius: 6px;
+        padding: 12px 14px;
+        font-size: 13px;
+        line-height: 1.7;
+        overflow-x: auto;
+        white-space: pre-wrap;
+      }
+      .editor {
+        height: 260px;
+        border: 1px solid #d1d9e0;
+        border-radius: 6px;
+        background: #fff;
+        overflow: hidden;
+        margin-bottom: 16px;
+      }
+      .cm-editor {
+        height: 100%;
+      }
+      .cm-editor.cm-focused {
+        outline: none;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Inkstone · Live Preview 性能测量台</h1>
+    <div class="hint">
+      测量「一次击键」到「浏览器绘制完成」的延迟。编辑区里的内容由脚本自动生成并输入。
+    </div>
+    <div id="ed" class="editor"></div>
+    <pre id="out">测量中…</pre>
+    <script type="module" src="/src/dev/perf-harness.ts"></script>
+  </body>
+</html>

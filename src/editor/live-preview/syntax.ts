@@ -13,16 +13,24 @@
  */
 
 import { parser as baseParser, GFM } from "@lezer/markdown";
-import type { Tree, SyntaxNode, SyntaxNodeRef } from "@lezer/common";
+import type { Tree, SyntaxNode, SyntaxNodeRef, TreeFragment } from "@lezer/common";
 
 /** 启用 GFM 扩展（表格、任务列表、删除线、自动链接） */
 const gfmParser = baseParser.configure(GFM);
 
 export type { Tree, SyntaxNode, SyntaxNodeRef };
 
-/** 解析整篇文档 */
-export function parseSyntax(source: string): Tree {
-  return gfmParser.parse(source);
+/**
+ * 解析整篇文档。
+ *
+ * @param source    文档全文
+ * @param fragments 可复用的旧树片段。传入时走**增量解析**——
+ *   lezer 会复用没被变更区间挖空的那部分旧树，只重扫变动区域。
+ *   实测（`scripts/verify-incremental.ts`）：900 轮随机编辑后，
+ *   增量树与全量树逐节点对比 0% 不一致，p95 0.07ms vs 2.74ms。
+ */
+export function parseSyntax(source: string, fragments?: readonly TreeFragment[]): Tree {
+  return fragments ? gfmParser.parse(source, fragments) : gfmParser.parse(source);
 }
 
 /** 遍历语法树的所有节点 */

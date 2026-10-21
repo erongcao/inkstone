@@ -24,13 +24,9 @@ import {
   type ViewUpdate,
   type DecorationSet,
 } from "@codemirror/view";
-import {
-  StateEffect,
-  StateField,
-  type EditorState,
-  type Extension,
-} from "@codemirror/state";
+import { StateEffect, StateField, type Extension } from "@codemirror/state";
 import { buildLivePreviewDecorations } from "./decorations";
+import { syntaxTreeField } from "./syntax-tree";
 import type { MarkerDisplayMode } from "@/settings/schema";
 
 /** 切换标记符显示策略 */
@@ -69,22 +65,30 @@ class LivePreviewPlugin {
   decorations: DecorationSet;
 
   constructor(view: EditorView) {
-    this.decorations = computeDecorations(view.state);
+    this.decorations = computeDecorations(view);
   }
 
   update(update: ViewUpdate): void {
-    // 任何事务（打字、移动光标、切换模式）都可能导致装饰器失效
-    if (update.transactions.length > 0) {
-      this.decorations = computeDecorations(update.state);
+    // 两种情况需要重算：
+    //   1. 有事务（打字、移动光标、切换模式）
+    //   2. 视口变化（滚动）—— CM6 在 measure 循环里会用**空事务**创建
+    //      一个 ViewUpdate 并通知插件，此时 `transactions.length === 0`
+    //      但 `viewportChanged === true`（`viewportMoved` 表示是纯滚动而非
+    //      文档变更导致的位置映射）。
+    if (update.transactions.length > 0 || update.viewportChanged) {
+      this.decorations = computeDecorations(update.view);
     }
   }
 }
 
 /** 根据当前状态算出装饰器集合；源码模式返回空集 */
-function computeDecorations(state: EditorState): DecorationSet {
+function computeDecorations(view: EditorView): DecorationSet {
+  const state = view.state;
   const mode = state.field(displayModeField);
   if (mode === "source") return Decoration.none;
-  return buildLivePreviewDecorations(state, mode);
+  // 语法树由 `syntaxTreeField` 增量维护，命中即复用，不再全量重解析
+  const tree = state.field(syntaxTreeField).tree;
+  return buildLivePreviewDecorations(state, mode, tree);
 }
 
 const livePreviewPlugin = ViewPlugin.fromClass(LivePreviewPlugin, {
@@ -99,7 +103,7 @@ const livePreviewPlugin = ViewPlugin.fromClass(LivePreviewPlugin, {
  * 见 `createMarkdownEditor` 里的 `initialDisplayMode`。
  */
 export function livePreview(): Extension {
-  return [displayModeField, livePreviewPlugin];
+  return [displayModeField, syntaxTreeField, livePreviewPlugin];
 }
 
 /** 编程式切换显示策略 */

@@ -253,6 +253,115 @@ ProseMirror 内核**，理由和我们完全一样——mark 不含标记符文�
 18. **turndown 的 `addRule` 是 `unshift`**——后加的规则优先级更高。
     要覆盖 GFM 插件的规则，必须在 `td.use(gfm)` **之后**再 `addRule`。
 
+19. **lezer 生态里没有 `TreeEditor` 这个类**（2026-10-21 实测）。
+    计划书原文写的「用 `TreeEditor` 做增量解析」是错的——`@lezer/common` 的
+    全部导出里没有它，`@lezer/lr` / `@lezer/highlight` / `@lezer/markdown` 里也没有。
+    **真正的增量入口是三个 API 的组合**：
+
+    ```ts
+    // 1. 把一棵已解析的树登记成「可复用的片段」
+    let fragments = TreeFragment.addTree(tree);
+    // 2. 按变更区间把片段切开：变更处挖空，其余保留
+    fragments = TreeFragment.applyChanges(fragments, changedRanges);
+    // 3. 解析时复用没被挖空的那部分旧树
+    tree = parser.parse(newText, fragments);
+    ```
+
+    CM6 官方走的是同一条路（`@codemirror/language` 的 `ParseContext.changes`）。
+
+20. **`TreeFragment.addTree(tree, fragments)` 不是「更新旧片段」**——
+    看实现（`@lezer/common/dist/index.js`）：
+
+    ```js
+    static addTree(tree, fragments = [], partial = false) {
+      let result = [new TreeFragment(0, tree.length, tree, 0, false, partial)];
+      for (let f of fragments)
+        if (f.to > tree.length) result.push(f);
+      return result;
+    }
+    ```
+
+    它**总是**新建一个「覆盖整篇」的 fragment，旧 fragment 只有超出新树长度的部分才被保留。
+    所以正常情况下 fragments 列表长度恒为 1，增量的复用发生在 `parser.parse(text, fragments)` 内部。
+
+21. **`@lezer/markdown` 的增量解析是可靠的**——900 轮随机编辑对拍，
+    增量树与全量树**逐节点（类型 + 起止位置）0% 不一致**。
+    复现脚本：`scripts/verify-incremental.ts`（900 轮）+ `tests/incremental-parse.test.ts`（200 轮）。
+    Markdown 的块级上下文（缩进、列表层级、围栏代码块）**不会**破坏增量解析的正确性。
+
+22. **`@lezer/common` 的 `ChangedRange` 是 type-only 导出**，必须 `import type`，
+    运行时 import 会拿到 `undefined`。
+
+23. **CM6 滚动时会用「空事务」创建 ViewUpdate 并通知插件**——
+    `EditorView.measure()` 循环里 `ViewUpdate.create(this, this.state, [])` +
+    `update.flags |= changed`（含 Viewport / ViewportMoved），然后 `updatePlugins(update)`。
+    所以 `update.transactions.length === 0` **不代表**「什么都没发生」。
+    判断是否要重算装饰器要用 `update.viewportChanged`，
+    判断「是不是纯滚动」要用 `update.viewportMoved`。
+
+24. **`StateField` 的 `update` 里没有 `tr.state` 之外的新文档访问方式**——
+    `tr.state.doc` 是变更后的文档；`tr.state` 在 `update` 回调里是可用的。
+
+25. **`EditorState.update()` 返回的是 `Transaction`，不是 `EditorState`**——
+    要拿新状态得写 `state.update({...}).state`。写错会得到一个没有 `.field()` 方法的对象。
+
+## Live Preview 性能：实测数据与优化结论（2026-10-21）
+
+### 成本分布（`scripts/bench-decorations.ts`）
+
+| 文档规模 | 语法节点 | lezer 全量解析 | 三次树遍历 | 完整管线 p95 | 装饰器数 |
+| --- | --- | --- | --- | --- | --- |
+| 500 行 / 13 KB | 1097 | 0.93ms | 0.19ms | 0.99ms | 638 |
+| 1500 行 / 32 KB | 2741 | 1.47ms | 0.27ms | 1.84ms | 1595 |
+| 4000 行 / 90 KB | 7673 | 3.25ms | 0.87ms | 4.36ms | 4466 |
+
+**解析占 64%~72%**，是管线里最大的单点成本 → 所以先做增量解析。
+
+### 优化后的实测（真实浏览器，`perf.html`）
+
+| 场景 | 装饰器 | dispatch 同步 p95 | 击键→下一帧绘制 p95 |
+| --- | --- | --- | --- |
+| 小文档 83 行 | 150 | 0.40ms | 10.10ms |
+| 中文档 1018 行 | 1800 | 0.70ms | 10.00ms |
+| 大文档 6798 行 | 12000 | 2.90ms | 7.20ms |
+
+node 侧的管线成本对比（同一次击键）：
+
+| 规模 | 全量解析路径 | 增量解析路径 |
+| --- | --- | --- |
+| 500 行 | 1.13ms | **0.31ms** |
+| 1500 行 | 1.91ms | **0.52ms** |
+| 4000 行 | 4.58ms | **1.53ms** |
+
+### 已实施的优化
+
+1. **增量解析**（`src/editor/live-preview/syntax-tree.ts`）——3 倍加速
+2. **三次 `tree.iterate()` 合并成一次**——省掉 2/3 的遍历成本（4000 行省 0.83ms）。
+   合并时用三个桶分别收集，最后按「行内 → 块级 → 标题」的顺序合并，
+   **与重构前三次独立遍历的推送顺序完全一致**，因此重叠样式的叠放结果不变。
+3. **`INLINE_MARKERS.find()` 换成 Map 查找**——每节点一次线性查找改成 O(1)。
+
+### 为什么**没有**做「装饰器按可见区缓存」
+
+计划书里写了这一项，实测后**决定不做**，理由：
+
+- 收益有限：裁剪到视口最多再省 ~2.5ms（6800 行 2.90ms → 约 0.4ms），
+  而 2.90ms 只占 16ms 交互预算的 18%，用户无感知。
+- 代价明确：不可见区域不生成装饰器 → 滚动进视野时**标记会闪现**，
+  这是明显的体验倒退。
+- 收益来源判断错误：装饰器数量主要影响**构建**成本，不影响**渲染**成本——
+  CM6 只为视口内的行建 DOM，视口外没有 DOM 要更新。
+  实测也印证：12000 个装饰器的大文档，击键→绘制延迟与小文档**没有差异**。
+
+**正确的做法是 M2 的「段落级增量渲染」**：不是裁剪装饰器，
+而是文档变更时只重建受影响区间的装饰器（`DecorationSet.map` + 局部重建），
+所有区域始终有装饰器，因此没有闪烁。
+
+### 测量台
+
+`perf.html` + `src/dev/perf-harness.ts`：真实浏览器里测「击键 → 绘制完成」的延迟。
+`perf.html` 不在 vite build 的默认入口列表里，**不会进生产包**。
+
 ## 粘贴：HTML → Markdown（2026-10-21 实施）
 
 用 turndown 7.2.4（MIT）而不是自己写转换器：嵌套标签的配对、空白折叠、
@@ -324,9 +433,11 @@ src/export/     导出管线
 src/settings/   设置模型与存储
 src/theme/      主题注册表与运行时
 src/ipc/        与 Rust 侧接口
+src/dev/        开发期测量台（不进生产包）
 src-tauri/src/  Rust 后端（document / menu / recent）
 tests/corpus/   round-trip 语料库
-scripts/        开发工具脚本（bench-parser / dump-lezer-tree / check-licenses）
+scripts/        开发工具脚本（bench-parser / bench-decorations / verify-incremental / dump-lezer-tree / check-licenses）
+perf.html       Live Preview 性能测量台（vite dev 下访问 /perf.html）
 docs/           计划书与调研文档
 ```
 
@@ -345,12 +456,13 @@ M0 已完成（2026-10-20），M1 编辑内核实施中（2026-10-21）：
 - 自动配对已实现（`off` / `basic` / `markdown` 三档，运行时可切换）
 - 撤销/重做与 Live Preview 装饰器重算的交互已补测试
 - 复制粘贴已实现：HTML → Markdown（turndown + 样式净化）、纯 Markdown 原样保留
+- **lezer 增量解析已落地**（`syntax-tree.ts`）：击键成本降 3 倍
+  （4000 行 4.58ms → 1.53ms；浏览器实测 6798 行 dispatch p95 = 2.90ms），
+  900 轮随机编辑对拍与全量解析 **0% 不一致**
 
 M1 剩余待办：
 
-- lezer **增量解析**（`TreeEditor`）未接，目前每次击键全量重解析；大文档下需要优化
-  （Typora 的做法是「段落级 AST + 只重渲染变动节点」，见 `docs/editors-comparison.md`）
-- 复制粘贴：HTML → Markdown 转换 + 样式净化（Markdown 原样保留）
-- Live Preview 边界：嵌套标记（`**粗体里的 `代码`**`）
+- 复制为 HTML / 粘贴为纯文本（Typora 功能清单第 10 节）
+- M2 承接：段落级增量渲染（局部重建装饰器，而非裁剪）
 - 表格、公式、图表的渲染层尚未实现（按计划推到 M2）
 
