@@ -192,6 +192,15 @@ ProseMirror 内核**，理由和我们完全一样——mark 不含标记符文�
 9. **展开判定用「左开右闭」**：`node.from < cursor <= node.to`。
    光标在正文里 → 展开；紧跟结束标记之后 → 展开（浏览器把这种光标放在元素内部，与 Typora 一致）；
    紧贴开始标记之前 → 不展开（光标在结构之外）。
+   （已用 Typora 官方演示视频逐帧核实：敲完收尾 `**` 后标记仍然可见，与右闭一致。）
+
+9.1 **隐藏标记符是 atomic 区间**——`HiddenMarkerWidget.ignoreEvent()` 返回 `true`，
+    CM6 据此把该区间标成 atomic，**光标不会停在它内部**，方向键会整个跳过。
+    这是好事（折叠状态下不会误入标记），但有两个必须知道的后果：
+    - 行首的 `**` 折叠时，光标按 Home 会被弹到标记之后（实测：落在位置 2 而不是 0）
+    - 想编辑被折叠的标记，必须先把光标移进结构——此时标记变回真实文本、atomic 消失，
+      才可以精确编辑
+    所以「点击渲染后的文字」不一定落在你以为的位置，得靠方向键微调。
 
 10. **`EditorView.inputHandler` 在 IME 组字期间也会被调用**。
     `applyDOMChangeInner` 里没有任何 composition 判断，`view.inputState.composing` 只用来计数。

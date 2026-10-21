@@ -314,3 +314,85 @@ describe("Live Preview 与撤销栈", () => {
     dispose();
   });
 });
+
+describe("Live Preview：嵌套标记", () => {
+  //     0         1   2         3   4         5
+  //     0123456789012345678901234567890123456789
+  //     **粗体里的 `代码`** 尾巴
+  //     [0,2) 外层 **   [7,8) 内层反引号   [10,11) 内层反引号   [11,13) 外层 **
+  const NESTED = "**粗体里的 `代码`** 尾巴";
+
+  it("光标在结构外：两层标记都隐藏，内容照样渲染", () => {
+    const hidden = collect(NESTED, NESTED.length)
+      .filter((d) => d.kind === "replace")
+      .map((d) => [d.from, d.to]);
+    // 外层 ** 与内层反引号全部收起
+    expect(hidden).toEqual([
+      [0, 2],
+      [7, 8],
+      [10, 11],
+      [11, 13],
+    ]);
+    // 两层内容都有样式
+    const marks = collect(NESTED, NESTED.length);
+    expect(marks.filter((d) => d.cls === "cm-md-strong")).toHaveLength(1);
+    expect(marks.filter((d) => d.cls === "cm-md-inline-code")).toHaveLength(1);
+  });
+
+  it("光标在外层正文里：外层标记显露，内层仍保持渲染态", () => {
+    // 光标落在「里」字上
+    const hidden = collect(NESTED, 4)
+      .filter((d) => d.kind === "replace")
+      .map((d) => [d.from, d.to]);
+    // 只有内层的反引号被收起
+    expect(hidden).toEqual([
+      [7, 8],
+      [10, 11],
+    ]);
+  });
+
+  it("光标进入内层代码：内层标记也显露", () => {
+    // 光标落在「代」字上（行内代码内部）
+    const hidden = collect(NESTED, 9)
+      .filter((d) => d.kind === "replace")
+      .map((d) => [d.from, d.to]);
+    // 两层标记都不再隐藏
+    expect(hidden).toEqual([]);
+  });
+
+  it("光标紧跟内层代码之后：内层重新收起，外层仍展开", () => {
+    // 位置 12 = 外层闭标记内部（内层之外、外层之内）
+    const hidden = collect(NESTED, 12)
+      .filter((d) => d.kind === "replace")
+      .map((d) => [d.from, d.to]);
+    expect(hidden).toEqual([
+      [7, 8],
+      [10, 11],
+    ]);
+  });
+
+  it("粗体在链接内：光标在链接文本里时两层标记都显露", () => {
+    const doc = "[**文字**](https://a.com)";
+    const hidden = collect(doc, 4)
+      .filter((d) => d.kind === "replace")
+      .map((d) => [d.from, d.to]);
+    expect(hidden).toEqual([]);
+  });
+
+  it("粗体在链接内：光标在结构外时全部收起", () => {
+    const doc = "[**文字**](https://a.com) 尾巴";
+    const hidden = collect(doc, doc.length)
+      .filter((d) => d.kind === "replace")
+      .map((d) => [d.from, d.to]);
+    // [ ] ( ) URL 与 ** 都收起
+    expect(hidden).toEqual([
+      [0, 1],
+      [1, 3],
+      [5, 7],
+      [7, 8],
+      [8, 9],
+      [9, 22],
+      [22, 23],
+    ]);
+  });
+});
