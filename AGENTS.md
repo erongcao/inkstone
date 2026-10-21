@@ -51,22 +51,31 @@ Inkstone（砚）是一个**开源 Markdown 编辑器**，对标 Typora 的 Live
 | 高亮/公式/图表 | Shiki / KaTeX / Mermaid | KaTeX 而非 MathJax——同步渲染，编辑器里不抖 |
 | 前端 | React 19 + Vite 8 + TypeScript 5.9 | TS 锁 5.9：typescript-eslint 8.72 尚未适配 TS 7 |
 
-## M1 选型结论：为什么是 CodeMirror 6 而不是 Milkdown（2026-10-20）
+## M1 选型结论：为什么是 CodeMirror 6 而不是 Milkdown（2026-10-20 实测 / 2026-10-21 正式拍板）
 
-原计划选 Milkdown 7（ProseMirror + remark）。M1 spike 用实测数据推翻了这个决定：
+原计划选 Milkdown 7（ProseMirror + remark）。M1 spike 用实测数据推翻了这个决定，
+**2026-10-21 用户在「A（Milkdown + Crepe）」与「B（CM6）」之间明确拍板选 B**。
 
 | 维度 | Milkdown 7 | CodeMirror 6 | 胜出 |
 | --- | --- | --- | --- |
 | 标记符是否入文档 | **否**。`src/mark/strong.ts` 显示 strong 是 ProseMirror mark，`**` 根本不在文本里 | **是**。文档恒为 Markdown 源码，`**` 就是普通字符 | CM6 |
 | 直接编辑 `**` | 做不到 | 天然可编辑 | CM6 |
 | 源码 ↔ 混合模式 | 需序列化 + 重解析 → 撤销栈分裂、光标映射难、有漂移风险 | 换装饰器，光标/滚动/undo 天然保持 | CM6 |
-| 实时布局性能 | remark 1000 行 p95 ≈ 11ms（超 16ms 预算） | lezer p95 ≈ 1.05ms | CM6 |
+| 实时布局性能 | 见下方校准声明 | lezer p95 ≈ 1.05ms | CM6 |
 | 中文 IME | ProseMirror 成熟 | CM6 成熟 | 平手 |
 
-**结论**：Typora 式体验的硬性要求是「标记符是真实可编辑的文本」。这一条 Milkdown 做不到，
-CM6 天然满足。其余能力两者都能做到。**因此编辑内核改用 CodeMirror 6，Milkdown 不进依赖树。**
+> ⚠️ **性能论据的校准（2026-10-21）**：不能说「remark 撑不住每击键」来否决 Milkdown——
+> Milkdown 载入时解析一次，之后直接编辑 ProseMirror 文档，每击键并不重解析 remark。
+> remark/lezer 的性能数据只用于说明**在 CM6 路线下语义与布局必须分层**。
 
-代价：CM6 没有富文本语义，需要我们自己实现「渲染层」（公式、图表、表格），这是 M2/M3 的工作量。
+**结论**：Typora 式体验的硬性要求是「标记符是真实可编辑的文本」。这一条 Milkdown 做不到，
+CM6 天然满足。**用户于 2026-10-21 正式拍板采用 CodeMirror 6，Milkdown 不进依赖树。**
+
+拍板判据是本文件的三条架构红线（真相源是 Markdown 文本 / 源码模式永远无损 / 解析规则唯一）——
+Milkdown 在前两条上做不到。详见 `docs/plan.md` §2.3「取舍框架与正式拍板」。
+
+代价：CM6 没有富文本语义，需要我们自己实现「渲染层」（公式、图表、表格）和写作 UI，
+这是 M2/M3 的工作量。**这个代价是已知并被明确接受的**，不要在后续实现中偷偷回退到富文本文档模型。
 
 ### 外部验证：标杆编辑器都是这条路（2026-10-20 调研）
 
@@ -325,7 +334,8 @@ docs/           计划书与调研文档
 
 M0 已完成（2026-10-20），M1 编辑内核实施中（2026-10-21）：
 
-- 编辑内核从 Milkdown 改选 **CodeMirror 6**（理由见上）
+- 编辑内核从 Milkdown 改选 **CodeMirror 6**（理由见上）；
+  **2026-10-21 用户正式拍板选 B**，判据是三条架构红线
 - Live Preview 装饰器已跑通：行内标记隐藏/展开、块级标记弱化、标题层级渲染
 - 源码模式 ↔ 实时预览切换已验证**光标位置精确保留**
 - 三种标记符显示策略（`live` / `dimmed` / `source`）已实现并实测
@@ -334,6 +344,7 @@ M0 已完成（2026-10-20），M1 编辑内核实施中（2026-10-21）：
   注：浏览器合成事件的 `type` 动作不等价于 IME 组字过程，只能靠真机验证。
 - 自动配对已实现（`off` / `basic` / `markdown` 三档，运行时可切换）
 - 撤销/重做与 Live Preview 装饰器重算的交互已补测试
+- 复制粘贴已实现：HTML → Markdown（turndown + 样式净化）、纯 Markdown 原样保留
 
 M1 剩余待办：
 
