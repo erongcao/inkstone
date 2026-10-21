@@ -173,8 +173,8 @@ DOCX / ODT / RTF / EPUB / LaTeX / MediaWiki / RST / Textile / OPML / RevealJS �
 
 | 功能 | 优先级 | 难度 |
 |---|---|---|
-| 智能粘贴（粘贴 HTML 时保留标题/列表层级） | P0 | 中 |
-| 复制为 HTML / 复制为 Markdown 源码 / 粘贴为纯文本 | P0 | 中 |
+| 智能粘贴（粘贴 HTML 时保留标题/列表层级） | P0 | ✅ 部分完成（2026-10-21）：HTML → Markdown 转换 + 样式净化已实现，Markdown 原样保留；层级保真待 M2 优化 |
+| 复制为 HTML / 复制为 Markdown 源码 / 粘贴为纯文本 | P0 | 🔶 部分完成：复制当前就是 Markdown 源码（CM6 行为）；复制为 HTML / 粘贴为纯文本待做 |
 | 拼写与语法检查（macOS 走系统词典，含从上下文菜单学习新词） | P2 | 中 |
 | 文本片段（Snippets） | P2 | 中 |
 | 命令面板（Command Palette） | P1 | 中 |

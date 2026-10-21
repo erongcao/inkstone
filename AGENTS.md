@@ -220,6 +220,46 @@ ProseMirror 内核**，理由和我们完全一样——mark 不含标记符文�
     但 `StateField.define` 每次调用会生成**新的字段实例**：
     要跨 reconfigure 保持字段身份稳定，字段必须定义在模块级，不能在工厂函数里定义。
 
+15. **`EditorView.domEventHandlers` 的 handler 签名是 `(event, view)`**——事件在前，视图在后。
+    写成 `(view, event)` 类型检查会直接报错（TS2345）。
+
+16. **插件的 DOM handler 排在 CM6 内置 handler 前面**。
+    `computeHandlers` 先 push 插件的 handler，最后才 push 内置的；
+    `runHandlers` 里第一个返回 true 的 handler 会赢，并且被 `preventDefault()`。
+    所以接管粘贴只要 `return true` 即可。
+
+17. **CM6 默认的 paste 只读 `text/plain`**，
+    从网页复制过来的内容会变成一坨裸 HTML 源码直接进文档。
+    要处理富文本必须自己接管 `paste` 事件。
+
+18. **turndown 的 `addRule` 是 `unshift`**——后加的规则优先级更高。
+    要覆盖 GFM 插件的规则，必须在 `td.use(gfm)` **之后**再 `addRule`。
+
+## 粘贴：HTML → Markdown（2026-10-21 实施）
+
+用 turndown 7.2.4（MIT）而不是自己写转换器：嵌套标签的配对、空白折叠、
+HTML 实体解码这些坑都很深，自己写的转换器会长期持续产出脏 Markdown。
+
+三种来源，三种处理：
+
+| 剪贴板内容 | 处理 |
+| --- | --- |
+| 只有纯文本 | 原样插入 |
+| 纯文本本身就是 Markdown | **原样保留**（判据见 `src/editor/paste/detect.ts`） |
+| 网页 / Word 的富文本 | 用 `text/html` 转成 Markdown（**样式净化**） |
+
+在 turndown 之上额外做的四件事：
+
+1. **样式净化**：剥掉 `script` / `style` / `iframe` / `object` / 表单控件 / `svg` 等标签。
+   turndown 自己不处理这些；它用 `designMode` 解析 HTML，脚本不会执行。
+2. **识别行内样式**：Word / Google Docs 导出的是 `<span style="font-weight:bold">`，
+   不识别这套行内样式，从这些来源粘贴过来的加粗会整个丢掉。
+3. **删除线用 `~~` 而不是 `~`**：GFM 插件默认输出单 `~`，Typora 的语法是 `~~文字~~`。
+4. **列表用 1 个空格缩进**：turndown 默认输出 `-   项目`（3 个空格），
+   CommonMark 与 Typora 的惯例是 `- 项目`。
+
+`<mark>` 标签转成 `==高亮==`（Typora 的高亮语法）。
+
 ## 质量闸门（CI 强制，提交前本地也要跑）
 
 ```bash

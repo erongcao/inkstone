@@ -20,6 +20,7 @@ import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import { languages } from "@codemirror/language-data";
 import { livePreview, setDisplayModeOf } from "./live-preview";
 import { autoPair } from "./auto-pair";
+import { markdownPaste } from "./paste";
 import type { AutoPairMode, MarkerDisplayMode } from "@/settings/schema";
 
 export interface MarkdownEditorOptions {
@@ -62,6 +63,8 @@ function buildExtensions(
     livePreview(),
     // 自动配对（可在运行时切换级别）
     autoPairBox.of(autoPair(options.autoPairMode ?? "off")),
+    // 粘贴：网页富文本 → Markdown
+    markdownPaste(),
     // 键盘映射
     keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
     // 视图

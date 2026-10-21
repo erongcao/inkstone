@@ -39,11 +39,12 @@
 | **三种标记符显示策略** | ✅ | `live` / `dimmed` / `source`，共用同一份文档，切换零漂移 |
 | **中文输入法（真机验证）** | ✅ | **用户 2026-10-21 在真机确认中文输入无问题**——M1 最后一个架构级阻塞项解除 |
 | **自动配对** | ✅ | 三档（off/basic/markdown），运行时可切；规则对齐 Typora 官方文档 + 官方视频逐帧 |
+| **复制粘贴（HTML → Markdown）** | ✅ | turndown 7.2.4（MIT）+ 样式净化；Markdown 原样保留；32 个用例 |
 | **解析性能基准** | ✅ | remark 1000 行 p95 = 10.96ms 超标；lezer = 1.05ms |
 
 **实测数据**：空闲内存 112.9 MiB（目标 < 150 MB，CM6 接入后 +11 MiB）；release 构建 37 s；应用包 **4.24 MiB**（CM6 接入前 3.70 MiB）。
 
-**M1 待办**：lezer 增量解析、复制粘贴（HTML → Markdown）、Live Preview 嵌套标记边界、
+**M1 待办**：lezer 增量解析、Live Preview 嵌套标记边界、
 表格/公式/图表渲染层（按计划推到 M2）。
 
 ---
@@ -409,8 +410,8 @@ CM6 的 `EditorView.inputHandler` 扩展点实现，设置项 `editor.autoPairMo
 - [x] 中文输入法全场景测试 ← **2026-10-21 用户真机验证通过**
 - [x] 撤销/重做：装饰器重算不破坏 undo 栈（补了 3 个用例）
 - [x] 自动配对（off / basic / markdown 三档，运行时可切）
+- [x] 复制粘贴：HTML → Markdown 转换 + 样式净化，Markdown 原样保留
 - [ ] lezer 增量解析（`TreeEditor`），避免每次击键全量重解析
-- [ ] 复制粘贴（HTML → Markdown 转换 + 样式净化）
 - [ ] 表格 / 公式 / 图表 / 脚注的渲染层 ← **按 §4 里程碑重排推到 M2**
 - **验收**：连续写 2000 字不卡顿；中英混排输入法不跳光标；两种模式反复切换 100 次无内容漂移
 
@@ -525,8 +526,9 @@ GitHub Alerts / 脚注 / RTL / 插件系统 / 主题市场 / 图片图床 / EPUB
 - [x] **round-trip 测试语料库** —— 5 份真实 Markdown 样本，覆盖表格/任务列表/数学/mermaid/脚注/YAML/边界情况
 - [x] **依赖许可证白名单 CI** —— 自动扫描 `package.json` / `Cargo.lock` / cargo registry 缓存
 - [x] **M1 前置**：把 `EditorSurface` 的 textarea 替换为 CodeMirror 6 内核，接入 Live Preview 装饰器插件
-- [x] **M1 剩余**：中文 IME 人工验证 ✅（2026-10-21）、自动配对 ✅、三种标记符显示策略 ✅
-- [ ] **M1 剩余**：lezer 增量解析、复制粘贴（HTML → Markdown）、表格/公式/图表渲染层（推到 M2）
+- [x] **M1 剩余**：中文 IME 人工验证 ✅（2026-10-21）、自动配对 ✅、三种标记符显示策略 ✅、
+  复制粘贴 HTML → Markdown ✅
+- [ ] **M1 剩余**：lezer 增量解析、表格/公式/图表渲染层（推到 M2）
 
 ### 本机环境快照（2026-10-20）
 
