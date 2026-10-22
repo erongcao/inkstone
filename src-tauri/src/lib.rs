@@ -1,3 +1,4 @@
+mod ai;
 mod document;
 mod menu;
 mod recent;
@@ -29,6 +30,11 @@ pub fn run() {
             document::read_document,
             recent::list_recent_files,
             recent::clear_recent_files,
+            ai::secrets::ai_secret_status,
+            ai::secrets::ai_set_secret,
+            ai::secrets::ai_delete_secret,
+            ai::http::ai_stream_chat,
+            ai::http::ai_cancel_stream,
         ])
         .build(tauri::generate_context!())
         .expect("构建 Inkstone 失败");

@@ -25,6 +25,9 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["fs", "sync"] }
 tauri-plugin-clipboard-manager = "2"
+keyring = { version = "3.6.3", features = ["apple-native", "windows-native", "sync-secret-service"] }
+reqwest = { version = "0.13.3", features = ["stream", "json", "native-tls"] }
+futures-util = "0.3.34"
 
 # 发布构建瘦身：体积和启动速度对写作工具很关键
 [profile.release]

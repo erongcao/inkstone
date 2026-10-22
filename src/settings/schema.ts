@@ -168,12 +168,68 @@ export interface GeneralSettings {
   sendAnonymousStats: boolean;
 }
 
+/** AI 端点的协议 */
+export type AiProtocol = "openai" | "anthropic" | "gemini";
+
+/**
+ * 一个 AI 端点配置。
+ *
+ * 注意这里**没有密钥字段**——密钥存在系统钥匙串里，
+ * 前端永远拿不到明文（见 `src-tauri/src/ai/secrets.rs`）。
+ * 设置里只记「用哪个端点 + 哪个模型 + 能力位覆盖」。
+ */
+export interface AiEndpointSetting {
+  /** 端点 id，同时是钥匙串里的 account 名 */
+  id: string;
+  /** 协议 */
+  protocol: AiProtocol;
+  /** base URL（用户可改，用来接自建服务） */
+  baseUrl: string;
+  /** 模型 id */
+  model: string;
+  /**
+   * 并发上限。0 = 不限。
+   * 必须真的限流而不只是显示：实测 GLM Coding Plan 的 Lite / Pro 档
+   * 只允许 1 个并发请求，超了直接 429。
+   */
+  maxConcurrent: number;
+  /** 能力位覆盖：模型不支持的参数必须关掉，否则上游直接 400 */
+  capabilities?: {
+    temperature?: boolean;
+    reasoningToggle?: boolean;
+  };
+  /** 用户自定义的提示文案（覆盖内置预设的 note） */
+  note?: string;
+}
+
+export interface AiSettings {
+  /** 是否启用 AI 能力 */
+  enabled: boolean;
+  /** 用户配置的端点列表（内置预设不在这里，它们是只读的模板） */
+  endpoints: AiEndpointSetting[];
+  /** 默认端点 id */
+  defaultEndpointId: string;
+  /** 默认模型 id */
+  defaultModel: string;
+  /** 改写类的系统提示词（用户可改） */
+  rewriteSystemPrompt: string;
+  /** 总结类的系统提示词 */
+  summarizeSystemPrompt: string;
+  /** 问答类的系统提示词 */
+  chatSystemPrompt: string;
+  /** 单次请求的最大输出 token */
+  maxOutputTokens: number;
+  /** 温度（仅在端点能力位允许时生效） */
+  temperature: number;
+}
+
 export interface Settings {
   appearance: AppearanceSettings;
   editor: EditorSettings;
   markdown: MarkdownSettings;
   export: ExportSettings;
   general: GeneralSettings;
+  ai: AiSettings;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -232,6 +288,24 @@ export const DEFAULT_SETTINGS: Settings = {
     restoreSession: true,
     sendAnonymousStats: false,
   },
+  ai: {
+    enabled: false,
+    endpoints: [],
+    defaultEndpointId: "",
+    defaultModel: "",
+    rewriteSystemPrompt:
+      "你是一位中文写作助手。用户会给 you 一段 Markdown 文本，" +
+      "请按要求改写它。只输出改写后的 Markdown，不要解释、不要加引号、" +
+      "不要用代码块包裹。保持原有的 Markdown 结构（列表、代码块、公式）不变。",
+    summarizeSystemPrompt:
+      "你是一位中文写作助手。请对用户给的 Markdown 文档做摘要，" +
+      "只输出 Markdown 本身，不要解释。",
+    chatSystemPrompt:
+      "你是一位中文笔记助手。只能依据用户提供的笔记内容回答，" +
+      "不要编造。引用了哪些笔记就明确说是哪几篇。",
+    maxOutputTokens: 4096,
+    temperature: 0.7,
+  },
 };
 
 /** 设置的分组元信息，设置面板据此自动渲染 */
@@ -241,6 +315,7 @@ export const SETTINGS_SECTIONS = [
   { id: "markdown", label: "Markdown" },
   { id: "export", label: "导出" },
   { id: "general", label: "通用" },
+  { id: "ai", label: "AI" },
 ] as const;
 
 export type SettingsSectionId = (typeof SETTINGS_SECTIONS)[number]["id"];
