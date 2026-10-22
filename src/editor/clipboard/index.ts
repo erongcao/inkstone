@@ -31,6 +31,8 @@ import {
   type Extension,
 } from "@codemirror/state";
 import { ensureMarkdownToHtml, renderMarkdownToHtml } from "@/parser/html-loader";
+import { readSettings } from "@/settings/store";
+import type { ParseOptions } from "@/parser/markdown";
 import { writeHtmlAndText, writePlainText } from "./write";
 
 /** Inkstone 专用的 MIME 类型：标记「这段 Markdown 来自 Inkstone」 */
@@ -96,7 +98,7 @@ export function handleCopy(view: EditorView, event: ClipboardEvent): boolean {
   // text/html 需要 remark-rehype（按需加载，见 parser/html-loader.ts）。
   // copy 事件必须同步写完，所以这里只能用已加载好的版本；
   // 极少数「刚启动就立刻复制」的情况会退化成只有纯文本。
-  const html = renderMarkdownToHtml(markdown);
+  const html = renderMarkdownToHtml(markdown, parseOptionsNow());
   if (html) data.setData("text/html", html);
   // 内部复制粘贴的无损通道（见文件头说明）
   try {
@@ -109,6 +111,18 @@ export function handleCopy(view: EditorView, event: ClipboardEvent): boolean {
 }
 
 /**
+ * 把用户当前的公式设置转成解析选项。
+ *
+ * 剪贴板处理是非 React 的（copy 事件里必须同步跑完），拿不到 hook，
+ * 所以走 `readSettings()`。不传的话 HTML 链路会用 remark-math 的默认值，
+ * 与用户在编辑器里的设置分叉——关掉单 `$` 的用户会看到「屏幕上不是公式、
+ * 复制出去却是」。
+ */
+function parseOptionsNow(): ParseOptions {
+  return { singleDollarTextMath: readSettings().markdown.inlineMathSingleDollar };
+}
+
+/**
  * 复制选区为渲染后的 HTML（同时附带 Markdown 源码作为纯文本兜底）。
  *
  * 与「按 ⌘C」的区别：⌘C 走 copy 事件（浏览器行为，用户无感），
@@ -118,7 +132,7 @@ export async function copySelectionAsHtml(view: EditorView): Promise<void> {
   const markdown = selectedMarkdown(view.state);
   if (!markdown) return;
   // 菜单动作是异步的，可以等渲染器加载完，保证一定有 HTML
-  const html = await ensureMarkdownToHtml(markdown);
+  const html = await ensureMarkdownToHtml(markdown, parseOptionsNow());
   await writeHtmlAndText(html, markdown);
 }
 

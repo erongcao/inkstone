@@ -886,6 +886,57 @@ elk(1428) / cytoscape(424) / chunk-*(849) 都不在首屏图里。
 `FencedCode` 节点。为此 `findCodeBlocks` 补上了 `claimed` 参数——
 它第一版忽略这个参数，会让同一段文本被生成两个块级装饰。
 
+## HTML 输出里的公式：自己写插件，不装 rehype-katex（2026-10-23）
+
+改之前「复制为 HTML」把公式输出成 `<code class="language-math">E=mc^2</code>`——
+粘到 Word / 邮件 / 任何富文本编辑器都是一段裸 LaTeX。
+
+### 为什么不装 `rehype-katex`
+
+它依赖 `katex@^0.16`，本项目顶层是 `katex@0.19`（`math-loader.ts`）。
+npm 的 semver **不把 `0.16` 与 `0.19` 视为同一版本**，于是 Vite 会把
+**两份 KaTeX 都打进产物**——603 KB 的重复代码。
+
+自写的插件只有几十行：`remark-math` 已经把公式变成 hast 的
+`code.language-math` 节点，要做的只是读出 TeX、调 KaTeX、换回去。
+另外也没装 `unist-util-visit` + `@types/hast`：hast 就是 `{children: []}`
+的普通树，递归二十行就够，为「遍历一棵树」省十五行不值得引两个包。
+
+### `<style>` 的子节点必须是 `raw` 而不是 `text`
+
+hast 序列化 text 时做 HTML 转义，KaTeX CSS 里的子选择器（`.a > .b`）
+会变成 `&gt;`——**转义后的 CSS 在 `<style>` 里不会被浏览器还原**，整张表失效。
+这和「把 HTML 当字符串塞进 text 里」是一类错误，只是更隐蔽：结构还在，样式全丢。
+
+配套地 `rehypeStringify` 开了 `allowDangerousHtml`（否则 raw 节点被忽略）。
+raw 内容全部由 KaTeX 生成（`trust: false` 已禁掉 `\href` / `\url` 这类宏）。
+副作用是用户写在 Markdown 里的原始 HTML 仍会被丢弃——`remark-rehype`
+在更早的阶段就没了，`allowDangerousHtml` 救不回来。要保留需另加 `rehype-raw`，
+那是「允许任意 HTML 进入剪贴板」的另一个取舍，**留给 M4 导出时一并决定**。
+
+### KaTeX 样式表两条取法，互补
+
+1. `import css from "katex/dist/katex.min.css?raw"`——生产构建里 Vite 把内容
+   打成字符串，这条在真机上永远有效
+2. 运行时从 `document.styleSheets` 兜底——**测试环境**（vitest 默认 stub CSS）
+   会让第 1 条拿到空串，dev 下 CSS 是 `<style>` 注入的，仍能取到
+
+两条都拿不到就返回空串：公式照样渲染成正确的 HTML 结构，只是少了排版样式。
+这比让整个复制功能失败要好。
+
+### 顺带修掉：HTML 链路不传解析选项，红线 3 被破坏
+
+`html-loader.ts` 之前自己调 `parseMarkdown(source)` **不带选项**，
+于是用户关掉「单 `$` 公式」设置之后，屏幕上不是公式、复制出去却是。
+
+现在 `markdownToHtml` / `renderMarkdownToHtml` / `ensureMarkdownToHtml`
+一律接受并透传 `ParseOptions`（签名与 `markdown-loader.ts` 对齐），
+剪贴板侧用新增的 `readSettings()` 读用户真实设置——
+剪贴板走 copy 事件、必须同步跑完，拿不到 `useSettings()`。
+
+**教训**：`markdown-loader` 早就是 `(source, options?)`，**只有 HTML 链路漏了**。
+凡是「同一个解析器的第二个调用点」，签名都要跟着第一个走。
+
 ## 行内 hover 提示：**纯 CSS**，不写 JS 浮层（2026-10-23）
 
 链接 / 行内代码 / 图片的 hover 提示全部用 `content: attr(...)` 做，

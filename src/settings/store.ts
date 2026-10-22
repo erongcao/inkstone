@@ -97,6 +97,19 @@ function persist(next: Settings) {
   }
 }
 
+/**
+ * 同步读取当前设置。
+ *
+ * 给**非 React 的调用点**用（剪贴板事件、导出管线等）——
+ * 这些地方拿不到 `useSettings()`，但仍必须用用户的真实设置，
+ * 否则「编辑器里是公式、复制出去不是」这类分叉就出现了。
+ *
+ * 不要在组件里用它：组件应当用 `useSettings()`，那才是会触发重渲染的那条路。
+ */
+export function readSettings(): Settings {
+  return state;
+}
+
 /** 局部更新设置，深合并 */
 export function updateSettings(patch: DeepPartial<Settings>): void {
   state = mergeSettings(state, patch);

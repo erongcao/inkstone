@@ -19,7 +19,10 @@
  */
 
 /** 渲染函数签名 */
-export type HtmlRenderer = (source: string) => string;
+import type { ParseOptions } from "./markdown";
+
+/** 与 `markdownToHtml` 同签名：`options` 必须透传，否则与编辑器内的解析分叉 */
+export type HtmlRenderer = (source: string, options?: ParseOptions) => string;
 
 let renderer: HtmlRenderer | null = null;
 let pending: Promise<HtmlRenderer> | null = null;
@@ -56,14 +59,20 @@ export function primeHtmlRenderer(): void {
  *
  * @returns 渲染器尚未就绪时返回 null
  */
-export function renderMarkdownToHtml(source: string): string | null {
-  return renderer ? renderer(source) : null;
+export function renderMarkdownToHtml(
+  source: string,
+  options?: ParseOptions,
+): string | null {
+  return renderer ? renderer(source, options) : null;
 }
 
 /** 等待渲染器就绪后渲染（菜单动作等异步场景用） */
-export async function ensureMarkdownToHtml(source: string): Promise<string> {
+export async function ensureMarkdownToHtml(
+  source: string,
+  options?: ParseOptions,
+): Promise<string> {
   const fn = await load();
-  return fn(source);
+  return fn(source, options);
 }
 
 /** 等待渲染器就绪（异步场景与测试用） */
