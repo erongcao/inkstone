@@ -23,6 +23,7 @@ import { TaskCheckboxWidget } from "./task-widget";
 import { blockRenderers } from "../render/registry";
 import { findInlineMath, renderInlineMath } from "../render/inline-math";
 import { findTaskItems } from "../render/task-list";
+import { findSizedImages, stripImageSize } from "../render/image-size";
 import { overlapsAny } from "../render/scan";
 import { findFootnotes, type FootnoteModel } from "../render/footnote";
 import { FootnoteRefWidget, FootnoteDefWidget } from "./footnote-widget";
@@ -252,6 +253,14 @@ export function buildLivePreviewDecorations(
         return false;
       }
 
+      // ---- 0b. lezer 认不出的带尺寸图片：`![a](x.png =200x100) ----
+      // URL 不能含空格，所以带空格的尺寸写法 lezer 压根不产出 Image 节点
+      // （整块退化成纯文本）。这里在**段落**上补一次窄范围扫描，
+      // 理由与代价见 `image-size.ts` 的文件头。
+      if (name === "Paragraph") {
+        imageDecos.push(...buildSizedImageDecorations(ref.node, source, cursor, mode));
+      }
+
       // ---- 1. 行内标记（可隐藏 / 可弱化）----
       const spec = INLINE_MARKER_BY_TYPE.get(name);
       if (spec) {
@@ -468,6 +477,9 @@ interface ImageParts {
   alt: string;
   /** 图片地址；引用式（`![alt][ref]`）解析不出来时为 null */
   src: string | null;
+  /** 显式尺寸（Typora / Obsidian 扩展），单位 px */
+  width?: number;
+  height?: number;
 }
 
 /**
@@ -505,6 +517,18 @@ function imageParts(
   if (src !== null && src.startsWith("<") && src.endsWith(">")) {
     src = src.slice(1, -1);
   }
+
+  // `图片.png=200x100` 这种**无空格**写法 lezer 认得，尺寸就在 URL 节点里，
+  // 这里剥掉尾巴否则会被当成文件名的一部分。带空格的那种 lezer 认不出，
+  // 走 `findSizedImages` 的行扫描兜底（见 image-size.ts 的取舍说明）。
+  let width: number | undefined;
+  let height: number | undefined;
+  if (src !== null) {
+    const stripped = stripImageSize(src);
+    src = stripped.src;
+    width = stripped.width;
+    height = stripped.height;
+  }
   if (src === null) {
     // 引用式：`![alt][ref]` → 找文档里的 `[ref]: 地址`
     const label = childrenOfType(node, "LinkLabel")[0];
@@ -514,7 +538,7 @@ function imageParts(
     if (src === null) return null; // 定义不存在：保持源码可见，不瞎渲染
   }
 
-  return { from: node.from, to: node.to, alt, src };
+  return { from: node.from, to: node.to, alt, src, width, height };
 }
 
 /** 链接引用标签归一：大小写不敏感、内部空白折叠 */
@@ -569,13 +593,45 @@ function buildImageDecorations(
   }
   if (inside) return [];
 
-  const result = renderImage(parts.src, parts.alt, parts.from);
+  const result = renderImage(parts.src, parts.alt, parts.from, parts.width, parts.height);
   return [
     Decoration.replace({ widget: new ImageWidget(result, parts.from) }).range(
       parts.from,
       parts.to,
     ),
   ];
+}
+
+/**
+ * 带尺寸图片（lezer 认不出的那类）的装饰。
+ *
+ * 展开规则与 `buildImageDecorations` 完全一致：光标落进区间 → 露出源码，
+ * 否则替换成 `<img>`。共用 `renderImage`，所以尺寸、缓存、点击回源码
+ * 全部是同一套逻辑，不会出现「普通图片有尺寸、带尺寸图片反而没有」。
+ */
+function buildSizedImageDecorations(
+  node: SyntaxNode,
+  source: string,
+  cursor: number,
+  mode: MarkerDisplayMode,
+): Range<Decoration>[] {
+  if (mode === "dimmed") return []; // 弱化模式下整段纯文本本来就可见
+
+  const decorations: Range<Decoration>[] = [];
+  for (const image of findSizedImages(source, node.from, node.to)) {
+    // 严格开区间，与 `buildImageDecorations` 保持一致。
+    // 写成闭区间的话，光标停在**文档末尾**时（`cursor === image.to`，
+    // 即整篇文档的最后一张图）就永远不替换——文档末尾放图是最常见的排法。
+    if (cursor > image.from && cursor < image.to) continue;
+    const result = renderImage(image.src, "", image.from, image.width, image.height);
+    decorations.push(
+      Decoration.replace({ widget: new ImageWidget(result, image.from) }).range(
+        image.from,
+        image.to,
+      ),
+    );
+  }
+  return decorations;
 }
 
 /**

@@ -64,12 +64,25 @@ const SKELETON = { minWidth: "160px", minHeight: "90px" };
 /**
  * 把一张图片渲染成 DOM。
  *
- * @param src  Markdown 里的原始地址（可能是相对路径）
- * @param alt 替代文本
+ * @param src    Markdown 里的原始地址（可能是相对路径）
+ * @param alt    替代文本
+ * @param from   在文档中的起点（点击图片要把光标移回来）
+ * @param width  显式宽度（px）。来自 Typora / Obsidian 的尺寸扩展，见 `image-size.ts`
+ * @param height 显式高度（px）。只给宽度时留空——猜高度会把图拉伸变形
  */
-export function renderImage(src: string, alt: string, from: number): ImageRenderResult {
+export function renderImage(
+  src: string,
+  alt: string,
+  from: number,
+  width?: number,
+  height?: number,
+): ImageRenderResult {
   const docPath = currentDocumentPath();
-  const key = cacheKey(docPath, src);
+  // 解析结果（URL）按 src 缓存是对的，但**渲染结果**还取决于尺寸：
+  // 同一张图在文档里出现两次、一次 200 宽一次 400 宽，DOM 必须不同。
+  // 所以 widget 的 key 里额外带上尺寸。
+  const size = width === undefined ? "" : `\u0000${width}x${height ?? ""}`;
+  const key = cacheKey(docPath, src) + size;
 
   const dom = document.createElement("span");
   dom.className = "cm-md-image";
@@ -83,7 +96,7 @@ export function renderImage(src: string, alt: string, from: number): ImageRender
 
   const cached = resolved.get(key);
   if (cached) {
-    dom.appendChild(buildImg(cached, alt));
+    dom.appendChild(buildImg(cached, alt, width, height));
     return { dom, key: `${key}\u0000${cached}` };
   }
 
@@ -99,7 +112,7 @@ export function renderImage(src: string, alt: string, from: number): ImageRender
       remember(key, url);
       // widget 可能已经被销毁/替换：只在自己仍是当前占位时才动手
       if (placeholder.parentNode !== dom) return;
-      dom.replaceChild(buildImg(url, alt), placeholder);
+      dom.replaceChild(buildImg(url, alt, width, height), placeholder);
       dom.dataset.imageLoaded = "1";
     })
     .catch(() => {
@@ -113,12 +126,26 @@ export function renderImage(src: string, alt: string, from: number): ImageRender
 }
 
 /** 真正的 `<img>` */
-function buildImg(url: string, alt: string): HTMLImageElement {
+function buildImg(
+  url: string,
+  alt: string,
+  width?: number,
+  height?: number,
+): HTMLImageElement {
   const img = document.createElement("img");
   img.src = url;
   img.alt = alt;
   img.loading = "lazy";
   img.draggable = false;
+  // 只给宽度时必须让高度自动：两个都设会按原比例拉伸变形。
+  // 反过来（只给高度）不常见，但同样只设一个。
+  //
+  // **必须用 setAttribute，不能用 `img.width = …`**（浏览器实测）：
+  // IDL 属性走反射，SVG 这类**没有固有尺寸**的图片上不落 attribute——
+  // 产物里确实带着赋值语句，DOM 上却查不到 width，形不成尺寸。
+  // 显式写 attribute 在任何图片类型上都一致。
+  if (width !== undefined) img.setAttribute("width", String(width));
+  if (height !== undefined) img.setAttribute("height", String(height));
   return img;
 }
 

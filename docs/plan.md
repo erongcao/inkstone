@@ -622,7 +622,7 @@ CM6 的 `EditorView.inputHandler` 扩展点实现，设置项 `editor.autoPairMo
 - [x] Mermaid 图表（懒加载独立 chunk；elkjs 是 EPL-2.0 弱 copyleft，已登记为待签字例外）
 - [x] 焦点模式 / 打字机模式
 - [x] Emoji 自动补全（`:smile` / `:笑`，1914 条含中文别名）
-- [x] 图片：拖放 / 剪贴板粘贴 / 相对路径（尺寸调整待做）
+- [x] 图片：拖放 / 剪贴板粘贴 / 相对路径 / **尺寸 `=WxH`**（Typora / Obsidian 扩展；尺寸写进 Markdown，不引入第二个真相源）
 - [x] 🆕 块级渲染层骨架（lezer 节点 → widget 的通用机制，表格/公式/图表都挂在它上面）
 - [x] 🆕 斜杠菜单 / 命令面板（⌘K + 行首 `/`，共用一份命令表；拖拽手柄后置）
 - [x] 🆕 链接浮层（输入 `](` 弹出 URL 输入框，回车补全右括号）
