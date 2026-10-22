@@ -3,7 +3,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isEquivalent, parseMarkdown, roundTrip } from "../src/parser/markdown";
-import { countWords } from "../src/ipc/document";
+import { countWords } from "../src/editor/stats";
 
 /** 递归查找第一个满足条件的 mdast 节点 */
 function findNode(

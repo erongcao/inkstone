@@ -302,3 +302,42 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* ═══════════════════════════════════════════════════════════
+   大纲面板
+   ═══════════════════════════════════════════════════════════ */
+
+.outline__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.outline__item {
+  display: block;
+  width: 100%;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: var(--ink-radius-sm);
+  background: none;
+  color: var(--ink-fg-muted);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+  /* 标题可能很长，截断而不是撑破侧边栏 */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.outline__item:hover {
+  background-color: var(--ink-bg-soft);
+  color: var(--ink-fg);
+}
+
+.outline__item:focus-visible {
+  outline: 2px solid var(--ink-accent);
+  outline-offset: -2px;
+}

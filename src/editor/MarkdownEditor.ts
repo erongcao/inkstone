@@ -19,6 +19,7 @@ import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import { languages } from "@codemirror/language-data";
 import { livePreview, setDisplayModeOf, setMathOptionsOf } from "./live-preview";
+import { setActiveEditorView } from "./active-view";
 import { autoPair } from "./auto-pair";
 import { markdownPaste } from "./paste";
 import {
@@ -180,6 +181,10 @@ export function createMarkdownEditor(
     parent: options.parent,
   });
 
+  // 登记为当前活动编辑器（大纲面板点击跳转要用）。
+  // destroy 时注销，避免侧边栏指向一个已销毁的视图。
+  setActiveEditorView(view);
+
   // StateField 没有「初始值」配置项，只能在创建后派发一次 effect 设置。
   // 这条 effect 不会进撤销栈（它不是 change），所以不会污染用户的 ⌘Z。
   if (options.displayMode && options.displayMode !== "live") {
@@ -210,7 +215,10 @@ export function createMarkdownEditor(
       armPlainTextPaste(view);
       view.focus();
     },
-    destroy: () => view.destroy(),
+    destroy: () => {
+      setActiveEditorView(null);
+      view.destroy();
+    },
     view,
   };
 }

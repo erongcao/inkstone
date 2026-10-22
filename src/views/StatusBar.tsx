@@ -4,19 +4,26 @@
 
 import { useSettings } from "@/settings/store";
 import { useDocument } from "@/ipc/document";
+import { useDocumentIndex } from "@/editor/document-index";
 
 export function StatusBar() {
-  const { doc, stats } = useDocument();
+  const { doc } = useDocument();
   const [settings] = useSettings();
+  const index = useDocumentIndex();
 
   return (
     <footer className="app__statusbar">
       <span>{doc.path ?? "未命名文档"}</span>
-      {settings.editor.alwaysShowWordCount && (
-        <span>
-          {stats.words} 词 · {stats.chars} 字符
-        </span>
-      )}
+      {settings.editor.alwaysShowWordCount &&
+        // 索引还没算出来时显示占位而不是 0：
+        // 「0 词」会被读成「文档是空的」，那是个误导
+        (index ? (
+          <span>
+            {index.stats.words} 词 · {index.stats.chars} 字符
+          </span>
+        ) : (
+          <span>统计中…</span>
+        ))}
       <span style={{ marginLeft: "auto" }}>
         {settings.markdown.inlineMath ? "数学已启用" : "数学已禁用"} ·{" "}
         {settings.markdown.mermaid ? "图表已启用" : "图表已禁用"}

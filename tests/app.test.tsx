@@ -34,7 +34,7 @@ describe("应用交互", () => {
     localStorage.clear();
   });
 
-  it("输入内容后状态栏字数统计随之更新", () => {
+  it("输入内容后状态栏字数统计随之更新", async () => {
     render(<App />);
 
     const view = getEditorView();
@@ -46,8 +46,13 @@ describe("应用交互", () => {
       });
     });
 
+    // 字数统计走**防抖的 mdast 解析**（和大纲共用一次），
+    // 所以索引算出来之前状态栏显示「统计中…」而不是 0——
+    // 「0 词」会被读成「文档是空的」，那是误导。
+    expect(screen.getByText("统计中…")).toBeTruthy();
+
     // 「你好世界」4 字 + 「hello」1 词 = 5 词；字符数含空格共 10
-    expect(screen.getByText(/5 词 · 10 字符/)).toBeTruthy();
+    expect(await screen.findByText(/5 词 · 10 字符/, {}, { timeout: 3000 })).toBeTruthy();
   });
 
   it("编辑器内容与文档状态保持同步", () => {
@@ -71,12 +76,38 @@ describe("应用交互", () => {
     expect(screen.getByRole("dialog")).toBeTruthy();
   });
 
-  it("侧边栏标签切换生效", () => {
+  it("侧边栏标签切换生效", async () => {
     render(<App />);
 
-    expect(screen.getByText("大纲面板将在 M2 提供")).toBeTruthy();
+    // 大纲面板已接通。加载态「正在分析文档结构…」只在**首次**出现
+    //（索引是模块级 store，同一份内容不会重复解析），所以这里断言最终状态。
+    expect(await screen.findByText("这份文档还没有标题")).toBeTruthy();
+
     fireEvent.click(screen.getByRole("tab", { name: "文件" }));
     expect(screen.getByText("文件树将在 M3 提供")).toBeTruthy();
+  });
+
+  it("大纲面板列出标题并可点击跳转", async () => {
+    render(<App />);
+
+    const view = getEditorView();
+    act(() => {
+      view.dispatch({
+        changes: {
+          from: 0,
+          to: view.state.doc.length,
+          insert: "# 第一章\n\n正文。\n\n## 第二节\n\n更多正文。",
+        },
+      });
+    });
+
+    expect(await screen.findByRole("button", { name: "第一章" }, { timeout: 3000 })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "第二节" })).toBeTruthy();
+
+    // 点击后光标应落到该标题所在行
+    fireEvent.click(screen.getByRole("button", { name: "第二节" }));
+    const line = view.state.doc.lineAt(view.state.selection.main.head);
+    expect(line.text).toBe("## 第二节");
   });
 
   it("修改主题后 data-theme 属性同步更新", () => {

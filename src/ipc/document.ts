@@ -8,7 +8,7 @@
  * 必须共享同一个实例，否则字数统计、脏标记会不同步。
  */
 
-import { useCallback, useMemo, useSyncExternalStore } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 
 export interface DocumentState {
   /** 文件绝对路径；null 表示未命名草稿 */
@@ -18,18 +18,6 @@ export interface DocumentState {
   dirty: boolean;
   /** 当前文档标题（不含路径） */
   title: string;
-}
-
-/** 统计字数：CJK 字符逐字计数，拉丁文按词计数 */
-export function countWords(text: string): { chars: number; words: number } {
-  const chars = text.length;
-  const cjk =
-    text.match(/[\u3400-\u9fff\uf900-\ufaff\u3040-\u30ff\uac00-\ud7af]/g)?.length ?? 0;
-  const latin =
-    text
-      .replace(/[\u3400-\u9fff\uf900-\ufaff\u3040-\u30ff\uac00-\ud7af]/g, " ")
-      .match(/[A-Za-z0-9_'-]+/g)?.length ?? 0;
-  return { chars, words: cjk + latin };
 }
 
 type Backend = {
@@ -170,7 +158,6 @@ export function setDocumentContent(content: string): void {
 
 export function useDocument() {
   const doc = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
-  const stats = useMemo(() => countWords(doc.content), [doc.content]);
 
   const open = useCallback(() => openDocument(), []);
   const save = useCallback(() => saveDocument(), []);
@@ -178,5 +165,6 @@ export function useDocument() {
   const create = useCallback(() => newDocument(), []);
   const setContent = useCallback((content: string) => setDocumentContent(content), []);
 
-  return { doc, stats, open, save, saveAs, create, setContent };
+  // 字数统计不再由这里出：它和大纲共用一次防抖的 mdast 解析，见 editor/document-index.ts
+  return { doc, open, save, saveAs, create, setContent };
 }
