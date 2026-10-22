@@ -35,7 +35,44 @@ if (!window.matchMedia) {
 // jsdom 不实现 scrollTo，ProseMirror / CodeMirror 等库会调用
 window.scrollTo = vi.fn() as unknown as typeof window.scrollTo;
 
-// 每��测试前清掉设置，避免用例之间互相污染
+// jsdom 完全不做布局，因此 Range 上一个尺寸 API 都没实现。
+// CodeMirror 的 DOMObserver 在 requestAnimationFrame 里会调
+// `range.getClientRects()` 来忽略没被改动的区域——
+// 一旦某个用例建完 EditorView 还没等 rAF 跑完就结束，
+// 这个异常会在用例之外抛出，vitest 记成 unhandled error 并让整个 run 失败。
+//
+// 补一个「什么都没有」的桩：空列表 + 零尺寸矩形。
+// 这是**如实**的——jsdom 里本来就没有任何布局信息，
+// CM6 对空结果的处理路径（认为所有区域都变了）恰恰是最保守的那个。
+const emptyRect = (): DOMRect => ({
+  x: 0,
+  y: 0,
+  width: 0,
+  height: 0,
+  top: 0,
+  left: 0,
+  bottom: 0,
+  right: 0,
+  toJSON: () => ({}),
+});
+if (!Range.prototype.getClientRects) {
+  Range.prototype.getClientRects = function getClientRects() {
+    const list = [] as unknown as DOMRectList & Iterable<DOMRect>;
+    // CM6 会 `Array.from(...)` 或直接迭代，补上迭代协议
+    (list as unknown as { [Symbol.iterator](): IterableIterator<DOMRect> })[
+      Symbol.iterator
+    ] = function* () {
+      /* 空 */
+    };
+    list.item = () => null;
+    return list;
+  };
+}
+if (!Range.prototype.getBoundingClientRect) {
+  Range.prototype.getBoundingClientRect = emptyRect as unknown as Range["getBoundingClientRect"];
+}
+
+// 每个测试前清掉设置，避免用例之间互相污染
 beforeEach(() => {
   localStorage.clear();
   document.documentElement.removeAttribute("data-theme");

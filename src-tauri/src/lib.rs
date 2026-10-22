@@ -1,6 +1,7 @@
 mod ai;
 mod asset;
 mod document;
+mod fs;
 mod menu;
 mod recent;
 
@@ -33,6 +34,8 @@ pub fn run() {
             asset::read_image_data_url,
             recent::list_recent_files,
             recent::clear_recent_files,
+            fs::list_directory,
+            fs::parent_of,
             ai::secrets::ai_secret_status,
             ai::secrets::ai_set_secret,
             ai::secrets::ai_delete_secret,
