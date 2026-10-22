@@ -24,6 +24,12 @@ import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { buildLivePreviewDecorations } from "../src/editor/live-preview/decorations";
 import { livePreviewField } from "../src/editor/live-preview/state";
+import { installDomStub } from "./dom-stub";
+
+// 装饰器管线现在会构造真实 DOM（图片 / 表格工具栏 / 代码高亮块）。
+// Node 里没有 `document`，不装 stub 的话脚本会在第一张图片处整个崩掉——
+// 那样 AGENTS.md 里那批性能数字就无法复现。理由见 dom-stub.ts。
+installDomStub();
 
 const corpusDir = join(process.cwd(), "tests/corpus");
 const gfmParser = baseParser.configure(GFM);
