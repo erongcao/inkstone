@@ -607,3 +607,53 @@
     transition: none;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════
+   Emoji 补全弹层
+   ═══════════════════════════════════════════════════════════ */
+
+/*
+ * 用 CM6 官方补全（@codemirror/autocomplete）的默认渲染，只改样式。
+ *
+ * 为什么不给它换一整套渲染：CM6 6.20 的 `CompletionConfig` 只有
+ * `optionClass`（给 <li> 加 class），没有 `renderOption` 钩子。
+ * 而默认渲染已经把 label 放在主体位——表情的主体就是那个字形，
+ * 所以只要把 label 设成字形、detail 设成关键字，再用 CSS 放大 label 即可。
+ * （`emoji.ts` 的 toOptions 里有说明）
+ */
+.cm-tooltip.cm-tooltip-autocomplete {
+  font-family: var(--ink-ui-family);
+  max-width: 340px;
+}
+
+.cm-tooltip-autocomplete ul li[aria-selected] {
+  background-color: var(--ink-accent);
+  color: var(--ink-bg);
+}
+
+/* 字形是主体，给它明显更大的展示位 */
+.ink-emoji-option .cm-completionLabel {
+  font-size: 22px;
+  line-height: 1;
+  vertical-align: middle;
+  margin-right: 8px;
+  min-width: 26px;
+  display: inline-block;
+  text-align: center;
+}
+
+/* 关键字压暗，别和字形抢注意力 */
+.ink-emoji-option .cm-completionDetail {
+  opacity: 0.62;
+  font-size: 0.85em;
+}
+
+.cm-tooltip-autocomplete ul li[aria-selected] .cm-completionDetail {
+  opacity: 0.85;
+}
+
+@media (prefers-color-scheme: dark) {
+  .cm-tooltip-autocomplete ul li[aria-selected] .cm-completionDetail {
+    opacity: 0.9;
+  }
+}

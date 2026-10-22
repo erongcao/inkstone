@@ -742,6 +742,72 @@ lezer 只用来划禁区（围栏/缩进代码块、HTML 块）。
 整块套 `cm-md-footnote-def`（缩进 + 左侧竖线）。点引用跳定义、点编号跳回第一个引用，
 走 `data-footnote-jump` + `live-preview/index.ts` 的 mousedown 分发（只移动光标，不改文档）。
 
+## Emoji 补全：`filter: false` 不是优化，是**能不能弹出来**的问题（2026-10-23）
+
+单测全绿、生产构建里弹层死活不出现。根因在 CM6 的二次过滤上，
+读 `@codemirror/autocomplete@6.20.4/dist/index.js` 才看得出来。
+
+### 坑 1（要命的那个）：CM6 会拿文档文本去模糊匹配 `option.label`
+
+`sortOptions`（`index.js:793`）在 `filter !== false` 时：
+
+```js
+let pattern = state.sliceDoc(a.from, a.to), match;
+let matcher = new FuzzyMatcher(pattern);
+for (let option of a.result.options)
+    if (match = matcher.match(option.label)) { ... }
+```
+
+我们的源 `from` 在 `:` 那一列 → `pattern` 是 `":smi"`；
+而 `label` 按设计放的是**字形** `😄`。字形里永远找不到 `:smi` 的字符序列，
+于是 `options.length === 0` → `CompletionDialog.build`（`index.js:857`）返回 `null` →
+`showTooltip` 拿到 `null`，**一个选项都不渲染，也不报错、不打日志**。
+
+而我们的检索和排序本来就在 `searchEmoji` 里自己做完了。所以正确写法是
+**`filter: false`**：CM6 跳过模糊匹配，按 `1e9 - i` 递减打分，**原序即序**，正好保住我们的排序。
+
+> 判据一句话：**`from` 含触发字符、或 `label` 不是匹配面，就必须关掉 CM6 的过滤。**
+> 这类 bug 单测抓不到（源确实返回了 options），只有生产构建的浏览器实测能看见。
+
+### 坑 2：`override: null` 是「不覆盖」，不是「清空」
+
+```js
+let sources = conf.override || state.languageDataAt("autocomplete", cur(state)).map(asSource);
+```
+
+`null` 落到右边——Markdown 没有语言级补全数据，拿到空数组，等于把唯一能用的源也关了。
+要换掉 CM6 自带的几套源（语言数据/路径/变量名），必须给**数组**：`override: [emojiCompletion]`。
+
+### 坑 3：源「同步」≠ 弹层「同步」
+
+`startQuery`（`index.js:1207`）是 `Promise.resolve(active.source(context)).then(...)`——
+**即使源返回非 Promise 也走微任务**；前面还隔着 `activateOnTypingDelay`（默认 100ms）的防抖。
+
+所以「同步源」的意义只是**没有异步竞态**（结果不会被后续事务判为过期丢弃），
+不是「立刻弹」。实测确认过的现象：源返回 35 条 hits，`.cm-tooltip-autocomplete` 始终不在 DOM 里。
+因为 `filter: false` 时弹层全程无声，别去查 console——查了也是空的。
+
+### 连带后果：`filter: false` 就不能给 `validFor`
+
+上游文档写明「`validFor` must not be given when `filter` is `false`」——
+它只在 CM6 二次过滤时用来判断「旧结果还成不成立」。没有它，每敲一个字符都会把结果打回
+Pending 重新查询一次。这是**我们要的**：`:smi` → `:smil` 的候选集本来就该变。
+
+代价是每次重查。我们把 `activateOnTypingDelay` 设成 0（源本身同步，1ms 内出结果，
+没必要让弹层发灰 100ms），并把 `searchEmoji` 的关键字切分缓存住——
+1914 行逐行 `split(" ")` 实测 **0.96ms/击键**，缓存后 **0.08ms**（约 11×）。
+如果哪天不用 `filter: false` 了，这个缓存就没有意义，可以一起撤掉。
+
+### 排序：**刻意**只做到「精确匹配 > 关键字短 > 字形码点」
+
+试过加「命中关键字在表里的位置」当二级键，**实测更糟**：`:sm` 会把 🤦(`smh`，排第 10)
+和 😤(`smug`，排第 12)顶到最前面。CLDR 没给出任何能区分「本名」与「同义词」的信号，
+位置只是数据集的排列习惯。
+
+已知局限（如实记着，别假装解决了）：CLDR 同义词是长尾的——🍏 带 `smith`、🤦 带 `smh`、
+😤 带 `smug`，所以 `:sm` / `:smi` 这种**太短的前缀**首位常常不是用户想要的（`:smi` → 🤗）。
+再打一两个字母就正常（`:smil` → 😀，`:笑` → 😁）。
+
 ## 行内公式定界符：`singleDollarTextMath`（2026-10-22 调研 + 实测）
 
 ### 调研：商业软件都是默认开单 `$`

@@ -31,6 +31,7 @@ import { markdownPaste } from "./paste";
 import { imageDrop } from "./image-insert";
 import { focusMode, setFocusModeOf } from "./focus-mode";
 import { typewriter, setTypewriterModeOf } from "./typewriter";
+import { emojiAutocomplete, preloadEmojiData } from "./emoji";
 import {
   armPlainTextPaste,
   copySelectionAsHtml,
@@ -88,6 +89,8 @@ function buildExtensions(
     // 焦点模式 / 打字机模式（两者都由设置面板的开关控制）
     focusMode(),
     typewriter(),
+    // Emoji 补全：`:前缀` 触发，数据按需加载
+    emojiAutocomplete(),
     // 复制：同时写 Markdown 源码与渲染后的 HTML
     markdownCopy(),
     // 键盘映射
@@ -204,6 +207,9 @@ export function createMarkdownEditor(
     state,
     parent: options.parent,
   });
+
+  // 后台预热 emoji 数据（补全源本身是同步的，见 emoji.ts 的说明）
+  preloadEmojiData();
 
   // 登记为当前活动编辑器（大纲面板点击跳转要用）。
   // destroy 时注销，避免侧边栏指向一个已销毁的视图。
