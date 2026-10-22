@@ -341,3 +341,221 @@
   outline: 2px solid var(--ink-accent);
   outline-offset: -2px;
 }
+
+/* ═══════════════════════════════════════════════════════════
+ * 命令面板（⌘K）
+ * ═══════════════════════════════════════════════════════════ */
+
+/*
+ * 覆盖层而不是编辑器内浮层：面板需要一个真正的 <input>，
+ * 查询词不进文档（见 views/CommandPalette.tsx 顶上的对照表）。
+ */
+.palette-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  justify-content: center;
+  /* 面板不贴顶：留出一点上边距，视觉上更像「浮在文档上」而不是「另一个页面」 */
+  padding-top: 12vh;
+  background-color: rgba(31, 35, 40, 0.28);
+}
+
+.palette {
+  display: flex;
+  flex-direction: column;
+  width: min(560px, calc(100vw - 48px));
+  max-height: min(420px, 70vh);
+  overflow: hidden;
+  background-color: var(--ink-bg);
+  border: 1px solid var(--ink-border);
+  border-radius: var(--ink-radius-lg);
+  box-shadow: 0 12px 32px rgba(31, 35, 40, 0.22);
+  font-family: var(--ink-ui-family, var(--ink-font-family));
+}
+
+.palette__input {
+  flex: none;
+  padding: 12px 16px;
+  border: 0;
+  border-bottom: 1px solid var(--ink-border);
+  background: none;
+  color: var(--ink-fg);
+  font: inherit;
+  font-size: 15px;
+  outline: none;
+}
+
+.palette__input::placeholder {
+  color: var(--ink-fg-faint);
+}
+
+.palette__list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.palette__empty {
+  padding: 20px 12px;
+  color: var(--ink-fg-faint);
+  font-size: 13px;
+  text-align: center;
+}
+
+.palette__group-title {
+  padding: 8px 12px 4px;
+  color: var(--ink-fg-faint);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+}
+
+.palette__item {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  width: 100%;
+  padding: 7px 12px;
+  border: 0;
+  border-radius: var(--ink-radius-sm);
+  background: none;
+  color: var(--ink-fg);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.palette__item[aria-selected="true"] {
+  background-color: var(--ink-accent);
+  color: var(--ink-bg);
+}
+
+.palette__label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 模糊匹配的命中字符 */
+.palette__label mark {
+  background: none;
+  color: var(--ink-accent-hover);
+  font-weight: 600;
+}
+
+.palette__item[aria-selected="true"] .palette__label mark {
+  color: inherit;
+  text-decoration: underline;
+}
+
+.palette__hint,
+.palette__shortcut {
+  flex: none;
+  color: var(--ink-fg-faint);
+  font-size: 12px;
+}
+
+.palette__item[aria-selected="true"] .palette__hint,
+.palette__item[aria-selected="true"] .palette__shortcut {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.palette__shortcut {
+  font-family: var(--ink-mono-family);
+}
+
+@media (prefers-color-scheme: dark) {
+  .palette-backdrop {
+    background-color: rgba(1, 4, 9, 0.55);
+  }
+
+  .palette {
+    box-shadow: 0 12px 32px rgba(1, 4, 9, 0.6);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * 链接浮层
+ * ═══════════════════════════════════════════════════════════ */
+
+/*
+ * 挂在光标坐标旁（position: fixed，坐标由 link-trigger.ts 从
+ * view.coordsAtPos 取），所以没有背景遮罩——它不该挡住整篇文档。
+ */
+.link-popover {
+  position: fixed;
+  z-index: 70;
+  width: min(400px, calc(100vw - 24px));
+  padding: 10px;
+  background-color: var(--ink-bg);
+  border: 1px solid var(--ink-border);
+  border-radius: var(--ink-radius-md);
+  box-shadow: 0 8px 24px rgba(31, 35, 40, 0.18);
+  font-family: var(--ink-ui-family, var(--ink-font-family));
+}
+
+.link-popover__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 6px;
+}
+
+.link-popover__title {
+  color: var(--ink-fg);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.link-popover__hint {
+  color: var(--ink-fg-faint);
+  font-size: 11px;
+}
+
+.link-popover__input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--ink-border);
+  border-radius: var(--ink-radius-sm);
+  background-color: var(--ink-bg-soft);
+  color: var(--ink-fg);
+  font-family: var(--ink-mono-family);
+  font-size: 13px;
+  outline: none;
+}
+
+.link-popover__input:focus {
+  border-color: var(--ink-accent);
+}
+
+.link-popover__foot {
+  display: flex;
+  gap: 6px;
+  min-height: 18px;
+  margin-top: 6px;
+}
+
+.link-popover__tag {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background-color: var(--ink-bg-inset);
+  color: var(--ink-fg-muted);
+  font-size: 11px;
+}
+
+.link-popover__tag--ok {
+  background-color: var(--ink-selection);
+  color: var(--ink-accent-hover);
+}
+
+.link-popover__tag--faint {
+  color: var(--ink-fg-faint);
+}
+
+@media (prefers-color-scheme: dark) {
+  .link-popover {
+    box-shadow: 0 8px 24px rgba(1, 4, 9, 0.55);
+  }
+}

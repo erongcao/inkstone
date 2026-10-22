@@ -14,6 +14,9 @@ import { Sidebar } from "@/views/Sidebar";
 import { EditorSurface } from "@/views/EditorSurface";
 import { StatusBar } from "@/views/StatusBar";
 import { SettingsPanel } from "@/views/SettingsPanel";
+import { CommandPalette } from "@/views/CommandPalette";
+import { LinkPopover } from "@/views/LinkPopover";
+import { onIntent } from "@/editor/intents";
 
 export default function App() {
   // 应用主题副作用（data-theme / data-mode / 版式变量 / 自定义 CSS）
@@ -42,6 +45,37 @@ export default function App() {
     );
     return () => unlisten?.();
   }, []);
+
+  // 命令面板发出的意图 → 具体行为。
+  // 视图与文件相关的命令实现在 React 这一侧（见 editor/intents.ts 的说明）
+  useEffect(() => {
+    const off = onIntent((intent) => {
+      switch (intent) {
+        case "view.live":
+          update({ editor: { markerDisplay: "live" } });
+          break;
+        case "view.dimmed":
+          update({ editor: { markerDisplay: "dimmed" } });
+          break;
+        case "view.source":
+          update({ editor: { markerDisplay: "source" } });
+          break;
+        case "view.toggle-focus-mode":
+          update({ editor: { focusMode: !settings.editor.focusMode } });
+          break;
+        case "view.toggle-typewriter-mode":
+          update({ editor: { typewriterMode: !settings.editor.typewriterMode } });
+          break;
+        case "file.new":
+          create();
+          break;
+        case "file.save":
+          void save();
+          break;
+      }
+    });
+    return off;
+  }, [create, save, update, settings.editor.focusMode, settings.editor.typewriterMode]);
 
   // 菜单动作 → 具体行为
   useEffect(() => {
@@ -80,6 +114,8 @@ export default function App() {
       </main>
       <StatusBar />
       {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
+      <CommandPalette />
+      <LinkPopover />
     </div>
   );
 }

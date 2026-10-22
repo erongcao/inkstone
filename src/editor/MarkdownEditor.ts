@@ -31,7 +31,12 @@ import { markdownPaste } from "./paste";
 import { imageDrop } from "./image-insert";
 import { focusMode, setFocusModeOf } from "./focus-mode";
 import { typewriter, setTypewriterModeOf } from "./typewriter";
-import { emojiAutocomplete, preloadEmojiData } from "./emoji";
+import { preloadEmojiData } from "./emoji";
+import { inkstoneAutocomplete } from "./completion";
+import { openPalette } from "./palette";
+import { runCommand } from "./commands";
+import { linkPopoverTrigger } from "./link-trigger";
+import "./commands/builtin"; // 顶层副作用：注册内置命令表
 import {
   armPlainTextPaste,
   copySelectionAsHtml,
@@ -89,8 +94,10 @@ function buildExtensions(
     // 焦点模式 / 打字机模式（两者都由设置面板的开关控制）
     focusMode(),
     typewriter(),
-    // Emoji 补全：`:前缀` 触发，数据按需加载
-    emojiAutocomplete(),
+    // 补全：`:前缀` 出 Emoji，行首 `/` 出斜杠菜单（两者共用一个弹层）
+    inkstoneAutocomplete(),
+    // 敲出 `](` 时在光标旁弹 URL 输入框
+    linkPopoverTrigger,
     // 复制：同时写 Markdown 源码与渲染后的 HTML
     markdownCopy(),
     // 键盘映射
@@ -108,6 +115,12 @@ function buildExtensions(
       ...historyKeymap,
       ...searchKeymap,
       indentWithTab,
+      // 命令面板。放在 defaultKeymap 之前不必要（⌘K 与它不冲突），
+      // 但和格式化快捷键放在一起，便于一眼看全「键盘能干什么」
+      { key: "Mod-k", run: () => (openPalette(), true) },
+      { key: "Mod-b", run: (view) => runCommand("format.bold", view) },
+      { key: "Mod-i", run: (view) => runCommand("format.italic", view) },
+      { key: "Mod-e", run: (view) => runCommand("format.code", view) },
       {
         key: "Mod-Shift-c",
         run: (view) => {

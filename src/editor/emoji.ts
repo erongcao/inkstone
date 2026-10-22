@@ -20,13 +20,11 @@
  * 出 200 条包含 "smile" 的结果反而难用。中文别名同样按前缀。
  */
 
-import {
-  autocompletion,
-  type Completion,
-  type CompletionContext,
-  type CompletionResult,
+import type {
+  Completion,
+  CompletionContext,
+  CompletionResult,
 } from "@codemirror/autocomplete";
-import type { Extension } from "@codemirror/state";
 import type { EmojiRow } from "./emoji-data";
 
 /** 触发前缀 */
@@ -211,8 +209,13 @@ export function searchEmoji(table: Table, query: string, limit = MAX_OPTIONS): H
   return hits.slice(0, limit);
 }
 
-/** 候选项的 CSS class 标记（配合 live-preview.css 里的样式） */
-const OPTION_CLASS = "ink-emoji-option";
+/**
+ * Emoji 补全源。
+ *
+ * `autocompletion()` 的装配在 `completion.ts`——那里现在同时管着
+ * Emoji 与斜杠菜单两个源，一个扩展只能有一个 `completionConfig`。
+ */
+export const EMOJI_OPTION_TYPE = "emoji";
 
 /**
  * 命中结果 → CM6 的候选项。
@@ -231,7 +234,7 @@ function toOptions(hits: Hit[]): Completion[] {
       ...hit.keywords.filter((k) => k !== hit.keyword).slice(0, 2),
     ].join(" · "),
     apply: hit.glyph,
-    type: "emoji",
+    type: EMOJI_OPTION_TYPE,
     // 关键字越短越可能是用户想要的（`:smile` 优先于 `:smiling_face_with_smiling_eyes`）
     boost: hit.keyword.length,
   }));
@@ -269,29 +272,9 @@ export function emojiCompletion(context: CompletionContext): CompletionResult | 
 }
 
 /**
- * Emoji 补全扩展。
+ * 补全源的 CSS class 标记（配合 live-preview.css 里的样式）。
  *
- * 用 `override` 而不是直接 `emojiCompletion`：CM6 自带的补全源
- * （语言数据、路径、变量名）在 Markdown 里会弹出没用的东西。
- *
- * 注意 `override` 必须给**数组**：`null` 是「不覆盖」的意思，
- * 会退回 `state.languageDataAt("autocomplete", …)`，而 Markdown 没有语言级补全数据，
- * 那条路拿到的是空数组，等于把唯一能用的源也关掉了。
+ * 真正的 `autocompletion()` 装配已经挪到 `completion.ts`——
+ * 一个扩展只能有一个 `completionConfig`，而现在 Emoji 与斜杠菜单是同一个弹层的两个源。
  */
-export function emojiAutocomplete(): Extension {
-  return autocompletion({
-    override: [emojiCompletion],
-    activateOnTyping: true,
-    optionClass: (option) => (option.type === "emoji" ? OPTION_CLASS : ""),
-    // 一次只可能有一个来源（就是 emoji 本身），限制渲染条数省掉无谓的 DOM
-    maxRenderedOptions: MAX_OPTIONS,
-    /**
-     * 设为 0：默认 100 ms。
-     *
-     * 因为用了 `filter: false`（也就没有 `validFor`），CM6 每敲一个字符都会
-     * 把上一个结果打回 Pending、重新查一遍源；这期间弹层是 `disabled`（发灰）的。
-     * 源本身是同步的，1 ms 内就有结果，没必要为此发灰 100 ms。
-     */
-    activateOnTypingDelay: 0,
-  });
-}
+export const EMOJI_OPTION_CLASS = "ink-emoji-option";

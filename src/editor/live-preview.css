@@ -657,3 +657,24 @@
     opacity: 0.9;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════
+ * 斜杠菜单
+ * ═══════════════════════════════════════════════════════════ */
+
+/*
+ * 与 Emoji 共用 CM6 的默认弹层渲染，只调样式。
+ *
+ * 斜杠菜单的 label 是「表格」这样的命令名，字号就是正文字号，
+ * 分类放 detail 位——所以只需要把 detail 压暗、和 label 拉开距离。
+ */
+.ink-slash-option .cm-completionDetail {
+  opacity: 0.62;
+  font-size: 0.85em;
+  margin-left: 10px;
+}
+
+.cm-tooltip-autocomplete ul li.ink-slash-option {
+  padding-top: 3px;
+  padding-bottom: 3px;
+}
