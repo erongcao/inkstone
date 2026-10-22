@@ -1,28 +1,36 @@
 /**
  * GFM 表格。
  *
- * 为什么必须行扫描：
- *   实测 `dump-lezer-tree.ts`，整张表在 lezer 里就是一个普通 `Paragraph`
- *   ——`@lezer/markdown` **完全不认** GFM 表格。
- *   而语义层有 `remark-gfm`（mdast 的 `table` / `tableRow` / `tableCell`）。
+ * **走语法树，不做行扫描**——这一点是本文件被推翻重写过的，理由值得留着。
  *
- * 表格结构天然是**多行**的（表头 + 分隔行 + 数据行），
- * 所以不能像行内公式那样「逐行解析」——
- * 这里自己做行扫描来定结构，单元格内部的行内 Markdown 交给 `html-loader`
- * （同一个 remark 管线 + remark-rehype），所以语义不会分裂。
+ * 最初以为「lezer 不认 GFM 表格」，于是自己写行扫描把整套 GFM 规则重实现了一遍
+ * （续行吸收、分隔行合法性、列数、列表/引用前缀、中断条件……），
+ * 结果和 remark-gfm 对拍时连续 4 处不一致，全是 GFM 规则的细节。
  *
- * 判定规则逐条对着 remark-gfm 实测过，并由 `tests/table.test.ts`
- * 的**对拍组**保证（拿全文 remark-gfm 的结果与本模块的行扫描结果比对）。
+ * 根因是**测错了对象**：`scripts/dump-lezer-tree.ts` 用的是裸 `parser`，
+ * 而编辑器真正用的是 `parser.configure(GFM)`（见 `live-preview/syntax.ts`）。
+ * 配上 GFM 之后 lezer **完全认得**表格：
+ *
+ * ```
+ * Table[0,37]
+ *   TableHeader[0,11]     "| 名称 | 说明 |"
+ *   TableDelimiter[12,27] "| --- | :---: |"   ← 名字叫 Delimiter，其实是分隔行
+ *   TableRow[28,37]       "| 甲 | 乙 |"
+ * ```
+ *
+ * 所有 GFM 边界（分隔行不合法 / 列数不符 / 被标题列表引用打断）
+ * lezer 都已经判对了，`Table` 节点的区间也**自带**列表与引用前缀处理
+ * （`  | a |` 的 from 落在 `|` 上；`> | a |` 的子节点里夹着 `QuoteMark`）。
+ *
+ * 教训写在这里：**能用语法树表达的，就不要用行扫描再实现一遍**——
+ * 行扫描的每一条规则都是一个潜在的语义分叉点。
+ *
+ * 仍然要自己解析的只剩**对齐方式**：lezer 不把 `:---:` 的对齐暴露成属性，
+ * 只能从 `TableDelimiter` 的文本里读。
  */
 
-import type { Tree } from "@lezer/common";
-import {
-  collectSkipRanges,
-  makeSkipTest,
-  scanLines,
-  type Interval,
-  type Line,
-} from "./scan";
+import type { SyntaxNode, Tree } from "@lezer/common";
+import type { Interval } from "./scan";
 import { renderInlineHtmlSync } from "@/parser/html-loader";
 import type { BlockMatch, BlockRenderer, BlockRenderResult } from "./types";
 
@@ -30,7 +38,9 @@ import type { BlockMatch, BlockRenderer, BlockRenderResult } from "./types";
 export type CellAlign = "left" | "center" | "right";
 
 /** 一个表格 */
-export interface TableMatch extends Interval {
+export interface TableMatch {
+  from: number;
+  to: number;
   kind: "table";
   /** 每列的对齐方式（null = 不指定，交给浏览器默认） */
   align: (CellAlign | null)[];
@@ -38,48 +48,29 @@ export interface TableMatch extends Interval {
   rows: string[][];
 }
 
-/**
- * 拆分一行的单元格。
- *
- * 只在**未被转义**的 `|` 上切分（GFM 规则），且**保留转义序列原样**——
- * `\|` 交给后续的 remark 去反转义，这里提前改会丢掉「这是字面量竖线」的信息。
- *
- * 首尾的 `|` 是可选的（GFM 允许省略），要剥掉；
- * 但结尾是 `\|` 时不能剥，那是真的内容。
- */
-export function splitRow(text: string): string[] {
-  let s = text.trim();
-  if (s.startsWith("|")) s = s.slice(1);
-  if (s.endsWith("|") && !s.endsWith("\\|")) s = s.slice(0, -1);
-
-  const cells: string[] = [];
-  let current = "";
-  for (let i = 0; i < s.length; i++) {
-    const ch = s[i];
-    if (ch === "\\" && i + 1 < s.length) {
-      // 反斜杠与后一个字符一起带走，转义序列原样保留
-      current += ch + s[i + 1];
-      i++;
-      continue;
-    }
-    if (ch === "|") {
-      cells.push(current.trim());
-      current = "";
-      continue;
-    }
-    current += ch;
+/** 取某个节点的直接子节点 */
+function childrenOfType(node: SyntaxNode, name: string): SyntaxNode[] {
+  const out: SyntaxNode[] = [];
+  const cursor = node.cursor();
+  if (cursor.firstChild()) {
+    do {
+      if (cursor.node.type.name === name) out.push(cursor.node);
+    } while (cursor.nextSibling());
   }
-  cells.push(current.trim());
-  return cells;
+  return out;
 }
 
 /**
- * 解析分隔行（`| --- | :---: |`）。
+ * 解析分隔行（`| --- | :---: |`）得到每列的对齐方式。
  *
  * @returns 不是合法分隔行时返回 null
  */
 export function parseDelimiterRow(text: string): (CellAlign | null)[] | null {
-  const cells = splitRow(text);
+  let s = text.trim();
+  if (s.startsWith("|")) s = s.slice(1);
+  if (s.endsWith("|") && !s.endsWith("\\|")) s = s.slice(0, -1);
+
+  const cells = s.split("|").map((c) => c.trim());
   if (cells.length === 0) return null;
   for (const cell of cells) {
     if (!/^:?-+:?$/.test(cell)) return null;
@@ -95,60 +86,57 @@ export function parseDelimiterRow(text: string): (CellAlign | null)[] | null {
 }
 
 /**
- * 行前缀：前导空白与引用标记（`>`），可交替出现多次。
+ * 取一行里的所有单元格文本。
  *
- * 表格可以**嵌套在列表项与引用里**（实测 remark-gfm 认
- * `  | a |` 与 `> | a |`），所以扫描前必须把前缀摘掉，
- * 否则永远匹配不到；而 `from` 要落在 `|` 上而不是前缀上
- * （实测 remark 给的区间也是从 `|` 开始）。
+ * **不能直接数 `TableCell` 节点**——lezer 对空单元格**不生成节点**，
+ * 只留下分隔符。实测 `|  | z |`：lezer 只给 1 个 `TableCell`（`z`），
+ * 而 remark 给 2 个单元格。数节点会少数一列。
+ *
+ * 所以改成按「分隔符切列」的状态机：
+ *   - 行首的分隔符是**边框**，不是列分隔，跳过
+ *   - 遇到 `TableDelimiter` → 收尾当前列，开始新列
+ *   - 收尾时只有「最后一个子节点是 TableCell」才补最后一列
+ *     （行尾的分隔符已经把最后一列收掉了）
  */
-function splitPrefix(text: string): { prefix: string; offset: number } {
-  let i = 0;
-  for (;;) {
-    const before = i;
-    while (i < text.length && (text[i] === " " || text[i] === "\t")) i++;
-    if (text[i] === ">") {
-      i++;
-      if (text[i] === " ") i++;
-      continue;
-    }
-    // 没有 `>` 就只保留这一步吃掉的缩进
-    i = before;
-    while (i < text.length && (text[i] === " " || text[i] === "\t")) i++;
-    return { prefix: text.slice(0, i), offset: i };
+function cellsOf(row: SyntaxNode, source: string): string[] {
+  const cells: string[] = [];
+  let current = "";
+  let pending: string | null = null; // null = 当前列尚未开始
+
+  const cursor = row.cursor();
+  if (cursor.firstChild()) {
+    let first = true;
+    do {
+      const child = cursor.node;
+      const name = child.type.name;
+      if (first) {
+        first = false;
+        // 行首分隔符是边框，跳过
+        if (name === "TableDelimiter") continue;
+      }
+      if (name === "TableCell") {
+        current += source.slice(child.from, child.to);
+        pending = "cell";
+      } else if (name === "TableDelimiter") {
+        cells.push(current.trim());
+        current = "";
+        pending = null;
+      }
+    } while (cursor.nextSibling());
   }
-}
 
-/**
- * 判断内容（剥掉前缀之后）是否会**中断**表格。
- *
- * 全部来自实测：GFM 表格只在空行或「另一个块级结构」处结束，
- * 普通文本—even 带缩进— 都会被当成表格的一行。
- * （`  缩进` 续行 → 仍是行；`    x` 四空格起 → 缩进代码块 → 中断）
- */
-const INTERRUPTS: RegExp[] = [
-  /^ {0,3}#{1,6}(\s|$)/, // ATX 标题
-  /^ {0,3}([-*_])[ \t]*(?:\1[ \t]*){2,}$/, // 分隔线
-  /^ {0,3}([-*+]|\d{1,9}[.)])(\s|$)/, // 列表
-  /^ {0,3}>/, // 引用（多级引用的内层）
-  /^ {0,3}(?:`{3,}|~{3,})/, // 围栏代码
-  /^ {4,}\S/, // 缩进代码
-  /^ {0,3}</, // HTML 块
-];
-
-function interruptsTable(content: string): boolean {
-  if (content.trim().length === 0) return true; // 空行
-  return INTERRUPTS.some((re) => re.test(content));
+  if (pending === "cell") cells.push(current.trim());
+  if (cells.length === 0) cells.push("");
+  return cells;
 }
 
 /**
  * 找出文档里所有 GFM 表格。
  *
- * 结构判定：第 i 行（剥掉前缀后）含 `|`，第 i+1 行是**列数相同**的
- * 合法分隔行，之后同前缀、不中断表格的行都算数据行。
- *
- * 数据行会被**归一化到表头宽度**：少了补空、多了截断——
- * 这正是 GFM 的规定，也和 remark-gfm 的 `tableRow` 列数一致。
+ * `blockRanges` 是**已被块级渲染器占用的区间**，必须让开：
+ * lezer 不认识数学，所以 `$$\n| a |\n| --- |\n$$\n` 里的表格语法
+ * 它会照认不误（实测 `Table[3,19)`），而 remark 判它属于公式块。
+ * 不让开的话，同一段文本会被公式块与表格同时替换。
  */
 export function findTables(
   tree: Tree,
@@ -156,71 +144,40 @@ export function findTables(
   options: { blockRanges?: readonly Interval[] } = {},
 ): TableMatch[] {
   const matches: TableMatch[] = [];
-  // 文档里没有 `|` 就不可能有表格——先做一次原生字符串快筛
-  if (!source.includes("|")) return matches;
+  const claimed = options.blockRanges ?? [];
+  const isClaimed = (from: number, to: number): boolean =>
+    claimed.some((r) => from < r.to && r.from < to);
 
-  const lines = scanLines(source);
-  // 禁区 = lezer 认识的代码块 / HTML 块 + 已被块级渲染器占用的区间。
-  // 后者必需：`$$ … | a | … $$` 里的表格语法在语义上属于公式块。
-  const isSkipped = makeSkipTest([
-    ...collectSkipRanges(tree),
-    ...(options.blockRanges ?? []),
-  ]);
+  tree.iterate({
+    enter(ref) {
+      // 注意：这里必须 `return;`（继续深入）而不是 `return false`（不进子树）——
+      // 否则会在 Document 就停住，永远走不到 Table。
+      if (ref.type.name !== "Table") return;
 
-  /** 剥掉行前缀后的内容 */
-  const contentOf = (line: Line): { prefix: string; text: string; from: number } => {
-    const { prefix, offset } = splitPrefix(line.text);
-    return { prefix, text: line.text.slice(offset), from: line.from + offset };
-  };
+      const header = childrenOfType(ref.node, "TableHeader")[0];
+      const delimiter = childrenOfType(ref.node, "TableDelimiter")[0];
+      if (!header || !delimiter) return false;
+      if (isClaimed(ref.from, ref.to)) return false;
 
-  for (let i = 0; i + 1 < lines.length; i++) {
-    if (isSkipped(lines[i].from)) continue;
-    const headerLine = contentOf(lines[i]);
-    if (!headerLine.text.includes("|")) continue;
+      const align = parseDelimiterRow(source.slice(delimiter.from, delimiter.to));
+      if (!align) return false;
 
-    // 分隔行必须与表头**前缀相同**（否则那是另一个块里的表格）
-    const delimLine = contentOf(lines[i + 1]);
-    if (delimLine.prefix !== headerLine.prefix) continue;
-    const align = parseDelimiterRow(delimLine.text);
-    const header = splitRow(headerLine.text);
-    // GFM 要求表头与分隔行列数一致，否则整块只是段落
-    if (!align || align.length !== header.length) continue;
+      const rows = [cellsOf(header, source)];
+      for (const row of childrenOfType(ref.node, "TableRow")) {
+        rows.push(cellsOf(row, source));
+      }
 
-    const rows: string[][] = [header];
-    let last = i + 1;
-    for (let j = i + 2; j < lines.length; j++) {
-      if (isSkipped(lines[j].from)) continue;
-      const cell = contentOf(lines[j]);
-      if (cell.prefix !== headerLine.prefix) break;
-      if (interruptsTable(cell.text)) break;
-      rows.push(splitRow(cell.text));
-      last = j;
-    }
-
-    // 注意：`rows` 保持**原始**逐行列数，不补空格也不截断——
-    // 实测 remark-gfm 的 tableRow 就是这样（3 列的表可以带 2 列的行）。
-    // 「不足补空、超过截断」是**渲染**阶段的事，见 render()。
-
-    matches.push({
-      from: headerLine.from,
-      to: lines[last].to,
-      kind: "table",
-      align,
-      rows,
-    });
-    i = last;
-  }
+      matches.push({ from: ref.from, to: ref.to, kind: "table", align, rows });
+      return false; // 子节点已全部处理完，不必再深入
+    },
+  });
 
   return matches;
 }
 
 /** HTML 转义（渲染器尚未就绪时的兜底） */
 function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/\|/g, "|");
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 /** 渲染一个单元格的内容 */
@@ -258,9 +215,9 @@ export const tableRenderer: BlockRenderer = {
     const body = document.createElement("tbody");
     for (let r = 1; r < table.rows.length; r++) {
       const tr = document.createElement("tr");
-      // GFM：数据行可以比表头少列或多列——
-      // 少的补空单元格，多的忽略。实测「3 列的表 + 2 列的行」是合法的，
-      // 且 remark-gfm 的 AST 保留原始列数，补齐只发生在渲染阶段。
+      // GFM 允许数据行的列数与表头不同：少的补空单元格，多的忽略。
+      // （实测「3 列的表 + 2 列的行」合法；remark-gfm 的 AST 也保留原始列数，
+      //   补齐只发生在渲染阶段。）
       const width = table.align.length;
       for (let c = 0; c < width; c++) {
         const td = document.createElement("td");
@@ -275,7 +232,7 @@ export const tableRenderer: BlockRenderer = {
     return {
       dom: el,
       // 指纹必须覆盖对齐方式与全部单元格内容
-      key: `table:${table.align.join(",")}:${table.rows.map((r) => r.join("")).join("")}`,
+      key: `table:${table.align.join(",")}:${table.rows.map((r) => r.join("")).join("")}`,
     } satisfies BlockRenderResult;
   },
 };

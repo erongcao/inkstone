@@ -25,11 +25,13 @@ import {
   setDisplayMode,
   setMathOptions,
   refreshRendering,
+  getSyntaxTree,
 } from "./state";
 import { registerBlockRenderer } from "../render/registry";
 import { codeBlockRenderer } from "../render/code-block";
 import { mathBlockRenderer } from "../render/math-block";
 import { tableRenderer } from "../render/table";
+import { findTaskItems, taskToggleChange } from "../render/task-list";
 import { onMathRendererReady } from "../render/math-loader";
 import type { MarkerDisplayMode } from "@/settings/schema";
 
@@ -112,6 +114,19 @@ export function livePreview(): Extension {
       mousedown: (event, view) => {
         const target = event.target as HTMLElement | null;
 
+        // 任务列表勾选框：`[data-task-at]`
+        // 这是**唯一**会改写文档内容的交互——而且必须走普通事务，
+        // 这样它天然进撤销栈、能被协作与保存流程看见。
+        const task = target?.closest?.("[data-task-at]") as HTMLElement | null;
+        if (task) {
+          const at = Number(task.dataset.taskAt);
+          if (!Number.isFinite(at)) return false;
+          event.preventDefault();
+          toggleTaskAt(view, at);
+          view.focus();
+          return true;
+        }
+
         // 行内公式：`[data-inline-from]`
         const inline = target?.closest?.("[data-inline-from]") as HTMLElement | null;
         if (inline) {
@@ -143,6 +158,24 @@ export function livePreview(): Extension {
 /** 编程式切换显示策略 */
 export function setDisplayModeOf(view: EditorView, mode: MarkerDisplayMode): void {
   view.dispatch({ effects: setDisplayMode.of(mode) });
+}
+
+/**
+ * 翻转某个位置的勾选框，并把改动**写回 Markdown 文本**。
+ *
+ * 为什么必须写回而不是只改 DOM：勾选状态是文档内容的一部分。
+ * 只活在 widget 里的话，关掉文件就丢、复制到别处也是空的，
+ * 而且永远不会被搜索/导出/打印看见——这会直接违反架构红线 1。
+ *
+ * 位置对不上（文档已被改动等）时静默返回，不做破坏性兜底。
+ */
+export function toggleTaskAt(view: EditorView, at: number): void {
+  const state = view.state;
+  const items = findTaskItems(getSyntaxTree(state), state.doc.toString());
+  const item = items.find((it) => it.from === at);
+  if (!item) return;
+  const change = taskToggleChange(item);
+  view.dispatch({ changes: { from: change.from, to: change.to, insert: change.insert } });
 }
 
 /**

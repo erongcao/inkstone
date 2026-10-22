@@ -371,16 +371,56 @@ ProseMirror 内核**，理由和我们完全一样——mark 不含标记符文�
 | `types.ts` | `BlockRenderer` 接口：`find(tree, source)` 找块、`render(match)` 出 DOM |
 | `registry.ts` | 幂等注册表（同 id 覆盖而非报错） |
 | `scan.ts` | 逐行扫描工具——给 **lezer 不支持**的块结构用 |
+| `table.ts` | GFM 表格（**走语法树**：`Table` / `TableHeader` / `TableDelimiter` / `TableRow` / `TableCell`） |
+| `task-list.ts` | GFM 任务列表（**走语法树**：`Task` / `TaskMarker`） |
 | `code-block.ts` | 围栏代码块定位（lezer `FencedCode`）+ 高亮 |
 
-两种识别方式并存是有原因的：
-**`@lezer/markdown` 的 GFM 扩展不识别表格与任务列表**（表格被当成普通 Paragraph），
-数学公式更不在 CommonMark 内——所以这些块必须用 `scan.ts` 行扫描，
-围栏代码块则用语法树（准，且能正确处理四反引号围栏与块内反引号）。
+识别方式有两条路，选择标准是**「lezer 配了 GFM 之后认不认」**：
+- 认 → 走语法树（表格、任务列表、围栏代码块）
+- 不认 → 行扫描（**数学公式**，它不在 CommonMark 也不在 GFM 里）
+
+### ⚠️ 曾经写错的一条结论（2026-10-22 已纠正）
+
+此前 AGENTS.md 写的是：
+
+> ~~`@lezer/markdown` 的 GFM 扩展不识别表格与任务列表（表格被当成普通 Paragraph）~~
+
+**这是错的。** 根因是测错了对象：`scripts/dump-lezer-tree.ts` 用的是**裸 `parser`**，
+而编辑器真正用的是 `parser.configure(GFM)`（见 `live-preview/syntax.ts`）。
+配上 GFM 之后实测：
+
+```
+Table[0,37]  TableHeader[0,11]  TableDelimiter[12,27]  TableRow[28,37]  TableCell[…]
+Task[41,48]  TaskMarker[41,44]
+```
+
+连带两个假结论：
+- 「`- [x]` 会被 lezer 解析成 `Link` 节点」——只在裸 parser 下才出现
+- 「表格与任务列表必须行扫描」——表格因此白写了一版行扫描实现，
+  和 remark-gfm 对拍时连续 **4 处不一致**（续行吸收、缩进代码中断、
+  列数归一化、列表/引用前缀），全部是 GFM 规则的细节，最后整块删掉改成走语法树。
+
+**教训：验证「某个解析器认不认某个结构」时，必须用编辑器实际使用的那份配置去测，
+而不是随手 import 一个裸 parser。** `dump-lezer-tree.ts` 现在也应该配 GFM，
+否则它会继续误导人。
 
 块级展开判定用**严格开区间** `from < cursor < to`：
 打开文件时光标在 0，第一个代码块是收起的（与 Typora 一致）；
 点击渲染块 → mousedown 把光标 dispatch 到 `from + 1` → 块切回源码。
+
+### lezer 与 micromark 的两处**已知**分歧（记录在案，未修）
+
+`tests/table.test.ts` 里有一组明确标注「记录在案，不修」的断言：
+
+1. **表格后紧跟 4 空格缩进的行**：remark 判它是缩进代码块 → 表格到此为止；
+   lezer 把它吸收成表格的一行。
+   复现：`` `| a |\n| --- |\n| 1 |\n    x` `` → lezer `Table[0,25)`，remark 表格只到 `[0,19)`。
+   不修的理由：缩进代码与「列表项内的相对缩进」在语义上互相纠缠，
+   正确处理要复刻 CommonMark 的缩进解析——那正是行扫描方案翻车的原因。
+2. **公式块里的表格**：lezer 不认识数学，会把 `$$\n| a |\n| --- |\n$$\n` 里的
+   表格照认不误（实测 `Table[3,19)`），而 remark 判它属于公式块。
+   这个好解决：`findTables` 接 `blockRanges` 参数，让已被块级渲染器占用的区间让开
+   （`BlockRenderer.find` 契约的第三个参数）。
 
 ### 代码高亮：Prism → highlight.js（**发布级 bug，不是口味问题**）
 

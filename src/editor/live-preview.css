@@ -420,3 +420,42 @@
   font-family: var(--ink-mono-family);
   font-size: 0.9em;
 }
+
+/* ═══════════════════════════════════════════════════════════
+   任务列表
+   ═══════════════════════════════════════════════════════════ */
+
+/*
+ * 勾选框用字符而不是 <input type="checkbox">：
+ * input 是 contenteditable 里的外来元素，光标进出、删除、撤销都很难伺候，
+ * 而字符渲染天然跟随编辑器的主题与字号。
+ * 点击态用 CSS 让它「按下去」。
+ */
+.cm-md-task {
+  display: inline-block;
+  margin-right: 0.35em;
+  font-size: 1.05em;
+  line-height: 1;
+  cursor: pointer;
+  user-select: none;
+  color: var(--ink-fg-muted);
+  transition: transform 80ms ease;
+}
+
+.cm-md-task:hover {
+  color: var(--ink-accent);
+}
+
+.cm-md-task:active {
+  transform: scale(0.85);
+}
+
+.cm-md-task--checked {
+  color: var(--ink-accent);
+}
+
+/* dimmed 策略下不替换成 widget，只弱化标记本身 */
+.cm-md-task-marker {
+  color: var(--ink-fg-faint);
+  font-family: var(--ink-mono-family);
+}

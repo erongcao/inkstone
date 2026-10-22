@@ -19,8 +19,10 @@ import type { SyntaxNode, Tree } from "@lezer/common";
 import { INLINE_MARKERS, BLOCK_MARKERS, HEADING_CLASSES } from "./syntax";
 import { BlockWidget } from "./block-widget";
 import { InlineHtmlWidget } from "./inline-widget";
+import { TaskCheckboxWidget } from "./task-widget";
 import { blockRenderers } from "../render/registry";
 import { findInlineMath, renderInlineMath } from "../render/inline-math";
+import { findTaskItems } from "../render/task-list";
 import type { BlockMatch, BlockRenderer } from "../render/types";
 import type { MarkerDisplayMode } from "@/settings/schema";
 
@@ -203,6 +205,9 @@ export function buildLivePreviewDecorations(
   const headingDecos: Range<Decoration>[] = [];
   const renderedDecos: Range<Decoration>[] = [];
 
+  // 任务项要**先**算出来：后面的装饰循环要用它来藏列表符号、换勾选框
+  const taskItems = findTaskItems(syntaxTree, source);
+
   // 一次遍历收集全部三类装饰。
   // 重构前这里是三次独立的 `tree.iterate()`（实测 4000 行文档 0.78ms），
   // 合并成一次后遍历成本降到约三分之一。
@@ -287,6 +292,32 @@ export function buildLivePreviewDecorations(
         block: true,
       }).range(match.from, match.to),
     );
+  }
+
+  // ── 任务列表：`- [ ]` / `- [x]` ──
+  // 勾选状态是**写回源码的状态**而不是纯装饰（见 live-preview/index.ts 的点击处理）。
+  // 光标停在任务项里时露出原始 `[ ]`，方便直接编辑标记本身。
+  for (const item of taskItems) {
+    const active = cursor > item.from && cursor < item.to;
+    if (mode === "dimmed") {
+      if (!active) {
+        inlineDecos.push(
+          Decoration.mark({ class: "cm-md-task-marker" }).range(item.from, item.to),
+        );
+      }
+      continue;
+    }
+    if (!active) {
+      inlineDecos.push(
+        Decoration.replace({
+          widget: new TaskCheckboxWidget(item),
+        }).range(item.from, item.to),
+      );
+    }
+    // 列表符号藏掉：Typora 的任务项只显示勾选框，不显示项目符号
+    if (item.listMarkTo > item.listMarkFrom && !active) {
+      inlineDecos.push(hiddenMarker().range(item.listMarkFrom, item.listMarkTo));
+    }
   }
 
   // ── 行内公式 `$x^2$` / `$$x^2$$` ──

@@ -4,7 +4,15 @@
  * 运行：node --experimental-strip-types scripts/dump-lezer-tree.ts "样例文本"
  */
 
-import { parser } from "@lezer/markdown";
+import { parser as baseParser, GFM } from "@lezer/markdown";
+
+/**
+ * 必须和编辑器用**同一个** parser 配置（见 src/editor/live-preview/syntax.ts）。
+ *
+ * 曾经这里用的是裸 parser，导致「lezer 不认 GFM 表格与任务列表」的错误结论，
+ * 白写了一版行扫描实现。验证解析器认不认某个结构时，一定要用实际那份配置。
+ */
+const parser = baseParser.configure(GFM);
 import type { SyntaxNode } from "@lezer/common";
 
 const sample =

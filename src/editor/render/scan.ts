@@ -2,10 +2,10 @@
  * 逐行扫描工具。
  *
  * 为什么需要它：
- *   实测 `@lezer/markdown` 的 GFM 扩展**不识别 GFM 表格与任务列表**
- *   （`dump-lezer-tree.ts` 验证：表格被解析成普通 `Paragraph`），
- *   数学公式（`$$…$$`）更是不在 CommonMark 语法里。
- *   而这些结构在语义层是 remark 的地盘（remark-gfm / remark-math 支持）。
+ *   数学公式（`$$…$$`）**既不在 CommonMark 也不在 GFM 里**，
+ *   lezer 配了 GFM 也照样不认识它（`dump-lezer-tree.ts` 验证：
+ *   `$$\nx^2\n$$` 在语法树里就是一个普通 `Paragraph`）。
+ *   而它在语义层是 remark-math 的地盘。
  *
  *   编辑视图要的是「每击键都快」，不能为了找表格就跑一遍 remark
  *   （1000 行 p95 ≈ 11ms，超出交互预算）。
@@ -73,12 +73,17 @@ export function trimEnd(text: string): string {
 /**
  * lezer 认识、但**不该**被行扫描当成 Markdown 结构的块。
  *
- * 关键点是这两类知识是互补的：
- *   - lezer 认识代码块与 HTML 块（实测节点名 `FencedCode` / `CodeBlock` / `HTMLBlock`）
- *   - lezer **不认识**公式与 GFM 表格（`$$\nx^2\n$$` 在它眼里就是一个普通 `Paragraph`）
+ * 关键点是两类知识互补：
+ *   - lezer（配 GFM）认识代码块、HTML 块、**表格**、**任务列表**
+ *   - lezer **只**不认识数学公式（`$$\nx^2\n$$` 在它眼里就是一个普通 `Paragraph`）
  *
- * 所以「用 lezer 划禁区 + 用行扫描找它不认识的结构」两者不打架，
+ * 所以「用 lezer 划禁区 + 行扫描找它不认识的结构」两者不打架，
  * 而且行扫描必须先划禁区，否则代码块里的 `$$`、`$x$` 全都会被误判。
+ *
+ * ⚠️ 这里只列 lezer **认识**的节点类型。曾经误以为 GFM 表格与任务列表
+ * 也不被认识、于是白写了一版行扫描实现，和 remark-gfm 对拍时连续 4 处不一致。
+ * 根因是拿 `scripts/dump-lezer-tree.ts` 里的裸 `parser` 去测，
+ * 而编辑器用的是 `parser.configure(GFM)`。详见 AGENTS.md 与 table.ts 顶部。
  */
 const SKIP_NODE_TYPES = new Set(["FencedCode", "CodeBlock", "HTMLBlock"]);
 

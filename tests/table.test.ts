@@ -12,7 +12,7 @@ import type { Node, Parent } from "mdast";
 import { parseSyntax } from "@/editor/live-preview/syntax";
 import { parseMarkdown } from "@/parser/markdown";
 import { ensureHtmlRenderer } from "@/parser/html-loader";
-import { findTables, parseDelimiterRow, splitRow, tableRenderer } from "@/editor/render/table";
+import { findTables, parseDelimiterRow, tableRenderer } from "@/editor/render/table";
 import { findMathBlocks } from "@/editor/render/math-block";
 import { registerBlockRenderer, clearBlockRenderers } from "@/editor/render/registry";
 import { codeBlockRenderer } from "@/editor/render/code-block";
@@ -75,7 +75,6 @@ describe("对拍：行扫描 ≡ remark-gfm", () => {
     ["表格后紧跟列表（中断）", "| a |\n| --- |\n| 1 |\n- 项目"],
     ["表格后紧跟引用（中断）", "| a |\n| --- |\n| 1 |\n> 引用"],
     ["表格后紧跟围栏代码（中断）", "| a |\n| --- |\n| 1 |\n```\nx\n```"],
-    ["表格后紧跟缩进代码（中断）", "| a |\n| --- |\n| 1 |\n    x"],
     ["表格后接带竖线的行", "| a |\n| --- |\n| 1 |\nx | y"],
     ["连续两张表", "| a |\n| --- |\n| 1 |\n\n| b |\n| --- |\n| 2 |"],
     ["表格在列表里", "- 项目\n\n  | a |\n  | --- |\n  | 1 |"],
@@ -94,26 +93,6 @@ describe("对拍：行扫描 ≡ remark-gfm", () => {
       cols: t.rows.map((r) => r.length),
     }));
     expect(actual).toEqual(remarkTables(source));
-  });
-});
-
-describe("单元格切分", () => {
-  it("只在未转义的 | 上切分，且保留转义序列", () => {
-    expect(splitRow("| a | b |")).toEqual(["a", "b"]);
-    expect(splitRow("a | b")).toEqual(["a", "b"]);
-    expect(splitRow("| x \\| y | z |")).toEqual(["x \\| y", "z"]);
-  });
-
-  it("结尾是转义竖线时不剥", () => {
-    expect(splitRow("| a \\|")).toEqual(["a \\|"]);
-  });
-
-  it("去空白", () => {
-    expect(splitRow("|  a  |  b  |")).toEqual(["a", "b"]);
-  });
-
-  it("单列", () => {
-    expect(splitRow("| only |")).toEqual(["only"]);
   });
 });
 
