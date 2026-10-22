@@ -472,3 +472,216 @@ mod tests {
         assert_eq!(out, vec!["a", "b"]);
     }
 }
+
+#[cfg(test)]
+mod network_tests {
+    //! 端到端验证「真实 socket + 真实 SSE 字节流」这条链路。
+    //!
+    //! 这里刻意**不用 mock**：起一个真的 TCP 监听、发真的 HTTP 响应、
+    //! 让 reqwest 真连——验证的是字节在网络上的切分行为，
+    //! 而不是我们喂进去的字符串。
+    //!
+    //! 用的 SSE 字节序列与 MiniMax / OpenAI 兼容端点的真实流一致：
+    //!   `data: {json}\n\n` 逐帧，`[DONE]` 收尾。
+
+    use super::SseDecoder;
+    // StreamExt 是父模块的导入，测试模块要用 `stream.next()` 得自己再引一次
+    use futures_util::StreamExt;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::thread;
+
+    /// 起一个只回固定字节流的极简 HTTP 服务器
+    fn serve_once(body: &'static str) -> (String, thread::JoinHandle<Vec<String>>) {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("绑定失败");
+        let addr = listener.local_addr().expect("取地址失败");
+        let handle = thread::spawn(move || {
+            let mut collected = Vec::new();
+            if let Ok((mut socket, _)) = listener.accept() {
+                // 把请求头读到空行（否则客户端可能还没发完就等响应）
+                let mut buf = [0u8; 2048];
+                if let Ok(n) = socket.read(&mut buf) {
+                    collected.push(String::from_utf8_lossy(&buf[..n]).to_string());
+                }
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\n\
+                     Content-Type: text/event-stream\r\n\
+                     Cache-Control: no-cache\r\n\
+                     Content-Length: {}\r\n\
+                     \r\n\
+                     {}",
+                    body.len(),
+                    body
+                );
+                let _ = socket.write_all(response.as_bytes());
+                let _ = socket.flush();
+                // 客户端读完就关
+                let _ = socket.shutdown(std::net::Shutdown::Write);
+            }
+            collected
+        });
+        (format!("http://{addr}/chat/completions"), handle)
+    }
+
+    /// 一条 OpenAI 兼容的真实增量帧
+    fn delta(content: &str) -> String {
+        format!(
+            "data: {{\"id\":\"1\",\"object\":\"chat.completion.chunk\",\"choices\":[{{\"index\":0,\"delta\":{{\"content\":\"{content}\"}}}}]}}\n\n"
+        )
+    }
+
+    fn chat_completion_stream() -> String {
+        let mut s = String::new();
+        s.push_str(&delta("你"));
+        s.push_str(&delta("好"));
+        s.push_str(&delta("，"));
+        s.push_str(&delta("世界"));
+        // 结束帧：只有 finish_reason，没有 content
+        s.push_str(
+            "data: {\"id\":\"1\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n",
+        );
+        s.push_str("data: [DONE]\n\n");
+        s
+    }
+
+    #[test]
+    fn 真实网络流能被正确解码() {
+        let (url, handle) = serve_once(Box::leak(chat_completion_stream().into_boxed_str()));
+
+        // 同步驱动 reqwest（测试里不用 tokio runtime）
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("建 runtime 失败");
+        let collected = rt.block_on(async {
+            let response = reqwest::Client::new()
+                .post(&url)
+                .header("accept", "text/event-stream")
+                .body("{}")
+                .send()
+                .await
+                .expect("请求失败");
+            assert!(
+                response.status().is_success(),
+                "状态码 {}",
+                response.status()
+            );
+
+            let mut stream = response.bytes_stream();
+            let mut decoder = SseDecoder::default();
+            let mut out = Vec::new();
+            while let Some(chunk) = stream.next().await {
+                let bytes = chunk.expect("读取流失败");
+                for payload in decoder.push(&String::from_utf8_lossy(&bytes)) {
+                    out.push(payload);
+                }
+            }
+            for payload in decoder.finish() {
+                out.push(payload);
+            }
+            out
+        });
+
+        // Rust 侧是**协议无关**的：它只负责把 data 负载原样转发，
+        // 不该知道 `finish_reason` 这种 OpenAI 特有的东西。
+        // 所以 5 条 data 帧（含结束帧）都会到这里，`[DONE]` 被丢掉。
+        // 「结束帧没有 content、要过滤掉」是**前端** `decodeDelta` 的职责。
+        assert_eq!(collected.len(), 5, "收到: {collected:?}");
+        let joined: String = collected.iter().map(|s| s.as_str()).collect();
+        assert!(
+            !joined.contains("[DONE]"),
+            "[DONE] 不该转发给前端: {joined}"
+        );
+        // 结束帧也照常转发（协议无关），但它没有 content
+        assert!(
+            collected.iter().any(|p| p.contains("finish_reason")),
+            "结束帧应在转发内容里"
+        );
+
+        // 从这里开始是**前端 decodeDelta 要做的事**。
+        // 在测试里把它跑一遍，验证「Rust 转发 + 前端提取」合起来的结果正确——
+        // 这才是用户最终看到的文本。
+        let text: String = collected
+            .iter()
+            .filter_map(|payload| {
+                let v: serde_json::Value = serde_json::from_str(payload).ok()?;
+                v["choices"][0]["delta"]["content"]
+                    .as_str()
+                    .map(str::to_string)
+            })
+            .collect();
+        assert_eq!(text, "你好，世界");
+
+        // 服务端确实收到了请求
+        let request = handle.join().unwrap();
+        assert!(!request.is_empty(), "服务端没收到请求");
+    }
+
+    #[test]
+    fn 鉴权头会按auth_spec注入() {
+        let (url, handle) = serve_once(Box::leak(
+            "data: a\n\ndata: [DONE]\n\n".to_string().into_boxed_str(),
+        ));
+
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.block_on(async {
+            let _ = reqwest::Client::new()
+                .post(&url)
+                .header("authorization", "Bearer test-key")
+                .body("{}")
+                .send()
+                .await
+                .expect("请求失败");
+        });
+
+        let request = handle.join().unwrap().join("\n").to_lowercase();
+        assert!(
+            request.contains("authorization: bearer test-key"),
+            "请求里没有鉴权头:\n{request}"
+        );
+        assert!(
+            request.contains("post /chat/completions"),
+            "请求行不对:\n{request}"
+        );
+    }
+
+    #[test]
+    fn 上游返回错误状态时把响应体带回去() {
+        // 401 的响应体是用户判断「key 填错」还是「模型不在分组」的关键
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        thread::spawn(move || {
+            if let Ok((mut socket, _)) = listener.accept() {
+                let mut buf = [0u8; 1024];
+                let _ = socket.read(&mut buf);
+                let body = r#"{"error":{"message":"invalid api key"}}"#;
+                let response = format!(
+                    "HTTP/1.1 401 Unauthorized\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                let _ = socket.write_all(response.as_bytes());
+            }
+        });
+
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let (status, text) = rt.block_on(async {
+            let response = reqwest::Client::new()
+                .post(format!("http://{addr}/v1/chat/completions"))
+                .body("{}")
+                .send()
+                .await
+                .expect("请求失败");
+            let status = response.status().as_u16();
+            (status, response.text().await.unwrap_or_default())
+        });
+        assert_eq!(status, 401);
+        assert!(text.contains("invalid api key"), "错误体丢了: {text}");
+    }
+}

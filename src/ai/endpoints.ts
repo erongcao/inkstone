@@ -126,6 +126,30 @@ export const BUILTIN_ENDPOINTS: EndpointConfig[] = [
     maxConcurrent: 0,
   },
 
+  {
+    id: "minimax-intl",
+    label: "MiniMax 国际（按量 / Token Plan）",
+    protocol: "openai",
+    baseUrl: "https://api.minimax.io/v1",
+    model: "MiniMax-M3",
+    billing: "pay-per-token",
+    maxConcurrent: 0,
+    note:
+      "海外账户用 api.minimax.io，中国大陆账户必须改成 api.minimaxi.com（多一个 i）。" +
+      "按量 API Key 与 Token Plan 订阅 Key 用**同一个端点**，只是计费到不同账户资源，" +
+      "两者不能互换。Anthropic 兼容协议（anthropic 子路径）可解锁 interleaved thinking。",
+  },
+  {
+    id: "minimax-cn",
+    label: "MiniMax 中国大陆（按量 / Token Plan）",
+    protocol: "openai",
+    baseUrl: "https://api.minimaxi.com/v1",
+    model: "MiniMax-M3",
+    billing: "pay-per-token",
+    maxConcurrent: 0,
+    note: "中国大陆账户的端点，注意是 minimaxi.com（比国际版多一个 i）。",
+  },
+
   // ── 本地推理（免费）─────────────────────────────────────────────────
   {
     id: "ollama",
