@@ -20,7 +20,12 @@
 import { Decoration, EditorView, ViewPlugin, type ViewUpdate } from "@codemirror/view";
 import type { Extension } from "@codemirror/state";
 import { buildLivePreviewDecorations } from "./decorations";
-import { livePreviewField, setDisplayMode, refreshRendering } from "./state";
+import {
+  livePreviewField,
+  setDisplayMode,
+  setMathOptions,
+  refreshRendering,
+} from "./state";
 import { registerBlockRenderer } from "../render/registry";
 import { codeBlockRenderer } from "../render/code-block";
 import { mathBlockRenderer } from "../render/math-block";
@@ -42,10 +47,12 @@ import type { MarkerDisplayMode } from "@/settings/schema";
  */
 const livePreviewDecorations = EditorView.decorations.from(
   livePreviewField,
-  ({ source, cursor, mode, tree }) => {
+  ({ source, cursor, mode, tree, singleDollarTextMath }) => {
     // 源码模式：不做任何渲染
     if (mode === "source") return Decoration.none;
-    return buildLivePreviewDecorations(source, cursor, mode, tree);
+    return buildLivePreviewDecorations(source, cursor, mode, tree, {
+      singleDollarTextMath,
+    });
   },
 );
 
@@ -101,6 +108,19 @@ export function livePreview(): Extension {
     EditorView.domEventHandlers({
       mousedown: (event, view) => {
         const target = event.target as HTMLElement | null;
+
+        // 行内公式：`[data-inline-from]`
+        const inline = target?.closest?.("[data-inline-from]") as HTMLElement | null;
+        if (inline) {
+          const at = Number(inline.dataset.inlineFrom);
+          if (!Number.isFinite(at)) return false;
+          event.preventDefault();
+          view.dispatch({ selection: { anchor: at + 1 } });
+          view.focus();
+          return true;
+        }
+
+        // 块级：`[data-block-from]`
         const block = target?.closest?.("[data-block-from]") as HTMLElement | null;
         if (!block) return false;
         const from = Number(block.dataset.blockFrom);
@@ -120,6 +140,18 @@ export function livePreview(): Extension {
 /** 编程式切换显示策略 */
 export function setDisplayModeOf(view: EditorView, mode: MarkerDisplayMode): void {
   view.dispatch({ effects: setDisplayMode.of(mode) });
+}
+
+/**
+ * 编程式设置行内公式的定界符策略。
+ *
+ * 设置面板改这个开关时调用；值直接透传给 remark-math 的 `singleDollarTextMath`。
+ */
+export function setMathOptionsOf(
+  view: EditorView,
+  options: { singleDollarTextMath: boolean },
+): void {
+  view.dispatch({ effects: setMathOptions.of(options) });
 }
 
 export { setDisplayMode };

@@ -21,6 +21,7 @@ export function EditorSurface({ onOpenSettings }: Props) {
   const [settings, updateSettings] = useSettings();
   const markerDisplay = settings.editor.markerDisplay;
   const autoPairMode = settings.editor.autoPairMode;
+  const inlineMathSingleDollar = settings.markdown.inlineMathSingleDollar;
   const hostRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<MarkdownEditorHandle | null>(null);
   /** 上一次同步进编辑器的值，用来避免回环更新 */
@@ -34,6 +35,7 @@ export function EditorSurface({ onOpenSettings }: Props) {
       doc: "",
       displayMode: markerDisplay,
       autoPairMode,
+      inlineMathSingleDollar,
       onChange: (value) => {
         lastSyncedRef.current = value;
         setContent(value);
@@ -67,6 +69,12 @@ export function EditorSurface({ onOpenSettings }: Props) {
   useEffect(() => {
     editorRef.current?.setAutoPairMode(autoPairMode);
   }, [autoPairMode]);
+
+  // 设置里的「单 $ 也当行内公式」变化 → 同步到编辑器。
+  // 它直接透传给 remark-math，所以导出的 HTML 与编辑器表现一致。
+  useEffect(() => {
+    editorRef.current?.setInlineMathSingleDollar(inlineMathSingleDollar);
+  }, [inlineMathSingleDollar]);
 
   // 菜单动作：剪贴板相关（作用在编辑器实例上，所以订阅放在这一层）
   useEffect(() => {

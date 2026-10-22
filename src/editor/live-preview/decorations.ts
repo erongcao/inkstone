@@ -18,7 +18,9 @@ import type { Range } from "@codemirror/state";
 import type { SyntaxNode, Tree } from "@lezer/common";
 import { INLINE_MARKERS, BLOCK_MARKERS, HEADING_CLASSES } from "./syntax";
 import { BlockWidget } from "./block-widget";
+import { InlineHtmlWidget } from "./inline-widget";
 import { blockRenderers } from "../render/registry";
+import { findInlineMath, renderInlineMath } from "../render/inline-math";
 import type { BlockMatch, BlockRenderer } from "../render/types";
 import type { MarkerDisplayMode } from "@/settings/schema";
 
@@ -170,7 +172,7 @@ function analyze(
 /**
  * 生成 Live Preview 装饰器集合。
  *
- * 这是一个**纯函数**——不依赖 EditorState，只吃四个显式参数。
+ * 这是一个**纯函数**——不依赖 EditorState，只吃几个显式参数。
  * 原因是 CM6 的 `EditorView.decorations.from(field, get)` 的 get 拿不到 state，
  * 而块级装饰器必须走 facet（见 `state.ts` 的说明）。
  *
@@ -180,12 +182,14 @@ function analyze(
  *   - `live`   标记隐藏（零宽 widget 顶替），光标进入该结构才显露
  *   - `dimmed` 标记始终可见，但弱化着色（Ulysses 式）
  * @param tree   增量维护的语法树
+ * @param math   行内公式选项（是否把单个 `$` 当定界符）
  */
 export function buildLivePreviewDecorations(
   source: string,
   cursor: number,
   mode: MarkerDisplayMode = "live",
   tree: Tree,
+  math: { singleDollarTextMath?: boolean } = {},
 ): DecorationSet {
   const syntaxTree = tree;
 
@@ -270,9 +274,10 @@ export function buildLivePreviewDecorations(
     },
   });
 
-  // ── 块级渲染（代码块 / 表格 / 公式 / 图表）──
+  // ── 块级渲染（代码块 / 公式块 / 表格 / 图表）──
   // 光标在块内 → 显示源码（可编辑）；光标在块外 → 显示渲染结果。
-  for (const { match, renderer } of collectBlockMatches(syntaxTree, source)) {
+  const blockMatches = collectBlockMatches(syntaxTree, source);
+  for (const { match, renderer } of blockMatches) {
     if (isBlockExpanded(match, cursor)) continue;
     const result = renderer.render(match, source);
     if (!result) continue;
@@ -281,6 +286,33 @@ export function buildLivePreviewDecorations(
         widget: new BlockWidget(result, match.from),
         block: true,
       }).range(match.from, match.to),
+    );
+  }
+
+  // ── 行内公式 `$x^2$` / `$$x^2$$` ──
+  // 必须排在块级之后：行首的 `$$x^2$$` 会被块级渲染器认走，
+  // 行内定位要把这些区间让开，否则同一段文本会被替换两次。
+  const blockRanges = blockMatches.map(({ match }) => ({
+    from: match.from,
+    to: match.to,
+  }));
+  for (const hit of findInlineMath(syntaxTree, source, {
+    singleDollarTextMath: math.singleDollarTextMath,
+    blockRanges,
+  })) {
+    // 与块级同一套展开规则：光标落在公式内 → 露出 `$…$` 源码
+    if (cursor > hit.from && cursor < hit.to) continue;
+    const html = renderInlineMath(hit.tex);
+    if (html === null) continue; // KaTeX 还没就绪，保持源码
+    inlineDecos.push(
+      Decoration.replace({
+        widget: new InlineHtmlWidget(
+          html,
+          `math:${hit.tex}`,
+          hit.from,
+          "cm-md-inline-math",
+        ),
+      }).range(hit.from, hit.to),
     );
   }
 

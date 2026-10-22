@@ -18,7 +18,7 @@ import {
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import { languages } from "@codemirror/language-data";
-import { livePreview, setDisplayModeOf } from "./live-preview";
+import { livePreview, setDisplayModeOf, setMathOptionsOf } from "./live-preview";
 import { autoPair } from "./auto-pair";
 import { markdownPaste } from "./paste";
 import {
@@ -38,6 +38,8 @@ export interface MarkdownEditorOptions {
   displayMode?: MarkerDisplayMode;
   /** 初始自动配对级别 */
   autoPairMode?: AutoPairMode;
+  /** 初始：单个 `$` 是否作为行内公式定界符（默认开） */
+  inlineMathSingleDollar?: boolean;
   /** 内容变化回调 */
   onChange?: (value: string) => void;
   /** 选区变化回调 */
@@ -150,6 +152,8 @@ export interface MarkdownEditorHandle {
   setDisplayMode(mode: MarkerDisplayMode): void;
   /** 切换自动配对级别 */
   setAutoPairMode(mode: AutoPairMode): void;
+  /** 切换行内公式的定界符策略（单 `$` 是否算） */
+  setInlineMathSingleDollar(enabled: boolean): void;
   /** 复制为渲染后的 HTML（同时附带 Markdown 源码作为纯文本兜底） */
   copyAsHtml(): Promise<void>;
   /** 复制为 Markdown 源码（纯文本） */
@@ -197,6 +201,8 @@ export function createMarkdownEditor(
     setAutoPairMode: (mode: AutoPairMode) => {
       view.dispatch({ effects: autoPairBox.reconfigure(autoPair(mode)) });
     },
+    setInlineMathSingleDollar: (enabled: boolean) =>
+      setMathOptionsOf(view, { singleDollarTextMath: enabled }),
     copyAsHtml: () => copySelectionAsHtml(view),
     copyAsMarkdown: () => copySelectionAsMarkdown(view),
     pasteAsPlainText: () => {

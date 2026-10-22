@@ -16,9 +16,25 @@
  */
 
 import type { KatexOptions } from "katex";
+import type { MarkdownAst } from "@/parser/markdown";
+import type { ParseOptions } from "@/parser/markdown";
 
-/** 渲染函数签名：TeX → HTML */
-export type MathRenderer = (tex: string) => string;
+/**
+ * 渲染函数签名：TeX → HTML。
+ *
+ * 第二个参数覆盖默认选项，主要是 `displayMode`
+ * （块级公式 `true` / 行内公式 `false`）。
+ */
+export type MathRenderer = (tex: string, overrides?: KatexOptions) => string;
+
+/**
+ * 逐行解析：行文本 → mdast。
+ *
+ * 也放在这个模块里，是因为 remark 管线（unified + remark-parse + gfm + math +
+ * stringify，约 137 KB）**只**被公式定位用到，
+ * 和 KaTeX 一起塞进同一个按需 chunk，主 chunk 才不会被拖大。
+ */
+export type InlineParser = (lineText: string, options: ParseOptions) => MarkdownAst;
 
 /**
  * 渲染选项。
@@ -37,6 +53,7 @@ export const MATH_OPTIONS: Readonly<KatexOptions> = Object.freeze({
 });
 
 let renderer: MathRenderer | null = null;
+let parser: InlineParser | null = null;
 let pending: Promise<MathRenderer> | null = null;
 
 const listeners = new Set<() => void>();
@@ -48,6 +65,7 @@ function load(): Promise<MathRenderer> {
   pending = import("./math-render")
     .then((mod) => {
       renderer = mod.renderMath;
+      parser = mod.parseInline;
       // 就绪通知：让已打开的编辑器重算装饰器，把「源码形态」升级成「渲染形态」
       for (const notify of listeners) notify();
       return renderer;
@@ -58,20 +76,41 @@ function load(): Promise<MathRenderer> {
   return pending;
 }
 
-/** 渲染器是否已就绪 */
+/** 渲染器（KaTeX + remark 管线）是否已就绪 */
 export function isMathRendererReady(): boolean {
-  return renderer !== null;
+  return renderer !== null && parser !== null;
+}
+
+/**
+ * 同步解析一行。
+ *
+ * @returns 管线尚未就绪时返回 null——调用方应据此跳过行内公式定位，
+ *          而不是退回某套「轻量正则」。理由见 `inline-math.ts`：
+ *          一旦编辑器另起一套规则，红线 C（解析规则唯一）就破了。
+ */
+export function parseInlineSync(
+  lineText: string,
+  options: ParseOptions,
+): MarkdownAst | null {
+  if (!parser) return null;
+  try {
+    return parser(lineText, options);
+  } catch {
+    return null;
+  }
 }
 
 /**
  * 同步渲染 TeX。
  *
+ * @param tex        TeX 源码
+ * @param overrides  覆盖默认选项（块级 `displayMode: true`）
  * @returns 渲染器尚未就绪时返回 null——调用方应据此退回源码显示
  */
-export function renderMathSync(tex: string): string | null {
+export function renderMathSync(tex: string, overrides?: KatexOptions): string | null {
   if (!renderer) return null;
   try {
-    return renderer(tex);
+    return renderer(tex, { ...MATH_OPTIONS, ...overrides });
   } catch {
     return null;
   }

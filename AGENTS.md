@@ -507,6 +507,76 @@ Vite 会把**被引用到的全部**字体打进产物：
 （实测踩坑：插件的匹配正则写成 `/katex[\w-]*\.css/` 时**匹配不到 `katex.min.css`**——
 `.` 不在 `[\w-]` 里，必须写成 `[\w.-]*`。第一版就是这样白装了一次。）
 
+## 行内公式定界符：`singleDollarTextMath`（2026-10-22 调研 + 实测）
+
+### 调研：商业软件都是默认开单 `$`
+
+| 产品 | 单 `$` 默认 | 有开关吗 | 引擎 |
+| --- | --- | --- | --- |
+| **Typora** | 开 | ✅ 偏好设置 → Markdown → 「内联公式」 | MathJax / KaTeX |
+| **VS Code** 内置预览（1.58+） | 开 | ✅ `markdown.math.enabled` | KaTeX |
+| **MarkText** | 开（`config/index.ts` 的 `math: true`） | ✅ 有 | KaTeX |
+| **Obsidian** | 开 | ❌ 无（论坛反复有人要求加） | KaTeX |
+| **GitHub**（2022 起） | 开 | ❌ 无 | MathJax |
+| **Zettlr** | 曾试图关掉单 `$`，引发新 bug（issue #52），改为「开定界符后不跟空格、闭定界符前不跟空格」 | 实验性 | KaTeX |
+
+`$` 与货币的冲突是**公认的老大难**，不是我们臆想的：
+[Obsidian 论坛](https://forum.obsidian.md/t/add-option-to-ignore-when-pairing-markdown-symbols/14855/7)
+「输入 `$3.50` 会被自动配对成 `$3.50$`」「我不认为用 MathJax 的人比用 `$` 表示货币的人多」；
+Zettlr issue #52 有用户贴出 `$100,000` 与 `$50,000` 之间整段被渲染成斜体的例子。
+
+### 关键：这个开关在上游就是一等公民
+
+`remark-math(options)` 把选项**原样透传**给 `micromark-extension-math@3.1.0`，
+后者有 `singleDollarTextMath`，官方文档原话：
+
+> `singleDollarTextMath` boolean, default `true` — Whether to support inline math with a
+> single dollar sign. **When false, only `$$x$$` and higher sequences work for inline math,
+> reducing interference with regular dollar signs in text.**
+
+**所以这不是编辑器自造的启发式，红线 C 不会破。**
+（曾经考虑过「关掉 + 加中文/空白启发式」的折中方案，那才是破红线，已放弃。）
+
+实测两种取值（本仓库的 remark 跑出来的）：
+
+| 输入 | `true`（默认） | `false` |
+| --- | --- | --- |
+| `价格 $5 到 $10 元` | `inlineMath("5 到 ")` | ✅ **无公式** |
+| `行内 $x^2$ 结束` | ✅ 渲染 | ❌ 不渲染 |
+| **`行内 $$x^2$$`** | ✅ | ✅ **`inlineMath` 仍然有效** |
+| `独占 $$…$$` | ✅ | ✅ |
+| `价格 \$5 到 \$10` | ✅ 无 | ✅ 无 |
+
+**结论：默认开（与全部商业软件一致），并把开关暴露到设置面板「Markdown → 单 $ 也当行内公式」。**
+关掉后 `$$…$$` 在行内仍可当行内公式用，所以「关掉就没有行内公式」不成立。
+
+生产产物实测：开时 `价格 5 到 10 元…` 的 `$5 到 $` 被替换成 KaTeX widget
+（KaTeX 把 CJK 包进 `<mtext>` 而不是报错，所以是**静默变形**而非红字）；
+关掉后三行分别变成「纯文本 / 纯文本 / 仍渲染」，与设计一致。
+
+### 逐行定位 ≡ 全文解析（用测试保证，不靠承诺）
+
+行内定位要拿 mdast 的位置，但 remark 全量解析 1000 行 p95 ≈ 11ms，每击键都跑不可接受。
+解法是**只解析含 `$` 的那一行**。这成立的前提是「micromark 的行内公式不能跨行」——
+实测 `开头 $x^2\n+ y^2$ 结尾` 全文解析也不产生 `inlineMath`。
+
+这个等价性被写成了**可执行的断言**（`tests/inline-math.test.ts` 的对拍组）：
+13 份语料 + 26 个刁钻片段（跨行 / 列表 / 嵌套列表 / 引用 / 表格单元 / 续行段落 /
+代码块 / HTML 块 / 转义 / 同一行多公式 / 货币区间 / Setext 标题……），
+每个 × 2 个开关值，逐个对比「逐行结果」与「全文 remark 结果」，必须 `toEqual`。
+
+### remark 管线也必须按需加载
+
+行内定位静态 `import` remark 会把 **137 KB** 拖进主 chunk
+（实测主 chunk 672.29 → 809.10 kB），拖慢冷启动。
+解法与 KaTeX 同款：让 remark 管线与 KaTeX 共用**同一个懒加载 chunk**
+（`math-render.ts` 是唯一同时 import 两者的文件）。
+未就绪时 `findInlineMath` 返回 `[]` 并等 `refreshRendering` 补上——
+**不退回任何「轻量正则」**，那会变成编辑器自造规则，红线 C 就破了。
+
+实测：主 chunk 回到 674.72 kB（比做行内公式前只多 2.4 kB），
+KaTeX 在 `math-render-*.js`（259 KB）、remark 在 `markdown-*.js`（132 KB），都是懒加载。
+
 ## Live Preview 性能：实测数据与优化结论（2026-10-21）
 
 ### 成本分布（`scripts/bench-decorations.ts`）
@@ -712,8 +782,11 @@ M2 已完成：
 - **M2-3 块级公式**：KaTeX 按需加载 + `refreshRendering` 触发重算；
   定位规则逐条对着 remark-math 实测对齐（含「未闭合吞到文末」「剥公共缩进保相对缩进」）；
   生产产物已实证 align 对齐环境 / 上标 / 错误标记三种形态
+- **M2-3b 行内公式**：定位用**逐行 remark 解析**（只解析含 `$` 的行），
+  等价于全文解析这件事由 52 个**对拍用例**保证（13 份语料 × 2 开关值 + 26 片段 × 2）；
+  定界符策略用上游 `singleDollarTextMath`，做成设置项「单 $ 也当行内公式」，默认开
 
-M2 剩余待办：**行内公式**（`$…$`）、Mermaid 图表、表格 + 任务列表交互、
+M2 剩余待办：Mermaid 图表、表格 + 任务列表交互、
 大纲面板 + 字数统计、斜杠菜单 / 命令面板 + 链接浮层、列表续行 / 自动编号、
 脚注、图片拖放、焦点模式 + Emoji。
 另：装饰器**局部重建**（段落级增量渲染）仍未做，是 M2 的性能项；

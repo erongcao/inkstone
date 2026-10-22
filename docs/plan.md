@@ -618,7 +618,7 @@ CM6 的 `EditorView.inputHandler` 扩展点实现，设置项 `editor.autoPairMo
 - [ ] 表格图形化编辑（增删行列、调列宽、对齐）
 - [ ] 任务列表交互（点击勾选写回源码）
 - [x] 代码高亮（highlight.js `lib/core`，亮/暗双主题走 CSS 变量）
-- [x] 块级公式 KaTeX（行内 `$…$` 仍待做）
+- [x] 公式 KaTeX：块级 `$$…$$` + 行内 `$…$`（定界符策略做成设置项，见 §8 D9）
 - [ ] Mermaid 图表
 - [ ] 焦点模式 / 打字机模式
 - [ ] Emoji 自动补全
@@ -720,6 +720,7 @@ GitHub Alerts / 脚注 / RTL / 插件系统 / 主题市场 / 图片图床 / EPUB
 | D6 | **pandoc 依赖方式** | 内置 / 调用系统安装 / 两者 | **调用系统安装**（本机已有 3.8），检测不到时给安装引导，保持安装包小 |
 | D7 | **是否现在就装 Rust** | 先装 / 先用 Electron 起步 / 用 Wails | **先装 Rust**（`brew install rustup`，约 1.5GB）。若您觉得这一步麻烦，Electron 是零摩擦替代 |
 | D8 | **语法高亮库** | Shiki / Prism / highlight.js | ✅ **已定：highlight.js `lib/core`**（2026-10-22）。原计划 Shiki → 先试 Prism → 换 highlight.js。**Shiki 出局**：要 wasm + 异步 `createHighlighter`，编辑器里每敲一个字符都要重排高亮，异步会抖。**Prism 出局**（实测翻车）：语言组件是副作用式注册到**全局** `Prism`，rollup 生产构建改变模块执行顺序后「注册在一个实例、读取在另一个实例」，`Prism.highlight` **静默降级成纯文本不报错**（dev 正常、preview 产物无 token）——发布阻断级缺陷。**highlight.js** 的 `lib/core` 是干净单例，`registerLanguage` 显式注册，语言模块是纯函数，不碰全局，三处行为一致；生产产物已实证。代价：raw 比 Prism 等价集多 97 KB（172.2 → 269.3 KB / gzip ≈ +40 KB），判断为「买正确性，值得」。详见 §2.5 与 AGENTS.md |
+| D9 | **行内公式定界符** | 单 `$` 开 / 单 `$` 关 / 加启发式（中文、空白） | ✅ **已定：默认开 + 用上游 `singleDollarTextMath` 做设置项**（2026-10-22）。**调研**：Typora / VS Code / MarkText / Obsidian / GitHub 六个商业编辑器全部默认开单 `$`（其中 Typora、VS Code、MarkText 有开关，Obsidian 与 GitHub 没有）。`$` 与货币的冲突是公认的老大难。**为什么不用启发式方案**：`remark-math` 把选项原样透传给 `micromark-extension-math@3.1.0`，后者有 `singleDollarTextMath` 一等选项，官方描述就是「reducing interference with regular dollar signs in text」——所以这是**语义层的开关**，编辑器与导出天生一致，不破红线 C；自己加中文/空白启发式反而会让编辑器认一套、remark 认另一套。**关键性质**：关掉后 `$$x^2$$` 在行内**仍然**是行内公式，所以关掉不等于失去行内公式。详见 AGENTS.md「行内公式定界符」 |
 
 ---
 

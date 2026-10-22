@@ -349,3 +349,17 @@
 .cm-md-math .katex-error:only-child {
   display: inline-block;
 }
+
+/* 行内公式：与块级共用 KaTeX 自身的排版，只做基线微调。
+   不设 font-family —— KaTeX 内部按自己的字体度量排版，
+   父级字体只会干扰上下标基线。 */
+.cm-md-inline-math {
+  padding: 0 1px;
+  border-radius: 2px;
+}
+
+/* 光标落进公式内部时露出源码，这里给一点视觉提示：
+   渲染出的公式是可点击进入编辑的，hover 时给出反馈。 */
+.cm-md-inline-math:hover {
+  background-color: var(--ink-code-bg);
+}

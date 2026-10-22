@@ -18,12 +18,15 @@
  */
 
 import type { Tree } from "@lezer/common";
-import { scanLines, type Line } from "./scan";
+import {
+  collectSkipRanges,
+  makeSkipTest,
+  scanLines,
+  stripTrailingNewline,
+  dedent,
+} from "./scan";
 import { renderMathSync } from "./math-loader";
 import type { BlockMatch, BlockRenderer, BlockRenderResult } from "./types";
-
-/** lezer 认识、但内容不该被当成公式的块 */
-const SKIP_NODE_TYPES = new Set(["FencedCode", "CodeBlock", "HTMLBlock"]);
 
 /**
  * 开定界符：`$$` 在行首（允许最多 3 个前导空格，CommonMark 的块级缩进上限）。
@@ -34,41 +37,6 @@ const MATH_OPEN = /^ {0,3}\$\$/;
 
 /** 闭定界符：整行只有 `$$`（允许尾部空白） */
 const MATH_CLOSE = /^ {0,3}\$\$\s*$/;
-
-/** 一个文档区间 */
-interface Interval {
-  from: number;
-  to: number;
-}
-
-/** 从语法树里划出「不能出现公式」的区间 */
-function collectSkipRanges(tree: Tree): Interval[] {
-  const ranges: Interval[] = [];
-  tree.iterate({
-    enter(ref) {
-      if (SKIP_NODE_TYPES.has(ref.type.name)) {
-        ranges.push({ from: ref.from, to: ref.to });
-        return false; // 不再进入子树
-      }
-      return true;
-    },
-  });
-  return ranges;
-}
-
-/**
- * 判断一个位置是否落在禁区里。
- *
- * 用**游标**而不是 `Array.some`：`ranges` 是按位置递增的，
- * 扫描是顺序前进的，指针只前进不回退，整体 O(行数 + 禁区数)。
- */
-function makeSkipTest(ranges: Interval[]): (pos: number) => boolean {
-  let index = 0;
-  return (pos) => {
-    while (index < ranges.length && ranges[index].to <= pos) index++;
-    return index < ranges.length && pos >= ranges[index].from && pos < ranges[index].to;
-  };
-}
 
 /**
  * 支持的写法（判定规则与 remark-math 的 `math` 节点对齐，均为实测）：
@@ -182,30 +150,6 @@ export function findMathBlocks(tree: Tree, source: string): BlockMatch[] {
   return matches;
 }
 
-/** 去掉结尾的换行符（`\r\n` 也要处理——`scanLines` 只按 `\n` 切分） */
-function stripTrailingNewline(text: string): string {
-  return text.replace(/\r?\n$/, "");
-}
-
-/**
- * 剥掉所有非空行的**公共**前导空白。
- *
- * 必须按公共前缀剥，不能逐行 `trimStart()`：
- * `\begin{align}` 里各行的对齐靠的是**相对**缩进，逐行 trim 会把对齐彻底抹平，
- * 公式会渲染成错位的样子（实测 remark-math 是剥公共前缀的）。
- */
-function dedent(content: string): string {
-  const lines = content.split("\n");
-  let min = Number.POSITIVE_INFINITY;
-  for (const line of lines) {
-    if (line.trim().length === 0) continue;
-    const indent = line.length - line.trimStart().length;
-    if (indent < min) min = indent;
-  }
-  if (!Number.isFinite(min) || min === 0) return content;
-  return lines.map((line) => line.slice(min)).join("\n");
-}
-
 /** 公式块渲染器 */
 export const mathBlockRenderer: BlockRenderer = {
   id: "math-block",
@@ -229,6 +173,3 @@ export const mathBlockRenderer: BlockRenderer = {
     } satisfies BlockRenderResult;
   },
 };
-
-/** 供测试用：暴露行类型，避免测试里重复 import */
-export type { Line };

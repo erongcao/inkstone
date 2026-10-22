@@ -287,8 +287,13 @@ function EditorSection({ settings, patch }: { settings: Settings; patch: PatchFn
 
 function MarkdownSection({ settings, patch }: { settings: Settings; patch: PatchFn }) {
   const m = settings.markdown;
-  const toggles: { key: keyof typeof m; label: string }[] = [
+  const toggles: { key: keyof typeof m; label: string; hint?: string }[] = [
     { key: "inlineMath", label: "行内数学 $…$" },
+    {
+      key: "inlineMathSingleDollar",
+      label: "单 $ 也当行内公式",
+      hint: "关掉后「价格 $5 到 $10 元」不再被误判成公式；$$x^2$$ 在行内仍可用",
+    },
     { key: "blockMath", label: "数学块 $$…$$" },
     { key: "autoNumberEquations", label: "公式自动编号" },
     { key: "mhchem", label: "化学扩展 mhchem" },
@@ -304,8 +309,8 @@ function MarkdownSection({ settings, patch }: { settings: Settings; patch: Patch
   return (
     <section className="settings-group">
       <h3>Markdown</h3>
-      {toggles.map(({ key, label }) => (
-        <label key={key} className="field field--inline">
+      {toggles.map(({ key, label, hint }) => (
+        <label key={key} className="field field--inline" title={hint}>
           <span>{label}</span>
           <input
             type="checkbox"

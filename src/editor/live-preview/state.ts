@@ -39,6 +39,18 @@ export const setDisplayMode = StateEffect.define<MarkerDisplayMode>();
  */
 export const refreshRendering = StateEffect.define<null>();
 
+/**
+ * 行内公式的定界符策略。
+ *
+ * `singleDollarTextMath: false` 时单个 `$` 不再是定界符——
+ * 直接透传给 remark-math，所以**不是编辑器自造的规则**，
+ * 编辑器视图与 HTML 导出认的是同一套（架构约束 C）。
+ *
+ * 这个选项必须进 StateField：它影响装饰器输出，
+ * 而 `EditorView.decorations.from` 只认这一个字段作依赖。
+ */
+export const setMathOptions = StateEffect.define<{ singleDollarTextMath: boolean }>();
+
 /** Live Preview 需要的全部状态 */
 export interface LivePreviewState {
   /** 当前文档的语法树（增量维护） */
@@ -51,6 +63,8 @@ export interface LivePreviewState {
   cursor: number;
   /** 标记符显示策略 */
   mode: MarkerDisplayMode;
+  /** 单个 `$` 是否作为行内公式定界符（透传给 remark-math，默认开） */
+  singleDollarTextMath: boolean;
 }
 
 /**
@@ -69,6 +83,7 @@ export const livePreviewField = StateField.define<LivePreviewState>({
       source,
       cursor: state.selection.main.head,
       mode: "live",
+      singleDollarTextMath: true,
     };
   },
 
@@ -76,8 +91,11 @@ export const livePreviewField = StateField.define<LivePreviewState>({
     // 显示策略可能被 effect 改掉；重算请求也要处理
     let mode = value.mode;
     let forced = false;
+    let singleDollarTextMath = value.singleDollarTextMath;
     for (const effect of tr.effects) {
       if (effect.is(setDisplayMode)) mode = effect.value;
+      if (effect.is(setMathOptions))
+        singleDollarTextMath = effect.value.singleDollarTextMath;
       if (effect.is(refreshRendering)) forced = true;
     }
 
@@ -86,10 +104,16 @@ export const livePreviewField = StateField.define<LivePreviewState>({
     if (!tr.docChanged) {
       // 强制重算：返回**新对象**（身份变了）让 CM6 重跑装饰器映射。
       // 注意不能在这里提前 return value，那会把请求吞掉。
-      if (forced) return { ...value, cursor, mode };
-      // 只是选区或模式变了：树与片段都保持不变
-      if (cursor === value.cursor && mode === value.mode) return value;
-      return { ...value, cursor, mode };
+      if (forced) return { ...value, cursor, mode, singleDollarTextMath };
+      // 只是选区、模式或公式策略变了：树与片段都保持不变
+      if (
+        cursor === value.cursor &&
+        mode === value.mode &&
+        singleDollarTextMath === value.singleDollarTextMath
+      ) {
+        return value;
+      }
+      return { ...value, cursor, mode, singleDollarTextMath };
     }
 
     // 文档变了 → 增量解析
@@ -115,6 +139,7 @@ export const livePreviewField = StateField.define<LivePreviewState>({
       source,
       cursor,
       mode,
+      singleDollarTextMath,
     };
   },
 });

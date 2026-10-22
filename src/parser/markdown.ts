@@ -21,38 +21,66 @@ import type { Root } from "mdast";
 export type MarkdownAst = Root;
 
 /** 构建统一处理器（抽成函数以便用 ReturnType 推导，避免手写泛型参数出错） */
-function buildProcessor() {
-  return unified()
-    .use(remarkParse)
-    .use(remarkFrontmatter, ["yaml"])
-    .use(remarkGfm)
-    .use(remarkMath)
-    .use(remarkStringify, {
-      bullet: "-",
-      emphasis: "*",
-      strong: "*",
-      fence: "`",
-      rule: "-",
-      listItemIndent: "one",
-      tightDefinitions: true,
-    });
+function buildProcessor(parseOptions: ParseOptions = {}) {
+  return (
+    unified()
+      .use(remarkParse)
+      .use(remarkFrontmatter, ["yaml"])
+      .use(remarkGfm)
+      // 选项透传：关掉单 `$` 时 micromark 只会把 `$$…$$` 当行内定界符，
+      // 块级 `$$` 始终要求至少两个 `$`，不受这个选项影响。
+      .use(remarkMath, {
+        singleDollarTextMath: parseOptions.singleDollarTextMath !== false,
+      })
+      .use(remarkStringify, {
+        bullet: "-",
+        emphasis: "*",
+        strong: "*",
+        fence: "`",
+        rule: "-",
+        listItemIndent: "one",
+        tightDefinitions: true,
+      })
+  );
+}
+
+/** 解析选项：与设置面板一一对应 */
+export interface ParseOptions {
+  /**
+   * 单个 `$` 是否作为行内公式定界符。
+   *
+   * 原样透传给 remark-math → micromark-extension-math 的 `singleDollarTextMath`
+   * （上游默认 `true`）。这是**语义层**的一等开关，不是编辑器自造的启发式，
+   * 所以编辑器视图、HTML 导出、往返测试三者天然一致（架构约束 C）。
+   */
+  singleDollarTextMath?: boolean;
+}
+
+/** 解析选项的缓存键 */
+function cacheKey(options: ParseOptions): string {
+  return options.singleDollarTextMath === false ? "sd0" : "sd1";
 }
 
 type MarkdownProcessor = ReturnType<typeof buildProcessor>;
 
-let processor: MarkdownProcessor | null = null;
+const processors = new Map<string, MarkdownProcessor>();
 
-/** 获取（并缓存）统一的 Markdown 处理器 */
-export function getProcessor(): MarkdownProcessor {
+/** 获取（并按选项缓存）统一的 Markdown 处理器 */
+export function getProcessor(options: ParseOptions = {}): MarkdownProcessor {
+  const key = cacheKey(options);
+  let processor = processors.get(key);
   if (!processor) {
-    processor = buildProcessor();
+    processor = buildProcessor({
+      singleDollarTextMath: options.singleDollarTextMath !== false,
+    });
+    processors.set(key, processor);
   }
   return processor;
 }
 
 /** 解析 Markdown 源码为 mdast */
-export function parseMarkdown(source: string): MarkdownAst {
-  return getProcessor().parse(source);
+export function parseMarkdown(source: string, options: ParseOptions = {}): MarkdownAst {
+  return getProcessor(options).parse(source);
 }
 
 /**
@@ -60,14 +88,17 @@ export function parseMarkdown(source: string): MarkdownAst {
  *
  * 注意：序列化结果不保证与输入逐字节相同（Markdown 语法有多种等价写法），
  * 真正的要求是「再次解析后结构等价」——这由 round-trip 测试保证。
+ *
+ * 序列化必须用**与解析同一个**处理器：否则 `singleDollarTextMath` 一开一关，
+ * 往返就会把行内公式的定界符形式改掉。
  */
-export function stringifyMarkdown(tree: MarkdownAst): string {
-  return getProcessor().stringify(tree);
+export function stringifyMarkdown(tree: MarkdownAst, options: ParseOptions = {}): string {
+  return getProcessor(options).stringify(tree);
 }
 
 /** 解析 → 序列化，往返一次 */
-export function roundTrip(source: string): string {
-  return stringifyMarkdown(parseMarkdown(source));
+export function roundTrip(source: string, options: ParseOptions = {}): string {
+  return stringifyMarkdown(parseMarkdown(source, options), options);
 }
 
 /**

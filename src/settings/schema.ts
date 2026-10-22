@@ -104,6 +104,20 @@ export interface EditorSettings {
 export interface MarkdownSettings {
   /** 行内数学 $...$ */
   inlineMath: boolean;
+  /**
+   * 行内公式是否把**单个** `$` 当作定界符。
+   *
+   * 直接透传给 remark-math 的 `singleDollarTextMath`（→ micromark-extension-math 的一等选项），
+   * 所以**不是**编辑器自己加的启发式，语义层与导出天然一致。
+   *
+   * 关掉后（`false`，上游默认 `true`）：
+   *   - `价格 $5 到 $10 元` 不再被误判成公式 —— 这是关它的**主要动机**
+   *   - `$$x^2$$` 在行内**仍然**是行内公式，所以「关掉就没有行内公式」是不成立的
+   *
+   * 默认为开：调研的六个商业编辑器（Typora / VS Code / MarkText / Obsidian / GitHub）
+   * 全部默认开启单 `$`，调研与实测见 AGENTS.md「行内公式定界符」。
+   */
+  inlineMathSingleDollar: boolean;
   /** 数学块 $$...$$ */
   blockMath: boolean;
   /** 数学公式自动编号 */
@@ -191,6 +205,7 @@ export const DEFAULT_SETTINGS: Settings = {
   },
   markdown: {
     inlineMath: true,
+    inlineMathSingleDollar: true,
     blockMath: true,
     autoNumberEquations: false,
     mhchem: true,
