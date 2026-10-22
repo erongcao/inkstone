@@ -85,6 +85,14 @@ interface Hideable {
   styleRanges: Interval[];
   /** 内容样式 class */
   styleClass?: string;
+  /**
+   * 挂在内容区间上的 HTML 属性。
+   *
+   * 存在是为了让 hover 提示能**纯 CSS** 完成：`content: attr(data-href)`。
+   * 走 CSS 而不是 JS 浮层，是因为它没有任何状态要同步——
+   * 鼠标一移开浏览器自己撤掉，不用重算装饰器、不用管文档变没变。
+   */
+  styleAttrs?: Record<string, string>;
 }
 
 /**
@@ -127,6 +135,7 @@ function childrenOfType(node: SyntaxNode, typeName: string): SyntaxNode[] {
 function analyze(
   node: SyntaxNode,
   spec: (typeof INLINE_MARKERS)[number],
+  source: string,
 ): Hideable | null {
   const nodeName = node.type.name;
 
@@ -138,11 +147,19 @@ function analyze(
     if (marks.length < 2) return null;
     const open = marks[0];
     const close = marks[1];
+
+    // 网址藏在 `](…)` 里，标记隐藏后用户**看不到链接到底指向哪**。
+    // 挂成 `data-href` 就能用纯 CSS 在 hover 时补一个提示（见 Hideable.styleAttrs）。
+    // 引用式 `[文字][ref]` 没有 URL 节点，解析要查引用表——先不处理，
+    // 没有提示和现在的行为一致，不算退化。
+    const href = urls.length > 0 ? source.slice(urls[0].from, urls[0].to) : "";
+
     return {
       node,
       hideRanges: [...marks, ...urls, ...titles].map((n) => ({ from: n.from, to: n.to })),
       styleRanges: [{ from: open.to, to: close.from }],
       styleClass: "cm-md-link",
+      styleAttrs: href ? { "data-href": href } : undefined,
     };
   }
 
@@ -245,7 +262,7 @@ export function buildLivePreviewDecorations(
         ) {
           return false;
         }
-        const analyzed = analyze(ref.node, spec);
+        const analyzed = analyze(ref.node, spec, source);
         if (!analyzed) return;
 
         const active = shouldReveal(analyzed.node, cursor);
@@ -253,7 +270,10 @@ export function buildLivePreviewDecorations(
         for (const range of analyzed.styleRanges) {
           if (range.to > range.from && analyzed.styleClass) {
             inlineDecos.push(
-              Decoration.mark({ class: analyzed.styleClass }).range(range.from, range.to),
+              Decoration.mark({
+                class: analyzed.styleClass,
+                attributes: analyzed.styleAttrs,
+              }).range(range.from, range.to),
             );
           }
         }

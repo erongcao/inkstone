@@ -31,6 +31,31 @@
   border: 1px solid var(--ink-code-border);
 }
 
+/*
+ * hover 时把反引号「补」出来。
+ *
+ * 标记符被零宽 widget 顶替后是真的从 DOM 里消失了，CSS 补不回来；
+ * 但**视觉上**只要在内容两侧各画一个反引号，用户看到的就是完整源码。
+ * 这样既保留了 live preview 的干净，又随时提示「这里可以直接改标记」——
+ * 点击进编辑态后真实的反引号会露出来，两边无缝衔接。
+ *
+ * 纯 CSS 的好处是没有任何状态要同步：鼠标一移开浏览器自己撤掉，
+ * 不用重算装饰器、不用管文档有没有变。
+ */
+.cm-md-inline-code:hover {
+  border-color: var(--ink-accent);
+}
+
+.cm-md-inline-code:hover::before {
+  content: "`";
+  color: var(--ink-fg-faint);
+}
+
+.cm-md-inline-code:hover::after {
+  content: "`";
+  color: var(--ink-fg-faint);
+}
+
 .cm-md-strikethrough {
   text-decoration: line-through;
   text-decoration-color: var(--ink-fg-faint);
@@ -43,12 +68,64 @@
   text-underline-offset: 2px;
 }
 
+/*
+ * hover 时补出链接目标。
+ *
+ * `[文字](网址)` 折叠后**只剩「文字」**——用户点之前根本不知道它指向哪，
+ * 相对路径和同域链接尤其猜不出来。这是最容易让人「点错链接」的一处信息缺失。
+ *
+ * 网址由 decorations 挂在 `data-href` 上（见 Hideable.styleAttrs），
+ * 这里纯 CSS 取值。不用 JS 浮层是有意的：没有任何状态需要同步，
+ * 也不会在重渲染时漏掉「浮层还开着」。
+ */
+.cm-md-link[data-href]:hover::after {
+  content: " " attr(data-href);
+  margin-left: 0.25em;
+  padding: 0.05em 0.4em;
+  font-family: var(--ink-mono-family);
+  font-size: 0.8125em;
+  color: var(--ink-fg-muted);
+  background-color: var(--ink-bg-soft);
+  border: 1px solid var(--ink-border);
+  border-radius: var(--ink-radius-sm);
+  /* 不参与行内排版换行，鼠标一停就贴在文字后面 */
+  white-space: nowrap;
+  text-decoration: none;
+}
+
 .cm-md-image {
   color: var(--ink-fg-muted);
   background-color: var(--ink-bg-soft);
   border: 1px dashed var(--ink-border);
   border-radius: var(--ink-radius-sm);
   padding: 0 0.25em;
+  /* 有图时不留多余的框线——:has 是判断 <img> 是否已替换掉占位符的最低成本办法。
+     原来加载成功后虚线框仍留在图外面，看起来像「图还没加载完」。 */
+  display: inline-block;
+  vertical-align: top;
+}
+
+.cm-md-image:has(img) {
+  border: none;
+  background: none;
+  padding: 0;
+}
+
+/*
+ * hover 时补出图片的原始地址。
+ *
+ * 图加载出来之后，Markdown 里那个路径就完全看不见了——
+ * 用户想确认「这张图到底引用的是哪个文件」时无从下手，
+ * 更不用说图裂了以后找原因。同样是 `data-image-src` + 纯 CSS。
+ */
+.cm-md-image[data-image-src]:hover::after {
+  content: attr(data-image-src);
+  margin-left: 0.4em;
+  font-family: var(--ink-mono-family);
+  font-size: 0.75em;
+  color: var(--ink-fg-muted);
+  vertical-align: middle;
+  white-space: nowrap;
 }
 
 /* 弱化显示模式（Ulysses 式）：标记不隐藏，只弱化着色 */

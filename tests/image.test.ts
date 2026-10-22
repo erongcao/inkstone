@@ -15,7 +15,7 @@ import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { parseSyntax } from "@/editor/live-preview/syntax";
 import { buildLivePreviewDecorations } from "@/editor/live-preview/decorations";
-import { ImageWidget } from "@/editor/live-preview/image-widget";
+import { ImageWidget, renderImage } from "@/editor/live-preview/image-widget";
 import {
   arrayBufferToBase64,
   dataUrlToBase64,
@@ -113,6 +113,21 @@ describe("图片装饰", () => {
   it("一行里的多张图片各自渲染", () => {
     const many = "![a](1.png) 中 ![b](2.png) 尾\n";
     expect(images(many, 0)).toHaveLength(2);
+  });
+});
+
+describe("图片的 hover 提示", () => {
+  it("挂上原始地址——图加载后 Markdown 里那个路径就看不见了", () => {
+    // CSS 是 `content: attr(data-image-src)`，属性缺失 = 提示静默不出现
+    const dom = renderImage("images/截图 1.png", "描述", 42).dom;
+    expect(dom.dataset.imageSrc).toBe("images/截图 1.png");
+    expect(dom.dataset.imageFrom).toBe("42");
+  });
+
+  it("没有 alt 时不挂 image-alt（避免出现空的提示）", () => {
+    const dom = renderImage("a.png", "", 0).dom;
+    expect(dom.dataset.imageSrc).toBe("a.png");
+    expect(dom.dataset.imageAlt).toBeUndefined();
   });
 });
 

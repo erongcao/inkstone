@@ -67,6 +67,28 @@ function marksWithClass(doc: string, cursor: number, cls: string): Deco[] {
   return collect(doc, cursor).filter((d) => d.kind === "mark" && d.cls?.includes(cls));
 }
 
+/**
+ * 取某个标记装饰挂的 HTML 属性。
+ *
+ * hover 提示是**纯 CSS** 做的（`content: attr(data-href)`），
+ * 所以这些属性就是整条链路的契约——装饰器少挂一个，提示就静默不出现。
+ */
+function markAttrs(doc: string, cursor: number, cls: string): Record<string, string>[] {
+  const set = buildLivePreviewDecorations(doc, cursor, "live", parseSyntax(doc));
+  const out: Record<string, string>[] = [];
+  const it = set.iter();
+  while (it.value !== null) {
+    const spec = it.value.spec as {
+      widget?: unknown;
+      class?: string;
+      attributes?: Record<string, string>;
+    };
+    if (!spec.widget && spec.class?.includes(cls)) out.push(spec.attributes ?? {});
+    it.next();
+  }
+  return out;
+}
+
 describe("Live Preview 装饰器", () => {
   it("光标在结构外时隐藏加粗标记", () => {
     // 光标放在「后」字上，确实在加粗结构之外
@@ -118,6 +140,42 @@ describe("Live Preview 装饰器", () => {
     expect(hidden).toContainEqual([5, 18]);
     expect(hidden).toContainEqual([19, 23]);
     expect(hidden).toContainEqual([23, 24]);
+  });
+
+  it("链接正文挂上 data-href——hover 提示全靠它", () => {
+    // 折叠后只剩「文字」，用户点之前看不到链接指向哪。
+    // CSS 里是 `content: attr(data-href)`，属性缺失 = 提示静默不出现。
+    const doc = "[文字](https://a.com)";
+    expect(markAttrs(doc, doc.length, "cm-md-link")).toEqual([
+      { "data-href": "https://a.com" },
+    ]);
+  });
+
+  it("带标题的链接：data-href 只取网址，不含标题", () => {
+    const doc = '[文字](https://a.com "标题")';
+    expect(markAttrs(doc, doc.length, "cm-md-link")[0]["data-href"]).toBe("https://a.com");
+  });
+
+  it("引用式链接没有 URL 节点 → 不挂属性（而不是挂一个空的）", () => {
+    // 空属性会让 CSS 渲染出一个空气泡，比不渲染更糟
+    const doc = "[文字][ref]\n\n[ref]: https://a.com";
+    const attrs = markAttrs(doc, doc.length, "cm-md-link");
+    expect(attrs.every((a) => a["data-href"] === undefined)).toBe(true);
+  });
+
+  it("加属性不影响标记的隐藏区间", () => {
+    // 末尾要跟一段，否则光标正好落在链接的闭合边界上（闭区间），
+    // 链接处于「已展开」状态，标记根本不藏——测的就不是同一件事了
+    const doc = "[文字](https://a.com) 后";
+    expect(markAttrs(doc, doc.length, "cm-md-link")).toHaveLength(1);
+    // `[`、`]`、`(`、`)`、URL 五段仍然照藏
+    expect(hiddenRanges(doc, doc.length)).toEqual([
+      [0, 1],
+      [3, 4],
+      [4, 5],
+      [5, 18],
+      [18, 19],
+    ]);
   });
 
   it("隐藏行内代码的反引号", () => {

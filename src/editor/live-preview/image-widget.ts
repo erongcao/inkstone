@@ -75,6 +75,11 @@ export function renderImage(src: string, alt: string, from: number): ImageRender
   dom.className = "cm-md-image";
   // 点击图片要把光标移回源码位置（mousedown 靠这个属性分发）
   dom.dataset.imageFrom = String(from);
+  // hover 提示用的原始地址。图片加载后用户只能看到图，
+  // 不知道它指向哪个文件——尤其相对路径的图，猜不出来。
+  // 同样走纯 CSS（`content: attr(data-image-src)`），不需要 JS 浮层。
+  dom.dataset.imageSrc = src;
+  if (alt) dom.dataset.imageAlt = alt;
 
   const cached = resolved.get(key);
   if (cached) {
