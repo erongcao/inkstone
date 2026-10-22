@@ -22,6 +22,8 @@ export function EditorSurface({ onOpenSettings }: Props) {
   const markerDisplay = settings.editor.markerDisplay;
   const autoPairMode = settings.editor.autoPairMode;
   const inlineMathSingleDollar = settings.markdown.inlineMathSingleDollar;
+  const focusMode = settings.editor.focusMode;
+  const typewriterMode = settings.editor.typewriterMode;
   const hostRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<MarkdownEditorHandle | null>(null);
   /** 上一次同步进编辑器的值，用来避免回环更新 */
@@ -75,6 +77,15 @@ export function EditorSurface({ onOpenSettings }: Props) {
   useEffect(() => {
     editorRef.current?.setInlineMathSingleDollar(inlineMathSingleDollar);
   }, [inlineMathSingleDollar]);
+
+  // 焦点模式 / 打字机模式：都走设置层的开关（持久化），编辑器侧只接收结果
+  useEffect(() => {
+    editorRef.current?.setFocusMode(focusMode);
+  }, [focusMode]);
+
+  useEffect(() => {
+    editorRef.current?.setTypewriterMode(typewriterMode);
+  }, [typewriterMode]);
 
   // 菜单动作：剪贴板相关（作用在编辑器实例上，所以订阅放在这一层）
   useEffect(() => {

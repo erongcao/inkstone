@@ -29,6 +29,8 @@ import {
 } from "./list-continuation";
 import { markdownPaste } from "./paste";
 import { imageDrop } from "./image-insert";
+import { focusMode, setFocusModeOf } from "./focus-mode";
+import { typewriter, setTypewriterModeOf } from "./typewriter";
 import {
   armPlainTextPaste,
   copySelectionAsHtml,
@@ -83,6 +85,9 @@ function buildExtensions(
     markdownPaste(),
     // 拖放：把图片文件存进 assets/ 并插入
     imageDrop(),
+    // 焦点模式 / 打字机模式（两者都由设置面板的开关控制）
+    focusMode(),
+    typewriter(),
     // 复制：同时写 Markdown 源码与渲染后的 HTML
     markdownCopy(),
     // 键盘映射
@@ -170,6 +175,10 @@ export interface MarkdownEditorHandle {
   setAutoPairMode(mode: AutoPairMode): void;
   /** 切换行内公式的定界符策略（单 `$` 是否算） */
   setInlineMathSingleDollar(enabled: boolean): void;
+  /** 切换焦点模式（弱化光标所在段落之外的内容） */
+  setFocusMode(enabled: boolean): void;
+  /** 切换打字机模式（光标固定在视口垂直中线） */
+  setTypewriterMode(enabled: boolean): void;
   /** 复制为渲染后的 HTML（同时附带 Markdown 源码作为纯文本兜底） */
   copyAsHtml(): Promise<void>;
   /** 复制为 Markdown 源码（纯文本） */
@@ -223,6 +232,8 @@ export function createMarkdownEditor(
     },
     setInlineMathSingleDollar: (enabled: boolean) =>
       setMathOptionsOf(view, { singleDollarTextMath: enabled }),
+    setFocusMode: (enabled: boolean) => setFocusModeOf(view, enabled),
+    setTypewriterMode: (enabled: boolean) => setTypewriterModeOf(view, enabled),
     copyAsHtml: () => copySelectionAsHtml(view),
     copyAsMarkdown: () => copySelectionAsMarkdown(view),
     pasteAsPlainText: () => {

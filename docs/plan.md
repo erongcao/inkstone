@@ -620,7 +620,7 @@ CM6 的 `EditorView.inputHandler` 扩展点实现，设置项 `editor.autoPairMo
 - [x] 代码高亮（highlight.js `lib/core`，亮/暗双主题走 CSS 变量）
 - [x] 公式 KaTeX：块级 `$$…$$` + 行内 `$…$`（定界符策略做成设置项，见 §8 D9）
 - [ ] Mermaid 图表
-- [ ] 焦点模式 / 打字机模式
+- [x] 焦点模式 / 打字机模式
 - [ ] Emoji 自动补全
 - [x] 图片：拖放 / 剪贴板粘贴 / 相对路径（尺寸调整待做）
 - [x] 🆕 块级渲染层骨架（lezer 节点 → widget 的通用机制，表格/公式/图表都挂在它上面）

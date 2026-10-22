@@ -547,6 +547,57 @@ Vite 会把**被引用到的全部**字体打进产物：
 （实测踩坑：插件的匹配正则写成 `/katex[\w-]*\.css/` 时**匹配不到 `katex.min.css`**——
 `.` 不在 `[\w-]` 里，必须写成 `[\w.-]*`。第一版就是这样白装了一次。）
 
+## 焦点模式 / 打字机模式（2026-10-23）
+
+### `EditorView.decorations.from(field, get)` 的 get **拿不到 state**
+
+焦点模式要「哪些行属于亮区」，光靠字段值（一个 boolean）算不出来——
+需要 `state.doc` 和语法树。所以装饰集合放进**另一个 StateField** 里算好，
+`provide` 时直接把字段值透出去。
+（`livePreview/index.ts` 里 `get` 只需要 mode/cursor 那些，所以那里用 `.from` 是对的。
+两种写法各有适用场景，别混。）
+
+### ⚠️ lezer 的坑：`cursor.node` 每次访问都返回**新对象**
+
+「同级往前找最近的标题」第一版写成 `if (node === block)`，
+结果**永远不成立**——lezer 的 `SyntaxNode` 每次访问都新建对象，
+引用比较对同一个节点也是 false。只能比位置（+ 类型）：
+
+```ts
+if (node.from === block.from && node.to === block.to) { ... }
+```
+
+### 「找最近的标题」不能只看紧邻的上一个兄弟
+
+正文里两个标题之间往往隔着好几个段落，紧邻的那个是**段落**不是标题。
+第一版只记 `prev`，结果标题永远点不亮。
+正解是一路往前走、记住**最近遇到的那个** `ATXHeading*`。
+
+### 弱化范围：逐行判归属，不要前后扫
+
+最终规则是「标题 + 当前段落」**两处**点亮，标题与段落之间的内容**仍然弱化**
+（整节都点亮会让这功能失效）。
+只有两个区间时前后扫很容易把「中间那段算亮还是算暗」写错，
+逐行 `active.some(r => line.from >= r.from && line.to <= r.to)` 一眼就对。
+
+另外 `doc.lineAt(block.to)` 拿到的是**块自己那一行**（行尾位置仍属于该行），
+「块之后」的循环必须从 `doc.lineAt(last).to + 1` 起。
+
+### 打字机模式：不能和用户抢滚动
+
+无条件每次都居中，会把「往上翻看之前写的��容」的人立刻拽回来。
+规则：用户滚轮/拖滚动条 → 挂起，直到下一次敲键盘才恢复。
+判定靠记录上一次我们自己写下的 `scrollTop`，数值对不上就是用户动的
+（CM6 没暴露「这次滚动由谁触发」，只能反推——本模块唯一一处不优雅，已记档）。
+
+`scroll` 事件**不冒泡**，所以不能挂在 `domEventHandlers` 上（那只挂 contentDOM），
+必须在插件构造时直接 `view.scrollDOM.addEventListener`，destroy 里解绑。
+
+### `Transaction` 没有 `selectionSet`
+
+`ViewUpdate` 有 `selectionSet`，`Transaction` 上只有 `selection`
+（且未变化时返回 `undefined`）。别把两者的 API 混用。
+
 ## 图片：落盘 + 相对路径 + 渲染（2026-10-23）
 
 ### 为什么不走 Tauri 的 `asset://` 协议
