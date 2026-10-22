@@ -617,6 +617,23 @@ Zettlr issue #52 有用户贴出 `$100,000` 与 `$50,000` 之间整段被渲染�
 实测：主 chunk 回到 674.72 kB（比做行内公式前只多 2.4 kB），
 KaTeX 在 `math-render-*.js`（259 KB）、remark 在 `markdown-*.js`（132 KB），都是懒加载。
 
+34. **编辑器里曾并存两棵 Markdown 语法树**（2026-10-22 实测，已修）：
+    - `syntaxTree(state)` → CM6 `markdownLanguage` 的树，**裸 parser**，不认 GFM
+    - `getSyntaxTree(state)` → Live Preview 的树，配了 `GFM`
+    后果不是「颜色不好看」，而是**行为不一致**：靠 `syntaxTree()` 写的编辑逻辑
+    看不见任务列表（`- [x]` 根本没有 `TaskMarker` 节点）。
+    根因是 `markdown({ base })` 有 `parser instanceof MarkdownParser` 校验，
+    而 **pnpm 装了两份 `@lezer/markdown`**，外部配置的 parser 传不进去。
+    解法见 `src/editor/markdown-language.ts`：拿 **CM6 自己的** parser 实例去
+    `.configure(GFM)`（类不变，`instanceof` 过得了；扩展对象不带类身份），
+    两处共用同一个 `Language`。**以后新增依赖语法树的逻辑，统一从
+    `editor/markdown-language.ts` 取，不要各处自己 configure。**
+
+35. **`resolveInner(pos, side)` 的 side 会影响节点解析**（2026-10-22 实测）：
+    `side = -1`（偏左）在光标位于**文档末尾**时会解析到 Document 而不是段落；
+    但换成 `side = 1`（偏右）在别的位置又更糟。
+    写「光标所在结构」这类逻辑时，两种都试一下，别默认某个值。
+
 ## Live Preview 性能：实测数据与优化结论（2026-10-21）
 
 ### 成本分布（`scripts/bench-decorations.ts`）

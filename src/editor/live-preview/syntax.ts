@@ -12,11 +12,8 @@
  * 两者的一致性由 tests/parser-agreement.test.ts 在语料库上断言。
  */
 
-import { parser as baseParser, GFM } from "@lezer/markdown";
 import type { Tree, SyntaxNode, SyntaxNodeRef, TreeFragment } from "@lezer/common";
-
-/** 启用 GFM 扩展（表格、任务列表、删除线、自动链接） */
-const gfmParser = baseParser.configure(GFM);
+import { gfmMarkdownParser as gfmParser } from "../markdown-language";
 
 export type { Tree, SyntaxNode, SyntaxNodeRef };
 

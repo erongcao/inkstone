@@ -15,12 +15,18 @@ import {
   historyKeymap,
   indentWithTab,
 } from "@codemirror/commands";
-import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
+import { markdown } from "@codemirror/lang-markdown";
+import { gfmMarkdownLanguage } from "./markdown-language";
 import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import { languages } from "@codemirror/language-data";
 import { livePreview, setDisplayModeOf, setMathOptionsOf } from "./live-preview";
 import { setActiveEditorView } from "./active-view";
 import { autoPair } from "./auto-pair";
+import {
+  continueListOnEnter,
+  indentListItem,
+  outdentListItem,
+} from "./list-continuation";
 import { markdownPaste } from "./paste";
 import {
   armPlainTextPaste,
@@ -64,7 +70,7 @@ function buildExtensions(
     highlightSelectionMatches(),
     // Markdown 语法高亮（源码模式下也有用）
     markdown({
-      base: markdownLanguage,
+      base: gfmMarkdownLanguage,
       codeLanguages: languages,
       addKeymap: true,
     }),
@@ -81,6 +87,12 @@ function buildExtensions(
     // 重复执行是无害的（复制幂等、纯文本标志是幂等的置位），
     // 但在浏览器开发模式（无原生菜单）下这两个快捷键是唯一入口。
     keymap.of([
+      // 列表续行必须排在 defaultKeymap 之前：
+      // defaultKeymap 的 Enter 是 insertNewlineAndIndent，
+      // 它会直接换行而不带列表符号。
+      { key: "Enter", run: continueListOnEnter },
+      { key: "Tab", run: indentListItem },
+      { key: "Shift-Tab", run: outdentListItem },
       ...defaultKeymap,
       ...historyKeymap,
       ...searchKeymap,
