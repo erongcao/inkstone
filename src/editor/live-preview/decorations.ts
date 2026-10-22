@@ -64,10 +64,10 @@ function hiddenMarker(): Decoration {
 }
 
 /** 一个纯区间（不含装饰器信息） */
-interface Interval {
+type Interval = {
   from: number;
   to: number;
-}
+};
 
 /** 一个可隐藏结构 */
 interface Hideable {
@@ -324,15 +324,24 @@ export function buildLivePreviewDecorations(
   );
 }
 
-/** 收集所有渲染器匹配到的块 */
+/**
+ * 收集所有渲染器匹配到的块。
+ *
+ * **按注册顺序**逐个调用，并把已占用区间透传给后面的渲染器——
+ * 有些结构会被两个渲染器同时匹配（行首单块 `$$x$$` 与块级 `math`、
+ * `$$ … | a | … $$` 里的表格语法），后面的必须让开，
+ * 否则同一段文本会被替换两次。
+ */
 function collectBlockMatches(
   tree: Tree,
   source: string,
 ): { match: BlockMatch; renderer: BlockRenderer }[] {
   const result: { match: BlockMatch; renderer: BlockRenderer }[] = [];
+  const claimed: Interval[] = [];
   for (const renderer of blockRenderers()) {
-    for (const match of renderer.find(tree, source)) {
+    for (const match of renderer.find(tree, source, claimed)) {
       result.push({ match, renderer });
+      claimed.push({ from: match.from, to: match.to });
     }
   }
   return result;

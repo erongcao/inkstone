@@ -40,6 +40,7 @@ export interface BlockRenderResult {
 }
 
 import type { Tree } from "@lezer/common";
+import type { Interval } from "./scan";
 
 /**
  * 块级渲染器。
@@ -57,8 +58,15 @@ import type { Tree } from "@lezer/common";
 export interface BlockRenderer {
   /** 唯一标识 */
   id: string;
-  /** 找出所有可渲染的块 */
-  find(tree: Tree, source: string): BlockMatch[];
+  /**
+   * 找出所有可渲染的块。
+   *
+   * `blockRanges` 是**先注册的渲染器**已经占用的区间集合：
+   * 有些结构会被两个渲染器同时匹配（行首单块 `$$x$$` 与块级 `math`、
+   * `$$ … | a | … $$` 里的表格语法），后面的渲染器要靠它让开，
+   * 否则同一段文本会被替换两次。装饰器管线按注册顺序透传。
+   */
+  find(tree: Tree, source: string, blockRanges?: readonly Interval[]): BlockMatch[];
   /** 渲染一个块；返回 null 表示这个块不渲染 */
   render(match: BlockMatch, source: string): BlockRenderResult | null;
 }

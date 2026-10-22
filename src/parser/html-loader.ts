@@ -65,3 +65,30 @@ export async function ensureMarkdownToHtml(source: string): Promise<string> {
   const fn = await load();
   return fn(source);
 }
+
+/** 等待渲染器就绪（异步场景与测试用） */
+export async function ensureHtmlRenderer(): Promise<void> {
+  await load();
+}
+
+/**
+ * 同步渲染**行内** Markdown 片段（表格单元格、脚注等）。
+ *
+ * 返回的是去掉最外层 `<p>` 的内部 HTML——
+ * 单元格本来就处在段落里，再套一层 `<p>` 会撑出多余的块级间距。
+ *
+ * 与 `markdownToHtml` 共用同一个 processor，所以单元格里的
+ * 表格内嵌公式 / 任务标记 / 引用链接都按同一套语义渲染（架构约束 C）。
+ *
+ * @returns 渲染器尚未就绪时返回 null，调用方应退回转义后的纯文本
+ */
+export function renderInlineHtmlSync(source: string): string | null {
+  if (!renderer) return null;
+  try {
+    const html = renderer(source);
+    const match = /^<p>([\s\S]*)<\/p>\n?$/.exec(html);
+    return match ? match[1] : html;
+  } catch {
+    return null;
+  }
+}

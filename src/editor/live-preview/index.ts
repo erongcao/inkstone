@@ -29,6 +29,7 @@ import {
 import { registerBlockRenderer } from "../render/registry";
 import { codeBlockRenderer } from "../render/code-block";
 import { mathBlockRenderer } from "../render/math-block";
+import { tableRenderer } from "../render/table";
 import { onMathRendererReady } from "../render/math-loader";
 import type { MarkerDisplayMode } from "@/settings/schema";
 
@@ -97,8 +98,10 @@ const mathReadinessWatcher = ViewPlugin.fromClass(
  */
 export function livePreview(): Extension {
   // 注册块级渲染器（幂等，重复调用会覆盖）
+  // 顺序有意义：后面的渲染器会拿到前面已占用的区间并让开
   registerBlockRenderer(codeBlockRenderer);
   registerBlockRenderer(mathBlockRenderer);
+  registerBlockRenderer(tableRenderer);
 
   return [
     livePreviewField,

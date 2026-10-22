@@ -363,3 +363,60 @@
 .cm-md-inline-math:hover {
   background-color: var(--ink-code-bg);
 }
+
+/* ═══════════════════════════════════════════════════════════
+   块级渲染：GFM 表格
+   ═══════════════════════════════════════════════════════════ */
+
+.cm-md-table {
+  margin: 0.8em 0;
+  border-collapse: collapse;
+  /* 表格可能比正文宽：允许块内横向滚动，而不是把文档撑宽
+     （.cm-content 的宽度约束见本文档「编辑器宽度约束」一节） */
+  max-width: 100%;
+  overflow-x: auto;
+  display: block;
+  font-size: 0.9375em;
+  line-height: 1.5;
+}
+
+.cm-md-table th,
+.cm-md-table td {
+  border: 1px solid var(--ink-table-border);
+  padding: 6px 12px;
+  vertical-align: top;
+}
+
+.cm-md-table th {
+  background-color: var(--ink-table-header-bg);
+  font-weight: 600;
+  /* 表头跨列时不要换行得太碎 */
+  white-space: nowrap;
+}
+
+.cm-md-table tbody tr:nth-child(even) {
+  background-color: var(--ink-table-stripe-bg);
+}
+
+/* 单元格里的段落：rem-rehype 只会给整篇文档套一个 <p>，
+   单元格内部不该再有一段首行缩进 */
+.cm-md-table p {
+  margin: 0;
+}
+
+.cm-md-table a {
+  color: var(--ink-accent);
+  text-decoration: none;
+}
+
+.cm-md-table a:hover {
+  text-decoration: underline;
+}
+
+.cm-md-table code {
+  padding: 1px 4px;
+  border-radius: 3px;
+  background-color: var(--ink-code-bg);
+  font-family: var(--ink-mono-family);
+  font-size: 0.9em;
+}
