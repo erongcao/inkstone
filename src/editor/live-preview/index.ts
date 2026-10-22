@@ -143,6 +143,19 @@ export function livePreview(): Extension {
           return true;
         }
 
+        // 图片：`[data-image-from]`
+        // 点渲染出来的图 → 光标移回源码位置，图片切回 `![…](…)` 原文，
+        // 这样路径可以直接编辑（也才可能发现图裂了）
+        const image = target?.closest?.("[data-image-from]") as HTMLElement | null;
+        if (image) {
+          const from = Number(image.dataset.imageFrom);
+          if (!Number.isFinite(from)) return false;
+          event.preventDefault();
+          view.dispatch({ selection: { anchor: from + 1 } });
+          view.focus();
+          return true;
+        }
+
         // 行内公式：`[data-inline-from]`
         const inline = target?.closest?.("[data-inline-from]") as HTMLElement | null;
         if (inline) {

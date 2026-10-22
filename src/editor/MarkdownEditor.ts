@@ -28,6 +28,7 @@ import {
   outdentListItem,
 } from "./list-continuation";
 import { markdownPaste } from "./paste";
+import { imageDrop } from "./image-insert";
 import {
   armPlainTextPaste,
   copySelectionAsHtml,
@@ -78,8 +79,10 @@ function buildExtensions(
     livePreview(),
     // 自动配对（可在运行时切换级别）
     autoPairBox.of(autoPair(options.autoPairMode ?? "off")),
-    // 粘贴：网页富文本 → Markdown
+    // 粘贴：网页富文本 → Markdown（图片粘贴也走这里，见 image-insert）
     markdownPaste(),
+    // 拖放：把图片文件存进 assets/ 并插入
+    imageDrop(),
     // 复制：同时写 Markdown 源码与渲染后的 HTML
     markdownCopy(),
     // 键盘映射

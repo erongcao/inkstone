@@ -26,6 +26,7 @@ import { findTaskItems } from "../render/task-list";
 import { overlapsAny } from "../render/scan";
 import { findFootnotes, type FootnoteModel } from "../render/footnote";
 import { FootnoteRefWidget, FootnoteDefWidget } from "./footnote-widget";
+import { ImageWidget, renderImage } from "./image-widget";
 import type { BlockMatch, BlockRenderer } from "../render/types";
 import type { MarkerDisplayMode } from "@/settings/schema";
 
@@ -145,21 +146,6 @@ function analyze(
     };
   }
 
-  if (nodeName === "Image") {
-    // ![替代文本](网址) → 只显示「替代文本」
-    const marks = childrenOfType(node, "LinkMark");
-    const urls = childrenOfType(node, "URL");
-    if (marks.length < 2) return null;
-    const open = marks[0];
-    const close = marks[1];
-    return {
-      node,
-      hideRanges: [...marks, ...urls].map((n) => ({ from: n.from, to: n.to })),
-      styleRanges: [{ from: open.to, to: close.from }],
-      styleClass: "cm-md-image",
-    };
-  }
-
   // StrongEmphasis / Emphasis / InlineCode / Strikethrough
   const marks = childrenOfType(node, spec.markType);
   if (marks.length === 0) return null;
@@ -208,6 +194,7 @@ export function buildLivePreviewDecorations(
   const headingDecos: Range<Decoration>[] = [];
   const renderedDecos: Range<Decoration>[] = [];
   const footnoteDecos: Range<Decoration>[] = [];
+  const imageDecos: Range<Decoration>[] = [];
 
   // 任务项要**先**算出来：后面的装饰循环要用它来藏列表符号、换勾选框
   const taskItems = findTaskItems(syntaxTree, source);
@@ -217,6 +204,15 @@ export function buildLivePreviewDecorations(
   // 两端的方括号被当链接括号藏掉），而脚注引用要自己接管这几个字符。
   // 所以行内标记那一轮必须先知道脚注引用的区间，才能让开。
   const footnotes = findFootnotes(syntaxTree, source);
+
+  // 链接引用表**惰性**建：绝大多数文档一个 `![alt][ref]` 都没有，
+  // 而收集定义要整棵语法树走一遍（1000 行约 0.16ms）——每击键都付这个钱不值。
+  // 所以先放个闭包，等到真的撞上引用式图片再付。
+  let linkRefTable: Map<string, string> | null = null;
+  const getLinkRefTable = (): Map<string, string> => {
+    if (linkRefTable === null) linkRefTable = collectLinkReferences(syntaxTree, source);
+    return linkRefTable;
+  };
   // 只有**会被渲染**的引用（编号 > 0）才需要让路；
   // 没有定义的 `[^missing]` 是字面量，保持原有行为不动
   const footnoteRefRanges = footnotes.refs
@@ -230,6 +226,14 @@ export function buildLivePreviewDecorations(
     enter(ref) {
       // `iterate` 回调拿到的是 SyntaxNodeRef（轻量引用），要拿完整节点用 `ref.node`
       const name = ref.type.name;
+
+      // ---- 0. 图片：整块渲染成 <img>，不走标记隐藏那一套 ----
+      if (name === "Image") {
+        imageDecos.push(
+          ...buildImageDecorations(ref.node, source, cursor, mode, getLinkRefTable),
+        );
+        return false;
+      }
 
       // ---- 1. 行内标记（可隐藏 / 可弱化）----
       const spec = INLINE_MARKER_BY_TYPE.get(name);
@@ -377,7 +381,14 @@ export function buildLivePreviewDecorations(
   // `DecorationSet` 只是类型别名（= RangeSet<Decoration>），
   // 真正的构造入口是静态方法 `Decoration.set(ranges, sort)`。
   return Decoration.set(
-    [...inlineDecos, ...blockDecos, ...headingDecos, ...renderedDecos, ...footnoteDecos],
+    [
+      ...inlineDecos,
+      ...blockDecos,
+      ...headingDecos,
+      ...renderedDecos,
+      ...footnoteDecos,
+      ...imageDecos,
+    ],
     true,
   );
 }
@@ -426,6 +437,125 @@ function buildFootnoteDecorations(
   }
 
   return decos;
+}
+
+/** 一张图片在源码里的构成 */
+interface ImageParts {
+  /** `![alt](src "title")` 整体区间 */
+  from: number;
+  to: number;
+  /** 替代文本 */
+  alt: string;
+  /** 图片地址；引用式（`![alt][ref]`）解析不出来时为 null */
+  src: string | null;
+}
+
+/**
+ * 拆解图片节点。
+ *
+ * lezer 的形态（`dump-lezer-tree.ts` 实测）：
+ * ```
+ * Image[0,21]
+ *   LinkMark[0,2]  "!["
+ *   LinkMark[6,7]  "]"      ← 替代文本 = 两者之间
+ *   LinkMark[7,8]  "("
+ *   URL[8,15]      "a/b.png"
+ *   LinkTitle      "标题"
+ *   LinkMark[20,21] ")"
+ * ```
+ * 引用式 `![alt][ref]` 里没有 `URL`，多一个 `LinkLabel`。
+ */
+function imageParts(
+  node: SyntaxNode,
+  source: string,
+  getLinkRefTable: () => Map<string, string>,
+): ImageParts | null {
+  const marks = childrenOfType(node, "LinkMark");
+  const open = marks[0];
+  if (!open || open.to - open.from !== 2) return null; // 必须是 "!["
+  const closeBracket = marks[1];
+  if (!closeBracket) return null;
+
+  const alt = source.slice(open.to, closeBracket.from);
+  const url = childrenOfType(node, "URL")[0];
+
+  let src: string | null = url ? source.slice(url.from, url.to) : null;
+  // `![a](<路径 带空格.png>)` 的 URL 区间**含尖括号**（lezer 原样切），
+  // 不剥掉的话 Rust 会去找一个名字带 `<` `>` 的文件。
+  if (src !== null && src.startsWith("<") && src.endsWith(">")) {
+    src = src.slice(1, -1);
+  }
+  if (src === null) {
+    // 引用式：`![alt][ref]` → 找文档里的 `[ref]: 地址`
+    const label = childrenOfType(node, "LinkLabel")[0];
+    if (!label) return null;
+    const key = normalizeRefLabel(source.slice(label.from, label.to));
+    src = getLinkRefTable().get(key) ?? null;
+    if (src === null) return null; // 定义不存在：保持源码可见，不瞎渲染
+  }
+
+  return { from: node.from, to: node.to, alt, src };
+}
+
+/** 链接引用标签归一：大小写不敏感、内部空白折叠 */
+function normalizeRefLabel(label: string): string {
+  return label.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+/**
+ * 收集文档里的链接引用定义（`[ref]: 地址`），供引用式图片查表。
+ *
+ * 由调用方的惰性闭包触发，见 `buildLivePreviewDecorations` 里的说明。
+ */
+function collectLinkReferences(tree: Tree, source: string): Map<string, string> {
+  const map = new Map<string, string>();
+  tree.iterate({
+    enter(ref) {
+      if (ref.type.name !== "LinkReference") return;
+      const label = childrenOfType(ref.node, "LinkLabel")[0];
+      const url = childrenOfType(ref.node, "URL")[0];
+      if (!label || !url) return;
+      const key = normalizeRefLabel(source.slice(label.from, label.to));
+      // 第一个定义胜出（CommonMark 行为）
+      if (!map.has(key)) map.set(key, source.slice(url.from, url.to));
+    },
+  });
+  return map;
+}
+
+/**
+ * 生成图片装饰。
+ *
+ * 与其它结构同一套展开规则：光标落进 `![…](…)` 区间 → 露出源码、可直接编辑路径；
+ * 在区间外 → 换成真正的 `<img>`。
+ *
+ * **不能**用块级替换：图片是行内的，块级 widget 会另起一行，
+ * 而 `文字 ![图](a.png) 文字` 这种写法必须保持行内。
+ */
+function buildImageDecorations(
+  node: SyntaxNode,
+  source: string,
+  cursor: number,
+  mode: MarkerDisplayMode,
+  getLinkRefTable: () => Map<string, string>,
+): Range<Decoration>[] {
+  const parts = imageParts(node, source, getLinkRefTable);
+  if (!parts || !parts.src) return [];
+
+  const inside = cursor > parts.from && cursor < parts.to;
+  // dimmed 策略下不做整块替换，只把地址弱化显示
+  if (mode === "dimmed") {
+    return [Decoration.mark({ class: "cm-md-image-alt" }).range(parts.from, parts.to)];
+  }
+  if (inside) return [];
+
+  const result = renderImage(parts.src, parts.alt, parts.from);
+  return [
+    Decoration.replace({ widget: new ImageWidget(result, parts.from) }).range(
+      parts.from,
+      parts.to,
+    ),
+  ];
 }
 
 /**

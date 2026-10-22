@@ -518,3 +518,59 @@
 .cm-md-footnote-badge:hover {
   color: var(--ink-accent);
 }
+
+/* ═══════════════════════════════════════════════════════════
+   图片
+   ═══════════════════════════════════════════════════════════ */
+
+/*
+ * 图片整体：inline-block + 垂直对齐，否则 <img> 的基线会在行内留下 4px 空隙，
+ * 整行行高被撑大。
+ */
+.cm-md-image {
+  display: inline-block;
+  line-height: 0;
+  vertical-align: middle;
+  max-width: 100%;
+}
+
+.cm-md-image img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.cm-md-image img:hover {
+  outline: 2px solid var(--ink-accent);
+  outline-offset: 2px;
+}
+
+/* 加载中的占位：给固定最小尺寸，图片到位时整篇文档不会往下跳 */
+.cm-md-image__placeholder {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  border: 1px dashed var(--ink-table-border);
+  border-radius: 4px;
+  background: var(--ink-code-bg);
+  color: var(--ink-fg-faint);
+  font-size: 0.8125em;
+  line-height: 1.4;
+  padding: 0 10px;
+  vertical-align: middle;
+}
+
+.cm-md-image__placeholder--failed {
+  border-style: solid;
+  border-color: var(--ink-danger);
+  color: var(--ink-danger);
+}
+
+/* dimmed 策略：不渲染成 <img>，只把整段地址弱化 */
+.cm-md-image-alt {
+  color: var(--ink-fg-faint);
+  font-family: var(--ink-mono-family);
+  font-size: 0.9em;
+}

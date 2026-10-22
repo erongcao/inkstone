@@ -156,6 +156,17 @@ export function setDocumentContent(content: string): void {
   setState({ content, dirty: state.content !== content });
 }
 
+/**
+ * 取当前文档的绝对路径（非 hook 版本）。
+ *
+ * 图片要按「文档所在目录」解析相对路径，而解析发生在装饰器 / widget 里——
+ * 那是纯 DOM 逻辑，不能也不该调 hook。用同步读取模块级 store，
+ * 和 `useDocument()` 订阅的是同一份状态。
+ */
+export function currentDocumentPath(): string | null {
+  return state.path;
+}
+
 export function useDocument() {
   const doc = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 

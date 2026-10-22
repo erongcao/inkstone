@@ -31,6 +31,8 @@ import {
   clearPlainTextPaste,
   isPlainTextPasteArmed,
 } from "@/editor/clipboard";
+import { handleImagePaste, pasteHasImage } from "@/editor/image-insert";
+import { extractDataImageUrl } from "@/ipc/image";
 
 /** 读剪贴板：个别浏览器对某些类型会抛异常，兜住 */
 function readClipboard(data: DataTransfer, type: string): string {
@@ -60,6 +62,17 @@ export function handlePaste(view: EditorView, event: ClipboardEvent): boolean {
   const text = readClipboard(data, "text/plain");
   const inkstoneMarkdown = readClipboard(data, INKSTONE_MARKDOWN_MIME);
   const forcePlainText = isPlainTextPasteArmed(view.state);
+
+  // ── 图片优先 ────────────────────────────────────────────────
+  // 剪贴板里有图片文件（系统截图 / 从图片应用复制）时，
+  // `text/plain` 往往是空的或一段无意义内容，先把图片存成文件插进去。
+  // 从浏览器复制的图片不带 files，只有 `text/html` 里的 data URL —— 走兜底。
+  if (!forcePlainText) {
+    const dataImage = extractDataImageUrl(html);
+    if (pasteHasImage(data, dataImage?.url ?? null)) {
+      return handleImagePaste(view, data, dataImage?.url ?? null);
+    }
+  }
 
   if (!text.trim() && !html.trim() && !inkstoneMarkdown.trim()) return false;
 

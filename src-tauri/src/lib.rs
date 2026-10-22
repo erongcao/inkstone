@@ -1,4 +1,5 @@
 mod ai;
+mod asset;
 mod document;
 mod menu;
 mod recent;
@@ -28,6 +29,8 @@ pub fn run() {
             document::save_document_as,
             document::set_document_title,
             document::read_document,
+            asset::save_image,
+            asset::read_image_data_url,
             recent::list_recent_files,
             recent::clear_recent_files,
             ai::secrets::ai_secret_status,
