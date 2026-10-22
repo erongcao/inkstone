@@ -13,6 +13,8 @@ import { history, undoDepth } from "@codemirror/commands";
 import { EditorView } from "@codemirror/view";
 import { focusMode, focusModeField, setFocusModeOf } from "@/editor/focus-mode";
 import { livePreview } from "@/editor/live-preview";
+import { isBlockExpanded, hasClosingFence } from "@/editor/live-preview/decorations";
+import type { BlockMatch } from "@/editor/render/types";
 import {
   typewriter,
   setTypewriterModeOf,
@@ -167,5 +169,75 @@ describe("打字机模式", () => {
     // jsdom 里没有布局，centerCursor 会因为 lineBlockAt 返回 null 而直接返回——
     // 这条只保证「开着也不会抛错」，滚动效果属于人工验证项
     expect(() => view.destroy()).not.toThrow();
+  });
+});
+
+/* ═══════════════════════════════════════════════════════════
+ * 未闭合围栏必须保持展开
+ * ═══════════════════════════════════════════════════════════ */
+
+/**
+ * 回归测试：M2-4 验证 mermaid 时撞上的**既有严重 bug**。
+ *
+ * 现象（生产构建、空文档）：敲完 ` ```js ` 三个字符后，编辑器里只剩一个
+ * 空的 `<pre class="cm-md-code" data-language="js">`，再打任何字符都无效——
+ * 也就是**根本没法用键盘敲出一个代码块**。
+ *
+ * 原因：未闭合的围栏，lezer 把它一直算到文档末尾，于是光标正好落在
+ * `match.to`；而 `isBlockExpanded` 是严格开区间，判成「不在块内」→ 块收起。
+ * 块 widget 是 `contenteditable="false"`，接着打的字全部丢失。
+ */
+describe("块展开规则：写到一半的块", () => {
+  const block = (from: number, to: number): BlockMatch => ({
+    from,
+    to,
+    kind: "code",
+    language: "js",
+    content: "",
+  });
+
+  it("闭合围栏：光标在块尾仍收起（与 Typora 一致）", () => {
+    const source = "```js\nconst a = 1;\n```";
+    const match = block(0, source.length);
+    expect(isBlockExpanded(match, match.to, source)).toBe(false);
+  });
+
+  it("闭合围栏且后面还有别的行：光标在下一行开头也收起", () => {
+    const fence = "```js\nconst a = 1;\n```";
+    const source = `${fence}\n\n后面段落`;
+    const match = block(0, fence.length);
+    expect(isBlockExpanded(match, match.to, source)).toBe(false);
+  });
+
+  it("未闭合围栏：光标在块尾（= 文档末尾）必须保持展开", () => {
+    const source = "```js";
+    const match = block(0, source.length);
+    expect(isBlockExpanded(match, match.to, source)).toBe(true);
+  });
+
+  it("未闭合围栏且已经敲了几行内容：块尾仍然算块内", () => {
+    const source = "```mermaid\ngraph TD\n  A-->B";
+    const match = block(0, source.length);
+    expect(isBlockExpanded(match, match.to, source)).toBe(true);
+  });
+
+  it("块内任意位置都展开（原有规则没被破坏）", () => {
+    const source = "```js\nconst a = 1;\n```";
+    const match = block(0, source.length);
+    expect(isBlockExpanded(match, 3, source)).toBe(true);
+  });
+
+  it("块首不展开（打开文件时第一个代码块是收起的）", () => {
+    const source = "```js\nconst a = 1;\n```";
+    expect(isBlockExpanded(block(0, source.length), 0, source)).toBe(false);
+  });
+
+  it("闭合判定：末行只有围栏才算闭合", () => {
+    expect(hasClosingFence("```js\ncode\n```")).toBe(true);
+    expect(hasClosingFence("```js\ncode\n```\n")).toBe(true);
+    expect(hasClosingFence("~~~py\ncode\n~~~")).toBe(true);
+    expect(hasClosingFence("```js")).toBe(false); // 带语言标识的开围栏
+    expect(hasClosingFence("```js\ngraph TD")).toBe(false);
+    expect(hasClosingFence("$$x$$")).toBe(false); // 非围栏块一律视为未闭合
   });
 });

@@ -309,7 +309,7 @@ export function buildLivePreviewDecorations(
   // 光标在块内 → 显示源码（可编辑）；光标在块外 → 显示渲染结果。
   const blockMatches = collectBlockMatches(syntaxTree, source);
   for (const { match, renderer } of blockMatches) {
-    if (isBlockExpanded(match, cursor)) continue;
+    if (isBlockExpanded(match, cursor, source)) continue;
     const result = renderer.render(match, source);
     if (!result) continue;
     renderedDecos.push(
@@ -592,7 +592,48 @@ function collectBlockMatches(
  *
  * 进入编辑态的路径：点击渲染后的块 → 把光标移到 `from + 1`（块内）→
  * 装饰器重算 → 该块切回源码。见 live-preview/index.ts 的 mousedown 处理。
+ *
+ * ## 例外：写到一半的块必须保持展开（实测踩过的严重 bug）
+ *
+ * 未闭合的围栏，lezer 会把它**一直算到文档末尾**。于是「刚敲完 ```` ```js ````、
+ * 光标停在后面」时，`cursor === match.to === doc.length`——
+ * 严格开区间判成「不在块内」，块立刻收起成一个空的渲染结果。
+ * 而块 widget 是 `contenteditable="false"`，用户接着打的字**全部丢失**。
+ *
+ * 实测（生产构建、空文档）：敲 ` ```js ` 之后编辑器里只剩一个空的
+ * `<pre class="cm-md-code" data-language="js">`，再打任何字符都无效——
+ * 也就是**根本没法用键盘敲出一个代码块**。
+ *
+ * 补法：块的**最后一行不是闭合围栏**就说明用户还没写完，
+ * 此时块尾也算块内。不看围栏字符本身，只认「末行是否整行都是围栏」。
  */
-function isBlockExpanded(match: BlockMatch, cursor: number): boolean {
-  return cursor > match.from && cursor < match.to;
+export function isBlockExpanded(
+  match: BlockMatch,
+  cursor: number,
+  source: string,
+): boolean {
+  if (cursor > match.from && cursor < match.to) return true;
+
+  // 块一直延伸到文末且没有闭合围栏 → 用户还在写，保持展开
+  if (cursor === match.to && !hasClosingFence(source.slice(match.from, match.to))) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * 这段块文本是不是以闭合围栏结尾。
+ *
+ * 末行必须**整行只有**围栏字符（允许 ≤3 格缩进与尾部空白）：
+ *   - `` ```js ``            → 末行是 `\`\`\`js`，带了语言标识 → 不是闭合围栏
+ *   - `` ```js\ncode\n``` `` → 末行是 `\`\`\`` → 是闭合围栏
+ *
+ * 先 `trimEnd()`：`match.to` 落在闭合围栏**之后**的换行符上时，
+ * 末行会是空串，不去掉尾部空白就会误判成「没闭合」。
+ */
+export function hasClosingFence(text: string): boolean {
+  const trimmed = text.trimEnd();
+  const lastLine = trimmed.slice(trimmed.lastIndexOf("\n") + 1);
+  // 末行必须**只有**围栏字符（可带 ≤3 格缩进与尾部空白）
+  return /^ {0,3}(?:`{3,}|~{3,})\s*$/.test(lastLine);
 }
