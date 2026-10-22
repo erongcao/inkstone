@@ -33,6 +33,16 @@ import { focusMode, setFocusModeOf } from "./focus-mode";
 import { typewriter, setTypewriterModeOf } from "./typewriter";
 import { preloadEmojiData } from "./emoji";
 import { inkstoneAutocomplete } from "./completion";
+import { primeMermaid } from "./render/mermaid-loader";
+
+/**
+ * mermaid 是否已经发起过预加载。
+ *
+ * 放模块级而不是编辑器实例里：触发点在 `buildExtensions` 构造的 updateListener 闭包里，
+ * 那里拿不到 `createMarkdownEditor` 的局部变量；而它本来就该是全局一次性
+ * （mermaid 的加载器本身就是模块级单例，重复发起只会拿到同一个 Promise）。
+ */
+let mermaidPrimed = false;
 import { openPalette } from "./palette";
 import { runCommand } from "./commands";
 import { linkPopoverTrigger } from "./link-trigger";
@@ -163,8 +173,13 @@ function buildExtensions(
     }),
     // 状态回调
     EditorView.updateListener.of((update) => {
-      if (update.docChanged && options.onChange) {
-        options.onChange(update.state.doc.toString());
+      if (update.docChanged) {
+        const text = update.state.doc.toString();
+        if (!mermaidPrimed && text.includes("```mermaid")) {
+          mermaidPrimed = true;
+          primeMermaid();
+        }
+        options.onChange?.(text);
       }
       if (update.selectionSet && options.onSelectionChange) {
         options.onSelectionChange(

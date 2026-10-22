@@ -678,3 +678,45 @@
   padding-top: 3px;
   padding-bottom: 3px;
 }
+
+/* ═══════════════════════════════════════════════════════════
+ * Mermaid 图表
+ * ═══════════════════════════════════════════════════════════ */
+
+/*
+ * mermaid 自己产出的 SVG。
+ *
+ * `svg { height }` 是内联的（渲染器算好像素高），但编辑器字号是用户可调的，
+ * 内联高度压不过用户的排版设置——所以按内容高度放开，让它自己撑。
+ */
+.cm-md-mermaid {
+  margin: 0.6em 0;
+  padding: 12px;
+  overflow-x: auto;
+  border: 1px solid var(--ink-border);
+  border-radius: var(--ink-radius-md);
+  background-color: var(--ink-bg-soft);
+  text-align: center;
+}
+
+.cm-md-mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* 语法错误：用户正在打字时图表经常是半成品，红色提示 + 原文最有用 */
+.cm-md-mermaid--error {
+  border-color: var(--ink-danger);
+  background-color: transparent;
+}
+
+.cm-md-mermaid-error {
+  margin: 0;
+  font-family: var(--ink-mono-family);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-danger);
+  text-align: left;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

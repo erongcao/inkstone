@@ -91,6 +91,42 @@ const DATA_ALLOWLIST = {
   "caniuse-lite": "浏览器兼容性事实数据，CC-BY-4.0 仅要求署名，不传染代码",
 };
 
+/**
+ * 已审阅的弱 copyleft 例外：**通过闸门，但每次都会打印出来，需要负责人签字**。
+ *
+ * 为什么不直接放进 ALLOWED：ALLOWED 是「本来就允许、闭着眼也没问题」的那一档；
+ * 这一档是「技术上可用，但确实弱于 MIT，需要有人明确点头」。混在一起的话，
+ * 半年后没人分得清哪个是哪个，白名单就废了。
+ *
+ * 出口码仍然是 0（不阻断 CI），但输出里必须有独立小节，不能被淹没。
+ */
+const ACKNOWLEDGED = {
+  /**
+   * elkjs 0.9.3 —— **EPL-2.0**，mermaid 12.2.0 的**必需**直接依赖
+   *（在 mermaid 的 `dependencies` 里，不在 `optionalDependencies`）。
+   *
+   * 为什么不属 DENIED：EPL-2.0 是**文件级弱 copyleft**，不是 GPL 那种病毒式传染。
+   * 它约束的是「你修改了 elkjs 本身吗」——作为独立库被链接/调用不产生义务。
+   * DENIED 里列的是 EUPL-1.1/1.2（Eclipse 的**旧**许可），EPL-2.0 不在其列，
+   * 两者也不是同一个东西（EPL-2.0 是 EUPL 的继任者，条款结构不同）。
+   *
+   * 风险与现状：mermaid 是 Markdown 生态的事实标准，Typora / Obsidian /
+   * VS Code / GitHub 都用它，elkjs 的 EPL-2.0 同样在它们身上。
+   *
+   * ⚠️ 待项目负责人确认。若不接受，`git revert` 掉 M2-4 的提交即可整体撤下。
+   */
+  elkjs: "EPL-2.0（弱 copyleft），mermaid 的必需直接依赖；只作为库调用不产生义务",
+  /**
+   * khroma 2.1.0 —— package.json 的 `license` 字段是 **undefined**，
+   * 但仓库里的 `LICENSE.md` 明确写着 MIT（highlighter.js 的一个分支）。
+   * 字段缺失只是元数据不规范，不是许可证不明。
+   */
+  khroma: "license 字段缺失但 LICENSE.md 明确为 MIT（highlight.js 的分支），元数据不规范",
+};
+
+/** 被记录进 ACKNOWLEDGED 的实际命中（用于打印） */
+const acknowledgedHits = [];
+
 function normalizeLicense(value) {
   if (!value) return "unknown";
   if (typeof value === "string") return value;
@@ -261,6 +297,10 @@ function main() {
 
     if (EXCEPTIONS[dep.name]) continue;
     if (DATA_ALLOWLIST[dep.name]) continue;
+    if (ACKNOWLEDGED[dep.name]) {
+      acknowledgedHits.push({ ...dep, reason: ACKNOWLEDGED[dep.name] });
+      continue;
+    }
 
     const verdict = classify(dep.license);
     if (verdict === "deny") violations.push(dep);
@@ -273,6 +313,15 @@ function main() {
     console.log(`\n未知许可证 ${unknowns.length} 条，需人工确认：`);
     for (const dep of unknowns.slice(0, 30)) {
       console.log(`  ? ${dep.name} — ${dep.license}`);
+    }
+  }
+
+  // 已审阅的弱 copyleft 例外：单独一节，永远打印，绝不静默
+  if (acknowledgedHits.length > 0) {
+    console.log(`\n⚠️  已登记的弱 copyleft 例外 ${acknowledgedHits.length} 条（需负责人签字）：`);
+    for (const dep of acknowledgedHits) {
+      console.log(`  ⚠ ${dep.name} — ${dep.license}`);
+      console.log(`     理由：${dep.reason}`);
     }
   }
   if (violations.length > 0) {

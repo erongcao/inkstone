@@ -54,6 +54,7 @@ import typescript from "highlight.js/lib/languages/typescript";
 import xml from "highlight.js/lib/languages/xml";
 import yaml from "highlight.js/lib/languages/yaml";
 
+import type { Interval } from "./scan";
 import type { BlockMatch, BlockRenderer, BlockRenderResult } from "./types";
 
 /**
@@ -194,12 +195,21 @@ export function resolveLanguage(info: string): string | null {
  * lezer 的 `SyntaxNode.toString()` 实际是 `Tree.toString()`，
  * 返回的是「节点类型名列表」（如 `"CodeInfo"`）而不是文本。
  * 这是实测踩过的坑。
+ *
+ * ⚠️ `claimed` 是先注册的渲染器已经认走的区间。**必须让开**：
+ * mermaid 与本渲染器会匹配同一个 `FencedCode` 节点（一个当图表、一个当代码高亮），
+ * 不让开就会对同一段文本生成两个块级装饰，DOM 里出现两份。
  */
-export function findCodeBlocks(tree: Tree, source: string): BlockMatch[] {
+export function findCodeBlocks(
+  tree: Tree,
+  source: string,
+  claimed: readonly Interval[] = [],
+): BlockMatch[] {
   const matches: BlockMatch[] = [];
   tree.iterate({
     enter(ref) {
       if (ref.type.name !== "FencedCode") return;
+      if (claimed.some((r) => r.from < ref.to && ref.from < r.to)) return;
       // 逐个子节点找 CodeInfo（语言）与 CodeText（内容）
       let language: string | undefined;
       let content = "";
@@ -252,8 +262,8 @@ function escapeHtml(text: string): string {
 export const codeBlockRenderer: BlockRenderer = {
   id: "code-block",
 
-  find(tree, source) {
-    return findCodeBlocks(tree, source);
+  find(tree, source, claimed) {
+    return findCodeBlocks(tree, source, claimed);
   },
 
   render(match) {

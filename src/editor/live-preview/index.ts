@@ -33,6 +33,8 @@ import { mathBlockRenderer } from "../render/math-block";
 import { tableRenderer } from "../render/table";
 import { findTaskItems, taskToggleChange } from "../render/task-list";
 import { onMathRendererReady } from "../render/math-loader";
+import { onDiagramRendered } from "../render/mermaid-loader";
+import { mermaidBlockRenderer } from "../render/mermaid";
 import type { MarkerDisplayMode } from "@/settings/schema";
 
 /**
@@ -92,6 +94,42 @@ const mathReadinessWatcher = ViewPlugin.fromClass(
 );
 
 /**
+ * Mermaid 渲染完成 → 强制装饰器重算。
+ *
+ * 理由与 `mathReadinessWatcher` **完全相同**（文档没变、但块的 DOM 必须换），
+ * 所以复用同一个 `refreshRendering` effect，而不是另造一个。
+ *
+ * 差别是 mermaid 会**反复**触发（每次一段新代码渲染完都通知一次），
+ * 所以额外加一层节流：250ms 内多次通知只重算一次。
+ * 没有这层的话，一篇文档里十张图会触发十轮装饰器重算。
+ */
+const mermaidReadinessWatcher = ViewPlugin.fromClass(
+  class {
+    private readonly unsubscribe: () => void;
+    private timer: ReturnType<typeof setTimeout> | null = null;
+
+    constructor(view: EditorView) {
+      this.unsubscribe = onDiagramRendered(() => {
+        if (this.timer !== null) clearTimeout(this.timer);
+        this.timer = setTimeout(() => {
+          this.timer = null;
+          view.dispatch({ effects: refreshRendering.of(null) });
+        }, 250);
+      });
+    }
+
+    update(_update: ViewUpdate): void {
+      /* 只在构造时订阅一次 */
+    }
+
+    destroy(): void {
+      this.unsubscribe();
+      if (this.timer !== null) clearTimeout(this.timer);
+    }
+  },
+);
+
+/**
  * Live Preview 扩展。
  *
  * 初值不通过 StateField 传入（StateField 没有 init 配置项），
@@ -100,7 +138,9 @@ const mathReadinessWatcher = ViewPlugin.fromClass(
  */
 export function livePreview(): Extension {
   // 注册块级渲染器（幂等，重复调用会覆盖）
-  // 顺序有意义：后面的渲染器会拿到前面已占用的区间并让开
+  // 顺序有意义：后面的渲染器会拿到前面已占用的区间并让开。
+  // **mermaid 必须排在 code-block 前面**——两者匹配同一个 `FencedCode` 节点。
+  registerBlockRenderer(mermaidBlockRenderer);
   registerBlockRenderer(codeBlockRenderer);
   registerBlockRenderer(mathBlockRenderer);
   registerBlockRenderer(tableRenderer);
@@ -109,6 +149,7 @@ export function livePreview(): Extension {
     livePreviewField,
     livePreviewDecorations,
     mathReadinessWatcher,
+    mermaidReadinessWatcher,
     // 点击渲染后的块 → 把光标移进块内 → 该块切回源码编辑
     EditorView.domEventHandlers({
       mousedown: (event, view) => {
