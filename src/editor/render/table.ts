@@ -32,6 +32,7 @@
 import type { SyntaxNode, Tree } from "@lezer/common";
 import type { Interval } from "./scan";
 import { renderInlineHtmlSync } from "@/parser/html-loader";
+import { createTableToolbar, markCell, paintToolbar } from "./table-toolbar";
 import type { BlockMatch, BlockRenderer, BlockRenderResult } from "./types";
 
 /** 单元格对齐方式 */
@@ -198,6 +199,15 @@ export const tableRenderer: BlockRenderer = {
 
   render(match) {
     const table = match as unknown as TableMatch;
+
+    // 工具栏 + 表格一起塞进 wrapper。
+    // 为什么不直接把 <table> 当 dom：工具栏必须在表**外面**，
+    // 否则点它会命中 `data-block-from` 而把表切回源码。
+    const wrap = document.createElement("div");
+    wrap.className = "cm-md-table-wrap";
+    const bar = createTableToolbar();
+    wrap.appendChild(bar);
+
     const el = document.createElement("table");
     el.className = "cm-md-table";
 
@@ -206,6 +216,7 @@ export const tableRenderer: BlockRenderer = {
     table.rows[0].forEach((cell, i) => {
       const th = document.createElement("th");
       th.innerHTML = renderCell(cell);
+      markCell(th, 0, i);
       applyAlign(th, table.align[i]);
       headRow.appendChild(th);
     });
@@ -222,15 +233,28 @@ export const tableRenderer: BlockRenderer = {
       for (let c = 0; c < width; c++) {
         const td = document.createElement("td");
         td.innerHTML = renderCell(table.rows[r][c] ?? "");
+        // 几何行号 = 渲染行号 + 1（0 表头 / 1 分隔行 / 2 起数据行）
+        markCell(td, r + 1, c);
         applyAlign(td, table.align[c]);
         tr.appendChild(td);
       }
       body.appendChild(tr);
     }
     el.appendChild(body);
+    wrap.appendChild(el);
+
+    // 默认落点 = 最后一个数据行的最后一列，和初始标签说的是同一个位置。
+    //
+    // **必须在这里就写进 dataset**：任何一次表格改动都会让这个 DOM 被重建，
+    // hover 写在元素上的坐标随之消失。若不预置，用户点完第一个按钮后
+    // 再点第二个就会因为读不到坐标而**静默无反应**（浏览器实测踩到）。
+    const defaultRow = Math.max(table.rows.length, 2);
+    wrap.dataset.hoverRow = String(defaultRow);
+    wrap.dataset.hoverCol = String(Math.max(table.align.length - 1, 0));
+    paintToolbar(bar, defaultRow, table.align.length);
 
     return {
-      dom: el,
+      dom: wrap,
       // 指纹必须覆盖对齐方式与全部单元格内容
       key: `table:${table.align.join(",")}:${table.rows.map((r) => r.join("")).join("")}`,
     } satisfies BlockRenderResult;

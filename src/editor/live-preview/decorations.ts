@@ -593,7 +593,7 @@ function collectBlockMatches(
  * 进入编辑态的路径：点击渲染后的块 → 把光标移到 `from + 1`（块内）→
  * 装饰器重算 → 该块切回源码。见 live-preview/index.ts 的 mousedown 处理。
  *
- * ## 例外：写到一半的块必须保持展开（实测踩过的严重 bug）
+ * ## 例外：**未闭合的围栏**必须保持展开（实测踩过的严重 bug）
  *
  * 未闭合的围栏，lezer 会把它**一直算到文档末尾**。于是「刚敲完 ```` ```js ````、
  * 光标停在后面」时，`cursor === match.to === doc.length`——
@@ -606,6 +606,16 @@ function collectBlockMatches(
  *
  * 补法：块的**最后一行不是闭合围栏**就说明用户还没写完，
  * 此时块尾也算块内。不看围栏字符本身，只认「末行是否整行都是围栏」。
+ *
+ * ## 这条豁免**只给围栏**——这是加错了会连累别人两次才记住的
+ *
+ * 表格、公式块、mermaid **在文末时也满足** `cursor === match.to`，
+ * 而它们的末行当然不是围栏（`| 甲 | 一 |`、`$$`…）。
+ * 不加 `kind` 判断的话，文末的那张表会被**永久钉在展开态**——
+ * 渲染路径永远走不到，表现为「表格怎么都不渲染成表格」。
+ *
+ * 判据必须是 `kind`：只有围栏代码块才有「写到一半」这回事，
+ * 其余块在文末就是写完了，该收起。
  */
 export function isBlockExpanded(
   match: BlockMatch,
@@ -614,8 +624,12 @@ export function isBlockExpanded(
 ): boolean {
   if (cursor > match.from && cursor < match.to) return true;
 
-  // 块一直延伸到文末且没有闭合围栏 → 用户还在写，保持展开
-  if (cursor === match.to && !hasClosingFence(source.slice(match.from, match.to))) {
+  // 只有围栏代码块有「未闭合」状态，其余块到文末就算写完了
+  if (
+    match.kind === "code" &&
+    cursor === match.to &&
+    !hasClosingFence(source.slice(match.from, match.to))
+  ) {
     return true;
   }
   return false;

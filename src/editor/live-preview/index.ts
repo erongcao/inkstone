@@ -35,6 +35,24 @@ import { findTaskItems, taskToggleChange } from "../render/task-list";
 import { onMathRendererReady } from "../render/math-loader";
 import { onDiagramRendered } from "../render/mermaid-loader";
 import { mermaidBlockRenderer } from "../render/mermaid";
+import {
+  CELL_COL_ATTR,
+  CELL_ROW_ATTR,
+  TOOLBAR_ATTR,
+  actionOf,
+  highlightHover,
+  paintToolbar,
+  syncToolbarState,
+} from "../render/table-toolbar";
+import {
+  columnAlignAt,
+  commandAddTableColumn,
+  commandAddTableRow,
+  commandRemoveTableColumn,
+  commandRemoveTableRow,
+  commandSetTableAlign,
+  findEditableTable,
+} from "../render/table-operations";
 import type { MarkerDisplayMode } from "@/settings/schema";
 
 /**
@@ -130,6 +148,77 @@ const mermaidReadinessWatcher = ViewPlugin.fromClass(
 );
 
 /**
+ * 鼠标指的是哪个单元格（工具栏按钮自己不算）。
+ *
+ * 返回带 `data-cell-row` 的 `<td>`/`<th>`。
+ */
+function hoverCell(target: HTMLElement | null): HTMLElement | null {
+  return target?.closest?.(`[${CELL_ROW_ATTR}]`) as HTMLElement | null;
+}
+
+/**
+ * 执行一次表格工具栏动作。
+ *
+ * 位置来自 wrapper 上 `data-hover-row/col`（mouseover 时写的），
+ * 文档位置来自 `data-block-from`（BlockWidget 写的表格起点）——
+ * 渲染态下光标在表外，必须显式告诉命令层「是哪张表」。
+ *
+ * 点在按钮之间的空隙上（actionOf 返回 null）时不做任何事，也不吞事件。
+ */
+function runTableAction(
+  view: EditorView,
+  bar: HTMLElement,
+  target: HTMLElement | null,
+): void {
+  const action = actionOf(target);
+  if (!action) return;
+
+  const wrap = bar.closest(".cm-md-table-wrap") as HTMLElement | null;
+  if (!wrap) return;
+
+  const blockFrom = Number(wrap.dataset.blockFrom);
+  if (!Number.isFinite(blockFrom)) return;
+
+  // 坐标缺失时**退到文档算出来的默认行列**，而不是静默什么都不做。
+  // `tableRenderer.render` 已经预置过坐标，这里只是兜底：
+  // 工具栏按钮点下去却毫无反应，用户只会当成功能坏了。
+  const fallback = findEditableTable(view, blockFrom + 1);
+  const row = Number.isFinite(Number(wrap.dataset.hoverRow))
+    ? Number(wrap.dataset.hoverRow)
+    : Math.max((fallback?.rows.length ?? 2) - 1, 2);
+  const col = Number.isFinite(Number(wrap.dataset.hoverCol))
+    ? Number(wrap.dataset.hoverCol)
+    : Math.max((fallback?.columns ?? 1) - 1, 0);
+
+  const at = blockFrom + 1;
+  const where = { row, column: col };
+  const ALIGN = {
+    "align-left": "left",
+    "align-center": "center",
+    "align-right": "right",
+  } as const;
+
+  switch (action) {
+    case "row-add":
+      commandAddTableRow(view, where, at);
+      break;
+    case "row-del":
+      commandRemoveTableRow(view, where, at);
+      break;
+    case "col-add":
+      commandAddTableColumn(view, where, at);
+      break;
+    case "col-del":
+      commandRemoveTableColumn(view, where, at);
+      break;
+    default:
+      // `align-default` 不在 ALIGN 里 → undefined → 取消对齐
+      commandSetTableAlign(view, ALIGN[action as keyof typeof ALIGN], where, at);
+      break;
+  }
+}
+
+/**
  * Live Preview 扩展。
  *
  * 初值不通过 StateField 传入（StateField 没有 init 配置项），
@@ -150,10 +239,56 @@ export function livePreview(): Extension {
     livePreviewDecorations,
     mathReadinessWatcher,
     mermaidReadinessWatcher,
+    // 表格工具栏的 hover 定位：记住鼠标指的是哪一行哪一列
+    EditorView.domEventHandlers({
+      mouseover: (event, view) => {
+        const cell = hoverCell(event.target as HTMLElement | null);
+        if (!cell) return false;
+        const wrap = cell.closest(".cm-md-table-wrap") as HTMLElement | null;
+        if (!wrap) return false;
+
+        const row = Number(cell.getAttribute(CELL_ROW_ATTR));
+        const col = Number(cell.getAttribute(CELL_COL_ATTR));
+        wrap.dataset.hoverRow = String(row);
+        wrap.dataset.hoverCol = String(col);
+
+        const table = wrap.querySelector(".cm-md-table") as HTMLElement | null;
+        if (table) highlightHover(table, row, col);
+
+        const bar = wrap.querySelector(`[${TOOLBAR_ATTR}]`) as HTMLElement | null;
+        if (!bar) return false;
+        paintToolbar(bar, row, col + 1);
+
+        // 对齐状态与列数必须回**文档**里读，不能只看渲染出来的 DOM：
+        // DOM 上的 text-align 是上一次渲染的结果，而 Markdown 里可能压根没写对齐。
+        // `data-block-from` 是 BlockWidget 写在 wrapper 上的表格起点。
+        const blockFrom = Number(wrap.dataset.blockFrom);
+        const tableState = Number.isFinite(blockFrom)
+          ? findEditableTable(view, blockFrom + 1)
+          : null;
+        syncToolbarState(bar, {
+          geometryRow: row,
+          columnCount: tableState?.columns ?? 0,
+          align: tableState ? columnAlignAt(tableState, col) : null,
+        });
+        return false;
+      },
+    }),
     // 点击渲染后的块 → 把光标移进块内 → 该块切回源码编辑
     EditorView.domEventHandlers({
       mousedown: (event, view) => {
         const target = event.target as HTMLElement | null;
+
+        // 表格工具栏：必须在 `data-block-from` 分支**之前**。
+        // wrapper 上带着 `data-block-from`（BlockWidget 写的），
+        // 顺序反了点工具栏就会把表格切回源码——等于按钮永远点不动。
+        const bar = target?.closest?.(`[${TOOLBAR_ATTR}]`) as HTMLElement | null;
+        if (bar) {
+          event.preventDefault();
+          runTableAction(view, bar, target);
+          view.focus();
+          return true;
+        }
 
         // 任务列表勾选框：`[data-task-at]`
         // 这是**唯一**会改写文档内容的交互——而且必须走普通事务，

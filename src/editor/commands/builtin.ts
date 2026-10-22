@@ -11,6 +11,7 @@
  * 「视图」只在命令面板出现——斜杠菜单里塞一个「切到源码模式」很奇怪。
  */
 
+import type { EditorView } from "@codemirror/view";
 import {
   toggleLinePrefix,
   toggleWrap,
@@ -20,6 +21,38 @@ import {
 } from "../command-editing";
 import { registerCommands, type InkstoneCommand } from "../commands";
 import { emitIntent } from "../intents";
+import {
+  commandAddTableColumn,
+  commandAddTableRow,
+  commandRemoveTableColumn,
+  commandRemoveTableRow,
+  commandSetTableAlign,
+  findEditableTable,
+} from "../render/table-operations";
+
+/** 表格命令只在「光标位于表格内」时可用——不在表内就没有"当前行/当前列"可言 */
+const inTable = (view: EditorView): boolean => findEditableTable(view) !== null;
+
+/**
+ * 造一条表格命令。
+ *
+ * `surfaces` 显式给 `["palette"]`：表格操作在斜杠菜单里没有意义——
+ * 打 `/` 的时候光标通常不在表内，列出来的条目点下去只会什么都不发生。
+ */
+const table = (
+  id: string,
+  label: string,
+  keywords: string,
+  run: (view: EditorView) => boolean,
+): InkstoneCommand => ({
+  id: `table.${id}`,
+  label,
+  category: "表格",
+  keywords,
+  surfaces: ["palette"],
+  enabled: inTable,
+  run,
+});
 
 /** 表格模板：3×3 带表头 */
 const TABLE_TEMPLATE = [
@@ -248,6 +281,38 @@ export function builtinCommands(): InkstoneCommand[] {
         return true;
       },
     },
+
+    /* ── 表格（只在光标位于表格内时可用） ── */
+    table("row-add", "表格：插入一行", "table add row hang biaoge", (view) =>
+      commandAddTableRow(view),
+    ),
+    table("row-del", "表格：删除当前行", "table delete row shanchu biaoge", (view) =>
+      commandRemoveTableRow(view),
+    ),
+    table("col-add", "表格：插入一列", "table add column lie biaoge", (view) =>
+      commandAddTableColumn(view),
+    ),
+    table("col-del", "表格：删除当前列", "table delete column shanchu biaoge", (view) =>
+      commandRemoveTableColumn(view),
+    ),
+    table("align-left", "表格：当前列左对齐", "table align left zuoyou duiqi", (view) =>
+      commandSetTableAlign(view, "left"),
+    ),
+    table(
+      "align-center",
+      "表格：当前列居中",
+      "table align center juzhong duiqi",
+      (view) => commandSetTableAlign(view, "center"),
+    ),
+    table("align-right", "表格：当前列右对齐", "table align right you duiqi", (view) =>
+      commandSetTableAlign(view, "right"),
+    ),
+    table(
+      "align-reset",
+      "表格：取消当前列对齐",
+      "table align none quxiao duiqi",
+      (view) => commandSetTableAlign(view, null),
+    ),
   ];
 }
 
