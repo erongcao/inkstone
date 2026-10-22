@@ -18,6 +18,7 @@ import {
   type SettingsSectionId,
 } from "@/settings/schema";
 import { BUILTIN_THEMES } from "@/theme/themes";
+import { AiSection } from "./AiSettingsSection";
 
 interface Props {
   onClose: () => void;
@@ -76,6 +77,7 @@ export function SettingsPanel({ onClose }: Props) {
             {section === "general" && (
               <GeneralSection settings={settings} patch={patch} />
             )}
+            {section === "ai" && <AiSection settings={settings} patch={patch} />}
           </div>
         </div>
       </div>

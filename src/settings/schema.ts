@@ -181,12 +181,19 @@ export type AiProtocol = "openai" | "anthropic" | "gemini";
 export interface AiEndpointSetting {
   /** 端点 id，同时是钥匙串里的 account 名 */
   id: string;
+  /** 展示名 */
+  label: string;
   /** 协议 */
   protocol: AiProtocol;
   /** base URL（用户可改，用来接自建服务） */
   baseUrl: string;
   /** 模型 id */
   model: string;
+  /**
+   * 计费性质。UI 必须显示——订阅 / 按量 / 本地免费三者
+   * 对用户的成本含义完全不同，混起来显示会让人误判。
+   */
+  billing: "subscription" | "pay-per-token" | "local-free";
   /**
    * 并发上限。0 = 不限。
    * 必须真的限流而不只是显示：实测 GLM Coding Plan 的 Lite / Pro 档

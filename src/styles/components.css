@@ -236,3 +236,69 @@
   overflow: hidden;
   background-color: var(--ink-bg);
 }
+
+/* ═══════════════════════════════════════════════════════════
+   AI 设置
+   ═══════════════════════════════════════════════════════════ */
+
+.ai-endpoint-info {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 12px;
+  margin: 4px 0 8px;
+  font-size: 12px;
+  color: var(--ink-fg-muted);
+}
+
+.ai-endpoint-info dt {
+  color: var(--ink-fg-faint);
+}
+
+.ai-endpoint-info dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.ai-endpoint-url {
+  font-family: var(--ink-mono-family);
+  font-size: 11px;
+}
+
+.ai-endpoint-note {
+  margin: 0 0 8px;
+  padding: 6px 8px;
+  border-left: 3px solid var(--ink-border-strong);
+  background: var(--ink-bg-soft);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-fg-muted);
+}
+
+/* 钥匙串降级提示——安全提示不能沉默 */
+.ai-warning {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--ink-danger);
+  border-radius: var(--ink-radius-sm);
+  background: var(--ink-danger-bg);
+  color: var(--ink-danger);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.ai-notice {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--ink-fg-muted);
+}
+
+.field--actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.field input[type="number"]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

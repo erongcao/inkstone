@@ -189,34 +189,32 @@ pub async fn ai_stream_chat(app: AppHandle, req: StreamRequest) -> Result<(), St
         // reqwest 0.13 的 `bytes_stream()` 是**同步**方法，返回 impl Stream
         // （不是 future）——写成 `.await` 会得到「不是 future」的编译错误。
         let mut stream = response.bytes_stream();
+        let mut decoder = SseDecoder::default();
 
-        // SSE 帧边界由这里切：按空行分隔，每帧可能有多个 data: 行
-        let mut buffer = String::new();
-        while let Some(chunk) = stream.next().await {
+        loop {
             if is_cancelled(&id_clone) {
                 break;
             }
-            let chunk = match chunk {
-                Ok(c) => c,
-                Err(e) => {
+            let chunk = match stream.next().await {
+                Some(Ok(c)) => c,
+                Some(Err(e)) => {
                     emit_error(&app_clone, &id_clone, &format!("流中断: {e}"));
                     return;
                 }
+                None => break,
             };
-            buffer.push_str(&String::from_utf8_lossy(&chunk));
-
-            // 注意必须连分隔符一起吃掉：`drain(..pos)` 在 pos == 0 时
-            // 移除 0 字节、缓冲区**不前进**，而流开头出现连续空行时
-            // pos 恰好就是 0 —— 会变成死循环空转，把 CPU 打满。
-            // `drain(..pos + 2)` 保证每轮至少前进 2 字节。
-            while let Some(pos) = buffer.find("\n\n") {
-                let frame = buffer[..pos].to_string();
-                buffer.drain(..pos + 2);
-                emit_frame(&app_clone, &id_clone, &frame);
+            for payload in decoder.push(&String::from_utf8_lossy(&chunk)) {
+                let _ = app_clone.emit(
+                    DELTA_EVENT,
+                    serde_json::json!({ "id": id_clone, "data": payload }),
+                );
             }
         }
-        if !buffer.is_empty() {
-            emit_frame(&app_clone, &id_clone, &buffer);
+        for payload in decoder.finish() {
+            let _ = app_clone.emit(
+                DELTA_EVENT,
+                serde_json::json!({ "id": id_clone, "data": payload }),
+            );
         }
         let _ = app_clone.emit(DONE_EVENT, serde_json::json!({ "id": id_clone }));
     });
@@ -224,71 +222,253 @@ pub async fn ai_stream_chat(app: AppHandle, req: StreamRequest) -> Result<(), St
     Ok(())
 }
 
-/// 把一个 SSE 帧里的 data 行拼出来推给前端
-fn emit_frame(app: &AppHandle, id: &str, frame: &str) {
+/// 从一个 SSE 帧里取出 data 负载（心跳与 `[DONE]` 返回 None）
+fn frame_payload(frame: &str) -> Option<String> {
     let payload: String = frame
         .lines()
         .filter_map(|line| line.strip_prefix("data:"))
         .map(|s| s.trim_start())
         .collect::<Vec<_>>()
         .join("\n");
+    // 心跳 / 注释行没有 data，丢掉
     if payload.is_empty() {
-        return;
+        return None;
     }
     // `[DONE]` 是 SSE 的结束标记，前端自己会认，这里不推。
     if payload == "[DONE]" {
-        return;
+        return None;
     }
-    let _ = app.emit(
-        DELTA_EVENT,
-        serde_json::json!({ "id": id, "data": payload }),
-    );
+    Some(payload)
+}
+
+/// SSE 帧解码器。
+///
+/// 抽成独立结构而不是写成一个函数，是为了**同步与异步两种驱动共用**：
+///
+/// - 命令侧用 `bytes_stream().next().await` 逐块喂（见 `ai_stream_chat`）
+/// - 单测侧用普通 `Iterator` 逐块喂
+///
+/// 而帧切分这份最容易出错的逻辑只有一处实现。
+#[derive(Default)]
+pub(crate) struct SseDecoder {
+    buffer: String,
+    /// 上一块末尾的 `\r` 被挂起来了
+    ///
+    /// 因为 `\r` 可能是 `\r\n` 的前半，也可能是一个**裸**回车，
+    /// 而下一块的开头才能区分。急着归一化就会把 `\r\n` 拆成两个换行。
+    pending_cr: bool,
+}
+
+impl SseDecoder {
+    /// 喂进一个网络块，返回本次能凑齐的完整帧负载
+    pub(crate) fn push(&mut self, chunk: &str) -> Vec<String> {
+        let mut text = String::new();
+        if self.pending_cr {
+            text.push('\r');
+            self.pending_cr = false;
+        }
+        text.push_str(chunk);
+        // 末尾的 `\r` 同样要挂起
+        if text.ends_with('\r') {
+            text.pop();
+            self.pending_cr = true;
+        }
+
+        // 行尾归一化：SSE 允许 \r\n / \n / \r 三种行尾，
+        // 而按空行切帧只认相邻的两个 \n。不归一化的话
+        // `\r\n\r\n` 里根本没有相邻的 \n，整段会并成一帧。
+        self.buffer
+            .push_str(&text.replace("\r\n", "\n").replace('\r', "\n"));
+
+        let mut out = Vec::new();
+        // 注意必须连分隔符一起吃掉：`drain(..pos)` 在 pos == 0 时
+        // 移除 0 字节、缓冲区**不前进**，而流开头出现连续空行时
+        // pos 恰好就是 0 —— 会变成死循环空转，把 CPU 打满。
+        // `drain(..pos + 2)` 保证每轮至少前进 2 字节。
+        while let Some(pos) = self.buffer.find("\n\n") {
+            let frame = self.buffer[..pos].to_string();
+            self.buffer.drain(..pos + 2);
+            if let Some(payload) = frame_payload(&frame) {
+                out.push(payload);
+            }
+        }
+        out
+    }
+
+    /// 流结束：吐出没被空行收尾的最后一帧
+    pub(crate) fn finish(&mut self) -> Vec<String> {
+        if self.pending_cr {
+            self.buffer.push('\r');
+            self.pending_cr = false;
+        }
+        frame_payload(&self.buffer).into_iter().collect()
+    }
+}
+
+/// 同步驱动解码器（测试与将来可能的非流式调用用）
+#[cfg(test)]
+pub(crate) fn pump_sse<I, F, C>(chunks: I, is_cancelled: C, mut on_payload: F) -> bool
+where
+    I: Iterator<Item = Result<String, String>>,
+    F: FnMut(&str) -> bool,
+    C: Fn() -> bool,
+{
+    let mut decoder = SseDecoder::default();
+    for chunk in chunks {
+        if is_cancelled() {
+            return false;
+        }
+        // 网络层出错：停止泵送。上层已经把错误 emit 出去了。
+        let Ok(text) = chunk else { return true };
+        for payload in decoder.push(&text) {
+            if !on_payload(&payload) {
+                return false;
+            }
+        }
+    }
+    for payload in decoder.finish() {
+        on_payload(&payload);
+    }
+    true
 }
 
 #[cfg(test)]
 mod tests {
-    /// 把生产代码里的切分逻辑抽出来单独测——
-    /// 那个 while 曾经因为 `drain(..0)` 不前进而死循环空转，
-    /// 所以这里必须覆盖「开头就是空行」这个边界。
-    fn split_frames(buffer: &mut String) -> Vec<String> {
-        let mut frames = Vec::new();
-        while let Some(pos) = buffer.find("\n\n") {
-            let frame = buffer[..pos].to_string();
-            buffer.drain(..pos + 2);
-            frames.push(frame);
-        }
-        frames
+    use super::pump_sse;
+
+    /// 把字符串块喂进泵里，返回收到的 payload
+    fn pump(chunks: &[&str]) -> (Vec<String>, bool) {
+        let owned: Vec<String> = chunks.iter().map(|s| (*s).to_string()).collect();
+        let mut out = Vec::new();
+        let completed = pump_sse(
+            owned.into_iter().map(Ok),
+            || false,
+            |payload| {
+                out.push(payload.to_string());
+                true
+            },
+        );
+        (out, completed)
     }
 
     #[test]
-    fn 分帧逻辑按空行切分() {
-        let mut buffer = String::from("data: a\n\ndata: b\n\n");
-        assert_eq!(split_frames(&mut buffer), vec!["data: a", "data: b"]);
-        assert!(buffer.is_empty());
+    fn 基本分帧() {
+        let (out, completed) = pump(&["data: a\n\ndata: b\n\n"]);
+        assert_eq!(out, vec!["a", "b"]);
+        assert!(completed);
+    }
+
+    #[test]
+    fn 一帧被拆在多个网络块里也能正确重组() {
+        // 真实场景：chunk 边界与 SSE 帧边界不对齐
+        let (out, _) = pump(&["da", "ta: 甲\n", "\nda", "ta: 乙\n\n"]);
+        assert_eq!(out, vec!["甲", "乙"]);
     }
 
     #[test]
     fn 流开头就是空行时不会死循环() {
-        // 回归用例：`drain(..0)` 移除 0 字节、位置不前进 → 曾经空转 99% CPU
-        let mut buffer = String::from("\n\ndata: a\n\n");
-        let frames = split_frames(&mut buffer);
-        assert_eq!(frames, vec!["", "data: a"]);
-        assert!(buffer.is_empty());
+        // 回归：`drain(..0)` 移除 0 字节、位置不前进 → 曾经空转 99% CPU
+        let (out, completed) = pump(&["\n\ndata: a\n\n"]);
+        assert_eq!(out, vec!["a"]);
+        assert!(completed);
     }
 
     #[test]
     fn 连续多个空行也收敛() {
-        let mut buffer = String::from("\n\n\n\n");
-        let frames = split_frames(&mut buffer);
-        assert!(frames.len() <= 3);
-        assert!(buffer.is_empty());
+        let (_, completed) = pump(&["\n\n\n\n"]);
+        assert!(completed);
     }
 
     #[test]
     fn 未闭合的尾帧仍然会被处理() {
-        // 上游最后一段可能没有空行结尾
-        let mut buffer = String::from("data: a\n\ndata: tail");
-        assert_eq!(split_frames(&mut buffer), vec!["data: a"]);
-        assert_eq!(buffer, "data: tail");
+        let (out, _) = pump(&["data: a\n\ndata: tail"]);
+        assert_eq!(out, vec!["a", "tail"]);
+    }
+
+    #[test]
+    fn 心跳与注释行被丢掉() {
+        let (out, _) = pump(&[": ping\n\ndata: a\n\n", "\n"]);
+        assert_eq!(out, vec!["a"]);
+    }
+
+    #[test]
+    fn done_标记不会被推给前端() {
+        let (out, _) = pump(&["data: a\n\ndata: [DONE]\n\n"]);
+        assert_eq!(out, vec!["a"]);
+    }
+
+    #[test]
+    fn 同一帧里的多个_data_行会被拼起来() {
+        let (out, _) = pump(&["data: 第一行\ndata: 第二行\n\n"]);
+        assert_eq!(out, vec!["第一行\n第二行"]);
+    }
+
+    #[test]
+    fn data_后面有空格会被去掉() {
+        let (out, _) = pump(&["data:  甲\n\n"]);
+        assert_eq!(out, vec!["甲"]);
+    }
+
+    #[test]
+    fn 取消后立即停止且不再推送() {
+        let owned: Vec<String> = ["data: a\n\n", "data: b\n\n"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let mut out = Vec::new();
+        let completed = pump_sse(
+            owned.into_iter().map(Ok),
+            || true, // 一开始就要求取消
+            |p| {
+                out.push(p.to_string());
+                true
+            },
+        );
+        assert!(!completed);
+        assert!(out.is_empty());
+    }
+
+    #[test]
+    fn 回调返回_false时停止泵送() {
+        let owned: Vec<String> = ["data: a\n\ndata: b\n\n"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let mut out = Vec::new();
+        let completed = pump_sse(
+            owned.into_iter().map(Ok),
+            || false,
+            |p| {
+                out.push(p.to_string());
+                false // 第一条就要求停
+            },
+        );
+        assert!(!completed);
+        assert_eq!(out, vec!["a"]);
+    }
+
+    #[test]
+    fn 网络出错时停止但不panic() {
+        let chunks: Vec<Result<String, String>> =
+            vec![Ok("data: a\n\n".into()), Err("断了".into())];
+        let mut out = Vec::new();
+        let completed = pump_sse(
+            chunks.into_iter(),
+            || false,
+            |p| {
+                out.push(p.to_string());
+                true
+            },
+        );
+        // 已经收到的照样交付，然后停下
+        assert_eq!(out, vec!["a"]);
+        assert!(completed);
+    }
+
+    #[test]
+    fn crlf_行尾也能切分() {
+        // 部分网关会用 \r\n
+        let (out, _) = pump(&["data: a\r\n\r\ndata: b\r\n\r\n"]);
+        assert_eq!(out, vec!["a", "b"]);
     }
 }
