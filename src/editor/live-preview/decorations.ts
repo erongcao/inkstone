@@ -23,6 +23,9 @@ import { TaskCheckboxWidget } from "./task-widget";
 import { blockRenderers } from "../render/registry";
 import { findInlineMath, renderInlineMath } from "../render/inline-math";
 import { findTaskItems } from "../render/task-list";
+import { overlapsAny } from "../render/scan";
+import { findFootnotes, type FootnoteModel } from "../render/footnote";
+import { FootnoteRefWidget, FootnoteDefWidget } from "./footnote-widget";
 import type { BlockMatch, BlockRenderer } from "../render/types";
 import type { MarkerDisplayMode } from "@/settings/schema";
 
@@ -204,9 +207,21 @@ export function buildLivePreviewDecorations(
   const blockDecos: Range<Decoration>[] = [];
   const headingDecos: Range<Decoration>[] = [];
   const renderedDecos: Range<Decoration>[] = [];
+  const footnoteDecos: Range<Decoration>[] = [];
 
   // 任务项要**先**算出来：后面的装饰循环要用它来藏列表符号、换勾选框
   const taskItems = findTaskItems(syntaxTree, source);
+
+  // 脚注也要**先**算出来：lezer 会把 `[^1]和另一个[^note]` 合成**一个**
+  // `Link` 节点（实测生产 DOM：`cm-md-link` 覆盖了 `^1]和另一个[^note`，
+  // 两端的方括号被当链接括号藏掉），而脚注引用要自己接管这几个字符。
+  // 所以行内标记那一轮必须先知道脚注引用的区间，才能让开。
+  const footnotes = findFootnotes(syntaxTree, source);
+  // 只有**会被渲染**的引用（编号 > 0）才需要让路；
+  // 没有定义的 `[^missing]` 是字面量，保持原有行为不动
+  const footnoteRefRanges = footnotes.refs
+    .filter((ref) => ref.number > 0)
+    .map((ref) => ({ from: ref.from, to: ref.to }));
 
   // 一次遍历收集全部三类装饰。
   // 重构前这里是三次独立的 `tree.iterate()`（实测 4000 行文档 0.78ms），
@@ -219,6 +234,13 @@ export function buildLivePreviewDecorations(
       // ---- 1. 行内标记（可隐藏 / 可弱化）----
       const spec = INLINE_MARKER_BY_TYPE.get(name);
       if (spec) {
+        // 这个 Link 里含有脚注引用 → 整个节点交给脚注渲染器，别插手
+        if (
+          name === "Link" &&
+          overlapsAny({ from: ref.from, to: ref.to }, footnoteRefRanges)
+        ) {
+          return false;
+        }
         const analyzed = analyze(ref.node, spec);
         if (!analyzed) return;
 
@@ -347,12 +369,63 @@ export function buildLivePreviewDecorations(
     );
   }
 
+  // ── 脚注 `[^1]` / `[^1]: 定义` ──
+  // 放在最后：脚注扫描要读整篇源码，块级渲染器占用的区间已经被 `blockRanges`
+  // 登记过，脚注不会再往已被替换的区间里插东西。
+  footnoteDecos.push(...buildFootnoteDecorations(footnotes, cursor));
+
   // `DecorationSet` 只是类型别名（= RangeSet<Decoration>），
   // 真正的构造入口是静态方法 `Decoration.set(ranges, sort)`。
   return Decoration.set(
-    [...inlineDecos, ...blockDecos, ...headingDecos, ...renderedDecos],
+    [...inlineDecos, ...blockDecos, ...headingDecos, ...renderedDecos, ...footnoteDecos],
     true,
   );
+}
+
+/**
+ * 生成脚注装饰。
+ *
+ * 两条规则：
+ *   - 引用 `[^1]` → 换成上标数字，点它跳到定义
+ *   - 定义 `[^1]:` → 换成 `1.` 编号，整块套一层样式；点编号跳回第一个引用
+ *
+ * 「光标进入就露出源码」沿用同一套展开判定（严格开区间），
+ * 所以脚注标记可以直接编辑——改标签、改编号，改完立刻重算。
+ *
+ * 编号为 0 的（没有定义的引用 / 没有被引用的定义）**不生成任何装饰**：
+ * 它们在语义上就是普通文本，硬渲染反而会撒谎。
+ */
+function buildFootnoteDecorations(
+  model: FootnoteModel,
+  cursor: number,
+): Range<Decoration>[] {
+  const { refs, defs } = model;
+  const decos: Range<Decoration>[] = [];
+
+  for (const ref of refs) {
+    if (ref.number === 0) continue;
+    if (cursor > ref.from && cursor < ref.to) continue;
+    decos.push(
+      Decoration.replace({
+        widget: new FootnoteRefWidget(ref.number, ref.targetFrom, ref.from),
+      }).range(ref.from, ref.to),
+    );
+  }
+
+  for (const def of defs) {
+    if (def.number === 0) continue;
+    // 整块样式：缩进 + 分隔，让定义在正文里能一眼认出
+    decos.push(Decoration.mark({ class: "cm-md-footnote-def" }).range(def.from, def.to));
+    // 光标在定义块内 → 露出 `[^1]:` 原文
+    if (cursor > def.from && cursor < def.markerTo) continue;
+    decos.push(
+      Decoration.replace({
+        widget: new FootnoteDefWidget(def.number, def.firstRefFrom),
+      }).range(def.markerFrom, def.markerTo),
+    );
+  }
+
+  return decos;
 }
 
 /**

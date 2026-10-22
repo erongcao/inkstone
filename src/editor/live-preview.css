@@ -459,3 +459,62 @@
   color: var(--ink-fg-faint);
   font-family: var(--ink-mono-family);
 }
+
+/* ═══════════════════════════════════════════════════════════
+   GFM 脚注
+   ═══════════════════════════════════════════════════════════ */
+
+/*
+ * 引用处的上标数字。
+ *
+ * 不真的用 <sup>：它会改行高，导致上方/下方相邻行的基线在光标进出时跳动。
+ * vertical-align 加固定 line-height 在纯文本流里更稳。
+ */
+.cm-md-footnote-ref {
+  vertical-align: super;
+  font-size: 0.72em;
+  line-height: 1;
+  font-weight: 600;
+  color: var(--ink-accent);
+  cursor: pointer;
+  padding: 0 1px;
+  border-radius: 2px;
+  user-select: none;
+}
+
+.cm-md-footnote-ref:hover {
+  background-color: var(--ink-code-bg);
+}
+
+/*
+ * 定义块。
+ *
+ * 定义留在原文位置（不进底部脚注区），这是 Typora 的做法：
+ * 文档坐标不变 → 脚注位置不需要在渲染层里「搬来搬去」，
+ * 光标、跳转、撤销全都天然对得上（红线 1 的延伸）。
+ */
+.cm-md-footnote-def {
+  display: block;
+  padding-left: 1.4em;
+  margin: 0.2em 0;
+  border-left: 2px solid var(--ink-table-border);
+  color: var(--ink-fg-muted);
+  font-size: 0.9375em;
+}
+
+/* 定义处的编号标记（`[^1]:` 换成的 `1.`） */
+.cm-md-footnote-badge {
+  display: inline-block;
+  min-width: 1.2em;
+  margin-left: -1.4em;
+  margin-right: 0.4em;
+  color: var(--ink-fg-faint);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  user-select: none;
+}
+
+.cm-md-footnote-badge:hover {
+  color: var(--ink-accent);
+}

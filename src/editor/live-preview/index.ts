@@ -127,6 +127,22 @@ export function livePreview(): Extension {
           return true;
         }
 
+        // 脚注跳转：`[data-footnote-jump]`
+        // 点引用跳定义、点定义跳回第一个引用。**只移动光标，不改文档**——
+        // 脚注内容本来就躺在 Markdown 文本里，这里只是带用户过去。
+        const footnote = target?.closest?.("[data-footnote-jump]") as HTMLElement | null;
+        if (footnote) {
+          const to = Number(footnote.dataset.footnoteJump);
+          if (!Number.isFinite(to)) return false;
+          event.preventDefault();
+          view.dispatch({
+            selection: { anchor: to + 1 },
+            effects: EditorView.scrollIntoView(to + 1, { y: "center" }),
+          });
+          view.focus();
+          return true;
+        }
+
         // 行内公式：`[data-inline-from]`
         const inline = target?.closest?.("[data-inline-from]") as HTMLElement | null;
         if (inline) {
