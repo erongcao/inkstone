@@ -23,12 +23,20 @@
  * 要么得替用户造一个文件名（用户会莫名其妙多出一个文件）。
  * 两种都不对，所以不保存——但**崩溃恢复快照照样写**，
  * 未命名草稿恰恰是最需要崩溃恢复的那一种。
+ *
+ * ## 存的是整个会话，不只是当前那一页
+ *
+ * 用户开了五个标签页时，崩溃恢复的答案必须是「五个都在」。
+ * 只存当前页的话，另外四页的未保存内容就凭空消失了——
+ * 那不是恢复，是部分恢复。
  */
 
 import { readSettings } from "@/settings/store";
 import {
-  getDocumentState,
-  saveDocument,
+  exportSession,
+  externallyChangedTabIds,
+  getTabs,
+  saveTab,
   setRecoveryError,
   subscribeDocument,
 } from "@/ipc/document";
@@ -93,7 +101,6 @@ export function createThrottle(
  * 返回一个停止函数。组件卸载时调用它，否则定时器会泄漏。
  */
 export function startAutoSaveRuntime(): () => void {
-  let lastContent = getDocumentState().content;
   let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
   const cancelAutoSave = () => {
@@ -104,46 +111,30 @@ export function startAutoSaveRuntime(): () => void {
   };
 
   const draftWriter = createThrottle(() => {
-    const state = getDocumentState();
-    const error = writeDraft({
-      path: state.path,
-      content: state.content,
-      title: state.title,
-      savedAt: Date.now(),
-    });
+    const error = writeDraft(exportSession());
     // 写不进去要说出来：「以为有崩溃恢复其实没有」比「没有崩溃恢复」危险得多
     setRecoveryError(error);
   }, DRAFT_THROTTLE_MS);
 
   const stop = subscribeDocument(() => {
-    const state = getDocumentState();
-    const settings = readSettings();
-
-    // 内容已经落盘 → 快照没有存在意义了
-    if (state.path !== null && !state.dirty) {
+    // 全部标签页都已落盘 → 快照没有存在意义了
+    if (!hasUnsaved()) {
       cancelAutoSave();
       draftWriter.cancel();
       clearDraft();
       setRecoveryError(null);
-      lastContent = state.content;
       return;
     }
-
-    if (state.content === lastContent) return;
-    lastContent = state.content;
 
     // 崩溃恢复快照：无论自动保存开没开，都要写
     draftWriter.call();
 
+    const settings = readSettings();
     if (!settings.general.autoSave) return;
-    // 文件在外部被改过、而用户还没决定怎么办时，**不写**：
-    // 现在写下去就是把对方的改动无声抹掉。
-    if (state.externalChange) return;
     cancelAutoSave();
     autoSaveTimer = setTimeout(() => {
       autoSaveTimer = null;
-      // saveDocument 自己会处理失败（写进 saveError），这里不 await 也不会静默
-      void saveDocument();
+      void saveAllDirtyTabs();
     }, settings.general.autoSaveInterval);
   });
 
@@ -152,4 +143,25 @@ export function startAutoSaveRuntime(): () => void {
     cancelAutoSave();
     draftWriter.cancel();
   };
+}
+
+/** 是否有任何一个标签页还没落盘 */
+function hasUnsaved(): boolean {
+  return getTabs().some((tab) => tab.dirty);
+}
+
+/**
+ * 把所有还有未保存改动的标签页写到磁盘。
+ *
+ * 逐个存而不是只存当前页：用户切到别页之后，当前页的改动同样要落盘，
+ * 不能等到它被切回来时才存。
+ */
+export async function saveAllDirtyTabs(): Promise<void> {
+  const blocked = externallyChangedTabIds();
+  for (const tab of getTabs()) {
+    if (!tab.dirty || !tab.path) continue;
+    // 外部改动还没解决的那一页跳过：写下去就是把对方的改动无声抹掉
+    if (blocked.has(tab.id)) continue;
+    await saveTab(tab.id);
+  }
 }

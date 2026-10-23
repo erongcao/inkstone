@@ -35,7 +35,7 @@ function formatTime(timestamp: number): string {
 }
 
 export function RecoveryDialog({ candidate, onRestore, onDiscard }: Props) {
-  const hasDiskVersion = candidate.diskContent !== null;
+  const many = candidate.unsavedCount > 1;
 
   return (
     <div
@@ -48,20 +48,23 @@ export function RecoveryDialog({ candidate, onRestore, onDiscard }: Props) {
         <h2>发现未保存的改动</h2>
 
         <p className="recovery-text">
-          {candidate.path ? (
+          {many ? (
             <>
-              文件 <code>{candidate.path}</code> 在 {formatTime(candidate.savedAt)}{" "}
-              有一份没保存的版本。
+              有 <strong>{candidate.unsavedCount}</strong> 个标签页在{" "}
+              {formatTime(candidate.savedAt)} 还有没保存的版本。
             </>
           ) : (
-            <>未命名草稿在 {formatTime(candidate.savedAt)} 有一份没保存的版本。</>
+            <>
+              有 {candidate.unsavedCount} 个标签页在 {formatTime(candidate.savedAt)}{" "}
+              还有没保存的版本。
+            </>
           )}
         </p>
 
         <p className="recovery-text recovery-text--muted">
-          {hasDiskVersion
-            ? "磁盘上的版本和你当时编辑的内容不一样。要恢复吗？恢复后这份内容仍是「未保存」状态，你可以自己决定要不要写回磁盘。"
-            : "磁盘上已经找不到这个文件了。恢复后这份内容仍是「未保存」状态，你可以另存到别处。"}
+          {many
+            ? `恢复会把这些标签页一起还原回来（当时打开的是「${candidate.title}」）。恢复后它们仍是「未保存」状态，你可以自己决定要不要写回磁盘。`
+            : "恢复会把这个标签页还原回来。恢复后它仍是「未保存」状态，你可以自己决定要不要写回磁盘。"}
         </p>
 
         <div className="recovery-actions">

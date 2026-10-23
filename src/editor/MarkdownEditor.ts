@@ -235,15 +235,34 @@ export interface MarkdownEditorHandle {
   destroy(): void;
   /** 底层视图（高级用法：查找替换面板、滚动定位等） */
   view: EditorView;
+  /**
+   * 取当前状态（存起来用于标签页切换）。
+   *
+   * 状态里带着撤销历史与光标位置——这正是「切回上一页，⌘Z 还能撤上一轮编辑」
+   * 所依赖的东西。
+   */
+  getState(): EditorState;
+  /** 为某个文档创建一份新的状态（与当前状态同一套扩展） */
+  createState(doc: string): EditorState;
+  /**
+   * 切换到另一份状态。
+   *
+   * 换的是**整个状态**而不是往当前状态里塞新文档：
+   * 后者会把撤销栈清掉，用户切回上一页按 ⌘Z 会发现什么都没得撤。
+   */
+  setState(state: EditorState): void;
 }
 
 export function createMarkdownEditor(
   options: MarkdownEditorOptions,
 ): MarkdownEditorHandle {
   const autoPairBox = new Compartment();
+  // 扩展只建一次：所有标签页的状态共用同一套扩展（Compartment 也共用），
+  // 这样切换状态时自动配对级别之类的运行时配置不会丢
+  const extensions = buildExtensions(options, autoPairBox);
   const state = EditorState.create({
     doc: options.doc ?? "",
-    extensions: buildExtensions(options, autoPairBox),
+    extensions,
   });
 
   const view = new EditorView({
@@ -275,6 +294,9 @@ export function createMarkdownEditor(
       });
     },
     focus: () => view.focus(),
+    getState: () => view.state,
+    createState: (doc: string) => EditorState.create({ doc, extensions }),
+    setState: (next: EditorState) => view.setState(next),
     setDisplayMode: (mode: MarkerDisplayMode) => setDisplayModeOf(view, mode),
     setAutoPairMode: (mode: AutoPairMode) => {
       view.dispatch({ effects: autoPairBox.reconfigure(autoPair(mode)) });

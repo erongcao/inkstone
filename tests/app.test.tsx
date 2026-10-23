@@ -182,9 +182,16 @@ describe("应用交互", () => {
 
   it("启动时发现未保存的改动会提示恢复，恢复后内容回到编辑器", async () => {
     writeDraft({
-      path: null,
-      content: "崩溃前的文字",
-      title: "未命名",
+      tabs: [
+        {
+          id: "t1",
+          path: null,
+          title: "未命名",
+          content: "崩溃前的文字",
+          savedContent: "",
+        },
+      ],
+      activeId: "t1",
       savedAt: Date.now(),
     });
 
@@ -202,9 +209,16 @@ describe("应用交互", () => {
 
   it("丢弃未保存的改动后不再提示", async () => {
     writeDraft({
-      path: null,
-      content: "不要了",
-      title: "未命名",
+      tabs: [
+        {
+          id: "t1",
+          path: null,
+          title: "未命名",
+          content: "不要了",
+          savedContent: "",
+        },
+      ],
+      activeId: "t1",
       savedAt: Date.now(),
     });
 

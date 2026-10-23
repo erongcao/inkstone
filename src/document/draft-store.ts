@@ -3,15 +3,12 @@
  *
  * ## 这层存的是什么
  *
- * 一份「当前正在编辑、但可能还没落盘」的文本快照。机器崩了 / 电断了之后，
- * 靠它把用户最后敲的字捞回来。
+ * 一次**会话**的快照：所有标签页 + 当前激活的是哪一页 + 各自的文本内容。
  *
- * ## 为什么不是「每次改动都存一份」
- *
- * 只存**一份**——当前正在编辑的那一份。理由：
- * - 崩溃恢复要回答的是「我刚才敲的东西还在吗」，不是「我最近编辑过哪些文件」
- * - 多份快照要处理「哪一份是最新的」「打开另一个文件后旧快照怎么办」这类问题，
- *   而这些问题的正确答案永远是「当前这一份」
+ * 为什么存整个会话而不是一份文本：崩溃恢复要回答的是「我刚才敲的东西还在吗」，
+ * 而用户开了五个标签页时，答案是「五个都在」。
+ * 只存当前那一页的话，另外四页的未保存内容就凭空消失了——
+ * 那不是恢复，是部分恢复。
  *
  * ## 为什么用 localStorage
  *
@@ -26,14 +23,22 @@
 /** 存储键；带版本号是为了以后改结构时能平滑迁移 */
 const DRAFT_KEY = "inkstone.draft.v1";
 
-/** 一份草稿快照 */
-export interface DraftSnapshot {
-  /** 文档绝对路径；null = 未命名草稿 */
+/** 一个标签页的快照 */
+export interface TabSnapshot {
+  id: string;
+  /** 文件绝对路径；null = 未命名草稿 */
   path: string | null;
-  /** 文本内容 */
-  content: string;
-  /** 展示用标题 */
   title: string;
+  content: string;
+  /** 我们相信磁盘上此刻的内容 */
+  savedContent: string;
+}
+
+/** 整个会话的快照 */
+export interface SessionSnapshot {
+  tabs: TabSnapshot[];
+  /** 崩溃前激活的是哪一页 */
+  activeId: string;
   /** 写入时刻（毫秒时间戳） */
   savedAt: number;
 }
@@ -63,11 +68,11 @@ function storage(): Storage | null {
  * 返回 null = 成功；返回字符串 = 失败原因（要如实告诉用户，
  * 「以为有崩溃恢复其实没有」比「没有崩溃恢复」危险得多）。
  */
-export function writeDraft(draft: DraftSnapshot): string | null {
+export function writeDraft(snapshot: SessionSnapshot): string | null {
   const store = storage();
   if (!store) return "本机存储不可用";
   try {
-    store.setItem(DRAFT_KEY, JSON.stringify(draft));
+    store.setItem(DRAFT_KEY, JSON.stringify(snapshot));
     return null;
   } catch (error) {
     // 配额满了最常见——大文档 + localStorage 5MB 上限
@@ -76,19 +81,22 @@ export function writeDraft(draft: DraftSnapshot): string | null {
 }
 
 /** 读一份快照；没有、坏了、格式不对都当成「没有」 */
-export function readDraft(): DraftSnapshot | null {
+export function readDraft(): SessionSnapshot | null {
   const store = storage();
   if (!store) return null;
   try {
     const raw = store.getItem(DRAFT_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<DraftSnapshot>;
-    if (typeof parsed.content !== "string") return null;
-    if (parsed.path !== null && typeof parsed.path !== "string") return null;
+    const parsed = JSON.parse(raw) as Partial<SessionSnapshot>;
+    if (!Array.isArray(parsed.tabs)) return null;
+    const tabs = parsed.tabs.filter(
+      (tab): tab is TabSnapshot =>
+        !!tab && typeof tab.content === "string" && typeof tab.id === "string",
+    );
+    if (tabs.length === 0) return null;
     return {
-      path: parsed.path ?? null,
-      content: parsed.content,
-      title: typeof parsed.title === "string" ? parsed.title : "未命名",
+      tabs,
+      activeId: typeof parsed.activeId === "string" ? parsed.activeId : tabs[0].id,
       savedAt: typeof parsed.savedAt === "number" ? parsed.savedAt : 0,
     };
   } catch {

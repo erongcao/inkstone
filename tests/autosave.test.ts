@@ -10,8 +10,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   getDocumentState,
-  newDocument,
+  getTabs,
   openDocumentAt,
+  resetTabs,
   saveDocument,
   setDocumentContent,
   subscribeDocument,
@@ -30,7 +31,7 @@ const README = `${SAMPLE_ROOT}/README.md`;
 
 describe("脏标记：以磁盘上的内容为准", () => {
   beforeEach(() => {
-    newDocument();
+    resetTabs();
   });
 
   it("改一个字 → 脏", async () => {
@@ -91,7 +92,7 @@ describe("自动保存", () => {
     stop?.();
     stop = null;
     vi.useRealTimers();
-    newDocument();
+    resetTabs();
   });
 
   it("停手够久就自动保存（脏标记自己变干净）", async () => {
@@ -128,7 +129,7 @@ describe("自动保存", () => {
   });
 
   it("未命名草稿不自动保存（没有落盘目标）", async () => {
-    newDocument();
+    resetTabs();
     setDocumentContent("未命名草稿的内容");
 
     await vi.advanceTimersByTimeAsync(300);
@@ -151,7 +152,7 @@ describe("崩溃恢复快照", () => {
     stop?.();
     stop = null;
     vi.useRealTimers();
-    newDocument();
+    resetTabs();
     clearDraft();
   });
 
@@ -163,8 +164,8 @@ describe("崩溃恢复快照", () => {
 
     const draft = readDraft();
     expect(draft).not.toBeNull();
-    expect(draft?.content).toBe("崩溃前的最后一句话");
-    expect(draft?.path).toBe(README);
+    expect(draft?.tabs[0]?.content).toBe("崩溃前的最后一句话");
+    expect(draft?.tabs[0]?.path).toBe(README);
   });
 
   it("节流：连续改动不会每次都写", async () => {
@@ -204,71 +205,120 @@ describe("崩溃恢复快照", () => {
   });
 
   it("未命名草稿也要写快照（恰恰是最需要恢复的那一种）", async () => {
-    newDocument();
+    resetTabs();
     setDocumentContent("没命名的草稿");
 
     await vi.advanceTimersByTimeAsync(10);
 
     const draft = readDraft();
-    expect(draft?.path).toBeNull();
-    expect(draft?.content).toBe("没命名的草稿");
+    expect(draft?.tabs[0]?.path).toBeNull();
+    expect(draft?.tabs[0]?.content).toBe("没命名的草稿");
   });
 });
 
 describe("恢复检查", () => {
+  /** 写一份会话快照 */
+  function writeSession(
+    tabs: { id: string; path: string | null; title: string; content: string; savedContent: string }[],
+    activeId = tabs[0]?.id ?? "",
+  ) {
+    writeDraft({ tabs, activeId, savedAt: Date.now() });
+  }
+
   beforeEach(() => {
     clearDraft();
   });
 
-  it("没有快照 → 没有可恢复的", async () => {
-    expect(await findRecoveryCandidate()).toBeNull();
+  it("没有快照 → 没有可恢复的", () => {
+    expect(findRecoveryCandidate()).toBeNull();
   });
 
-  it("快照内容 == 磁盘内容 → 静默清掉，不打扰用户", async () => {
-    writeDraft({
-      path: README,
-      content: SAMPLE_CONTENTS[README],
-      title: "README",
-      savedAt: Date.now(),
-    });
+  it("快照内容 == 磁盘内容 → 静默清掉，不打扰用户", () => {
+    writeSession([
+      {
+        id: "t1",
+        path: README,
+        title: "README",
+        content: SAMPLE_CONTENTS[README],
+        savedContent: SAMPLE_CONTENTS[README],
+      },
+    ]);
 
-    expect(await findRecoveryCandidate()).toBeNull();
+    expect(findRecoveryCandidate()).toBeNull();
     expect(readDraft()).toBeNull();
   });
 
-  it("快照内容 != 磁盘内容 → 给出候选", async () => {
-    writeDraft({
-      path: README,
-      content: "用户在崩溃前敲进去的字",
-      title: "README",
-      savedAt: Date.now(),
-    });
+  it("快照内容 != 磁盘内容 → 给出候选", () => {
+    writeSession([
+      {
+        id: "t1",
+        path: README,
+        title: "README",
+        content: "用户在崩溃前敲进去的字",
+        savedContent: SAMPLE_CONTENTS[README],
+      },
+    ]);
 
-    const candidate = await findRecoveryCandidate();
+    const candidate = findRecoveryCandidate();
     expect(candidate).not.toBeNull();
-    expect(candidate?.content).toBe("用户在崩溃前敲进去的字");
-    expect(candidate?.diskContent).toBe(SAMPLE_CONTENTS[README]);
+    expect(candidate?.session.tabs[0].content).toBe("用户在崩溃前敲进去的字");
+    expect(candidate?.unsavedCount).toBe(1);
   });
 
-  it("未命名草稿也给候选（没有磁盘版本可比）", async () => {
-    writeDraft({ path: null, content: "无名草稿", title: "未命名", savedAt: Date.now() });
+  it("未命名草稿也给候选（没有磁盘版本可比）", () => {
+    writeSession([
+      { id: "t1", path: null, title: "未命名", content: "无名草稿", savedContent: "" },
+    ]);
 
-    const candidate = await findRecoveryCandidate();
-    expect(candidate?.path).toBeNull();
-    expect(candidate?.diskContent).toBeNull();
+    const candidate = findRecoveryCandidate();
+    expect(candidate?.session.tabs[0].path).toBeNull();
+    expect(candidate?.unsavedCount).toBe(1);
   });
 
-  it("恢复：内容回到编辑器，且仍是未保存状态", async () => {
-    writeDraft({
-      path: README,
-      content: "恢复出来的内容",
-      title: "README",
-      savedAt: Date.now(),
-    });
-    const found = await findRecoveryCandidate();
+  it("多个标签页：没保存的页数要数清楚", () => {
+    writeSession([
+      {
+        id: "t1",
+        path: README,
+        title: "README",
+        content: "改过的",
+        savedContent: SAMPLE_CONTENTS[README],
+      },
+      {
+        id: "t2",
+        path: null,
+        title: "未命名",
+        content: "也改过的",
+        savedContent: "",
+      },
+      {
+        id: "t3",
+        path: null,
+        title: "另一个",
+        content: "没改过",
+        savedContent: "没改过",
+      },
+    ]);
+
+    const candidate = findRecoveryCandidate();
+    expect(candidate?.unsavedCount).toBe(2);
+    expect(candidate?.session.tabs).toHaveLength(3);
+  });
+
+  it("恢复：内容回到编辑器，且仍是未保存状态", () => {
+    writeSession([
+      {
+        id: "t1",
+        path: README,
+        title: "README",
+        content: "恢复出来的内容",
+        savedContent: SAMPLE_CONTENTS[README],
+      },
+    ]);
+    const found = findRecoveryCandidate();
     expect(found).not.toBeNull();
 
-    await applyRecovery(found!);
+    applyRecovery(found!);
 
     const state = getDocumentState();
     expect(state.content).toBe("恢复出来的内容");
@@ -277,16 +327,43 @@ describe("恢复检查", () => {
     expect(state.dirty).toBe(true);
   });
 
-  it("丢弃：快照被清掉，下次启动不再问", async () => {
-    writeDraft({
-      path: README,
-      content: "不要了",
-      title: "README",
-      savedAt: Date.now(),
-    });
+  it("恢复：多个标签页一起回来", () => {
+    writeSession([
+      {
+        id: "t1",
+        path: README,
+        title: "README",
+        content: "第一页的内容",
+        savedContent: SAMPLE_CONTENTS[README],
+      },
+      {
+        id: "t2",
+        path: null,
+        title: "未命名",
+        content: "第二页的内容",
+        savedContent: "",
+      },
+    ]);
+    const found = findRecoveryCandidate();
+    applyRecovery(found!);
+
+    expect(getTabs()).toHaveLength(2);
+    expect(getDocumentState().content).toBe("第一页的内容");
+  });
+
+  it("丢弃：快照被清掉，下次启动不再问", () => {
+    writeSession([
+      {
+        id: "t1",
+        path: README,
+        title: "README",
+        content: "不要了",
+        savedContent: SAMPLE_CONTENTS[README],
+      },
+    ]);
     discardRecovery();
     expect(readDraft()).toBeNull();
-    expect(await findRecoveryCandidate()).toBeNull();
+    expect(findRecoveryCandidate()).toBeNull();
   });
 });
 

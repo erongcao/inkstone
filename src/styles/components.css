@@ -880,3 +880,86 @@
   gap: 8px;
   margin-top: 16px;
 }
+
+/*
+ * 标签栏
+ * ═══════════════════════════════════════════════════════════ */
+
+/* 横向滚动：标签页多了以后可以滚，不换行 */
+.tab-bar {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  flex: none;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0 6px;
+  border-bottom: 1px solid var(--ink-border);
+  background-color: var(--ink-bg-soft);
+  scrollbar-width: thin;
+}
+
+.tab-bar__item {
+  display: flex;
+  align-items: center;
+  flex: none;
+  max-width: 220px;
+  border-right: 1px solid var(--ink-border);
+}
+
+.tab-bar__item.is-active {
+  background-color: var(--ink-bg);
+}
+
+.tab-bar__label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 4px 7px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--ink-fg-muted);
+  font-family: var(--ink-ui-family, var(--ink-font-family));
+  font-size: 12.5px;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.tab-bar__item.is-active .tab-bar__label {
+  color: var(--ink-fg);
+  font-weight: 600;
+}
+
+.tab-bar__label:hover {
+  color: var(--ink-fg);
+}
+
+.tab-bar__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 未保存标记：一个小圆点 */
+.tab-bar__dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--ink-accent, #0969da);
+}
+
+.tab-bar__close {
+  flex: none;
+  padding: 0 8px 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--ink-fg-faint);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.tab-bar__close:hover {
+  color: var(--ink-fg);
+}

@@ -12,8 +12,8 @@ import * as documentModule from "@/ipc/document";
 import {
   getDocumentState,
   markExternalChange,
-  newDocument,
   openDocumentAt,
+  resetTabs,
   setDocumentContent,
 } from "@/ipc/document";
 import {
@@ -36,12 +36,12 @@ function diskContentIs(content: string) {
 describe("外部修改检测", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    newDocument();
+    resetTabs();
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
-    newDocument();
+    resetTabs();
   });
 
   it("路径不是当前文档 → 不管", async () => {
@@ -97,7 +97,7 @@ describe("外部修改检测", () => {
 describe("冲突的两种选择", () => {
   beforeEach(async () => {
     vi.restoreAllMocks();
-    newDocument();
+    resetTabs();
     await openDocumentAt(README);
     diskContentIs("外部改过的内容");
     setDocumentContent("我本地写的内容");
@@ -106,7 +106,7 @@ describe("冲突的两种选择", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
-    newDocument();
+    resetTabs();
   });
 
   it("用磁盘版本 → 内容换成磁盘那份，不再是脏的", () => {
@@ -146,7 +146,7 @@ describe("外部改动未解决时，自动保存不写", () => {
     stop = null;
     vi.useRealTimers();
     vi.restoreAllMocks();
-    newDocument();
+    resetTabs();
   });
 
   it("有外部改动时自动保存不落盘", async () => {

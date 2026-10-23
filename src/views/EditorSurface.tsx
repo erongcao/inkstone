@@ -6,8 +6,10 @@
  */
 
 import { useEffect, useRef } from "react";
+import type { EditorState } from "@codemirror/state";
 import { createMarkdownEditor, type MarkdownEditorHandle } from "@/editor/MarkdownEditor";
-import { useDocument } from "@/ipc/document";
+import { useDocument, takePendingScroll } from "@/ipc/document";
+import { scrollEditorTo } from "@/editor/active-view";
 import { onMenuAction } from "@/ipc/menu";
 import { runCommand } from "@/editor/commands";
 import { useSettings } from "@/settings/store";
@@ -29,6 +31,17 @@ export function EditorSurface({ onOpenSettings }: Props) {
   const editorRef = useRef<MarkdownEditorHandle | null>(null);
   /** 上一次同步进编辑器的值，用来避免回环更新 */
   const lastSyncedRef = useRef<string>("");
+  /**
+   * 每个标签页各自的编辑器状态。
+   *
+   * 状态里带着撤销历史与光标位置——切回上一页时整个状态换回去，
+   * 用户按 ⌘Z 还能撤上一轮编辑。
+   * 用「往同一个状态里塞新文档」代替的话，撤销栈会被清掉，
+   * 切回来按 ⌘Z 会发现「什么都没得撤」，那比没有多标签更糟。
+   */
+  const statesRef = useRef(new Map<string, EditorState>());
+  /** 当前编辑器对应的是哪个标签页 */
+  const activeTabRef = useRef<string>("");
 
   // 创建编辑器（只做一次）
   useEffect(() => {
@@ -53,6 +66,29 @@ export function EditorSurface({ onOpenSettings }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setContent]);
 
+  // 切换标签页：换整个 EditorState（保住每页各自的撤销历史与光标位置）
+  //
+  // 必须排在「外部内容变化 → 同步进编辑器」之前：
+  // 切换时把 lastSynced 一起更新掉，后面那个 effect 就不会
+  // 又拿新内容去 setValue 一遍（那会把刚换好的状态又搅乱）。
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    const nextId = doc.tabId;
+    const previousId = activeTabRef.current;
+    if (nextId === previousId) return;
+
+    // 离开的那一页：把当前状态存下来（连同它的撤销栈）
+    if (previousId) {
+      statesRef.current.set(previousId, editor.getState());
+    }
+
+    const cached = statesRef.current.get(nextId);
+    editor.setState(cached ?? editor.createState(doc.content));
+    activeTabRef.current = nextId;
+    lastSyncedRef.current = doc.content;
+  }, [doc.tabId, doc.content]);
+
   // 外部内容变化 → 同步进编辑器
   useEffect(() => {
     const editor = editorRef.current;
@@ -62,6 +98,13 @@ export function EditorSurface({ onOpenSettings }: Props) {
     lastSyncedRef.current = doc.content;
     editor.setValue(doc.content);
   }, [doc.content]);
+
+  // 待执行的滚动（「跳到第 N 行」）：必须在状态换完之后做，
+  // 否则偏移量是按旧文档算的
+  useEffect(() => {
+    const offset = takePendingScroll();
+    if (offset !== null) scrollEditorTo(offset);
+  });
 
   // 设置里的显示策略变化 → 同步到编辑器
   useEffect(() => {

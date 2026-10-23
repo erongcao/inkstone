@@ -12,6 +12,7 @@ import { openDocumentAt, useDocument } from "@/ipc/document";
 import { useSettings } from "@/settings/store";
 import { Sidebar } from "@/views/Sidebar";
 import { EditorSurface } from "@/views/EditorSurface";
+import { TabBar } from "@/views/TabBar";
 import { StatusBar } from "@/views/StatusBar";
 import { SettingsPanel } from "@/views/SettingsPanel";
 import { CommandPalette } from "@/views/CommandPalette";
@@ -29,8 +30,8 @@ import {
 import {
   applyRecovery,
   discardRecovery,
-  findRecoveryCandidate,
-  type RecoveryCandidate,
+  refreshRecoveryCandidate,
+  useRecoveryCandidate,
 } from "@/document/recovery";
 
 export default function App() {
@@ -41,7 +42,10 @@ export default function App() {
   const [sidebarVisible, setSidebarVisible] = useState(true);
   const { open, save, saveAs, create } = useDocument();
   const [settings, update] = useSettings();
-  const [recovery, setRecovery] = useState<RecoveryCandidate | null>(null);
+  // 待恢复的会话是**派生**出来的：候选在模块加载时就定好了，
+  // 这里只决定「要不要提示」——设置里关掉了恢复就不提示
+  const recoveryCandidate = useRecoveryCandidate();
+  const recovery = settings.general.restoreSession ? recoveryCandidate : null;
   const conflict = useConflict();
 
   // 挂载原生菜单事件桥
@@ -52,20 +56,13 @@ export default function App() {
   // 自动保存 + 崩溃恢复快照：跟着文档内容走，组件卸载时要停掉定时器
   useEffect(() => startAutoSaveRuntime(), []);
 
+  // 挂载时再检查一次有没有待恢复的会话（模块加载时算的那次可能太早）
+  useEffect(() => {
+    refreshRecoveryCandidate();
+  }, []);
+
   // 文件监听：检测当前文档在外部被修改
   useEffect(() => startWatchRuntime(), []);
-
-  // 启动时检查有没有上次没保存完的改动
-  useEffect(() => {
-    if (!settings.general.restoreSession) return;
-    let cancelled = false;
-    void findRecoveryCandidate().then((candidate) => {
-      if (!cancelled) setRecovery(candidate);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [settings.general.restoreSession]);
 
   // 从 Finder / 命令行打开文件
   useEffect(() => {
@@ -145,6 +142,7 @@ export default function App() {
     <div className="app" data-sidebar={sidebarVisible ? "visible" : "hidden"}>
       {sidebarVisible && <Sidebar />}
       <main className="app__main">
+        <TabBar />
         <EditorSurface onOpenSettings={() => setSettingsOpen(true)} />
       </main>
       <StatusBar />
@@ -152,14 +150,8 @@ export default function App() {
       {recovery && (
         <RecoveryDialog
           candidate={recovery}
-          onRestore={() => {
-            void applyRecovery(recovery);
-            setRecovery(null);
-          }}
-          onDiscard={() => {
-            discardRecovery();
-            setRecovery(null);
-          }}
+          onRestore={() => applyRecovery(recovery)}
+          onDiscard={() => discardRecovery()}
         />
       )}
       <CommandPalette />
