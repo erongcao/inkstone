@@ -11,6 +11,14 @@ export function StatusBar() {
   const [settings] = useSettings();
   const index = useDocumentIndex();
 
+  // 保存失败 / 恢复快照写不进去，都必须让人看见。
+  // 自动保存失败却一声不吭是最坏的结果：用户以为字已经存进磁盘了。
+  const problem = doc.saveError
+    ? `自动保存失败：${doc.saveError}`
+    : doc.recoveryError
+      ? `崩溃恢复不可用：${doc.recoveryError}`
+      : null;
+
   return (
     <footer className="app__statusbar">
       <span>{doc.path ?? "未命名文档"}</span>
@@ -24,6 +32,11 @@ export function StatusBar() {
         ) : (
           <span>统计中…</span>
         ))}
+      {problem && (
+        <span className="app__statusbar-error" role="status">
+          {problem}
+        </span>
+      )}
       <span style={{ marginLeft: "auto" }}>
         {settings.markdown.inlineMath ? "数学已启用" : "数学已禁用"} ·{" "}
         {settings.markdown.mermaid ? "图表已启用" : "图表已禁用"}

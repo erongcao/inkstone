@@ -4,6 +4,7 @@ import { EditorView } from "@codemirror/view";
 import App from "../src/App";
 import { dispatchMenuAction } from "@/ipc/menu";
 import { openPalette } from "@/editor/palette";
+import { readDraft, writeDraft } from "@/document/draft-store";
 
 /**
  * 交互冒烟测试
@@ -171,6 +172,43 @@ describe("应用交互", () => {
     const replaceInput = view.dom.querySelector<HTMLInputElement>('input[name="replace"]');
     expect(replaceInput).not.toBeNull();
     expect(view.root.activeElement).toBe(replaceInput);
+  });
+
+  it("启动时发现未保存的改动会提示恢复，恢复后内容回到编辑器", async () => {
+    writeDraft({
+      path: null,
+      content: "崩溃前的文字",
+      title: "未命名",
+      savedAt: Date.now(),
+    });
+
+    render(<App />);
+
+    expect(await screen.findByRole("dialog", { name: "恢复未保存的改动" })).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "恢复" }));
+      await Promise.resolve();
+    });
+
+    expect(getEditorView().state.doc.toString()).toBe("崩溃前的文字");
+  });
+
+  it("丢弃未保存的改动后不再提示", async () => {
+    writeDraft({
+      path: null,
+      content: "不要了",
+      title: "未命名",
+      savedAt: Date.now(),
+    });
+
+    render(<App />);
+    await screen.findByRole("dialog", { name: "恢复未保存的改动" });
+
+    fireEvent.click(screen.getByRole("button", { name: "丢弃" }));
+
+    expect(screen.queryByRole("dialog", { name: "恢复未保存的改动" })).toBeNull();
+    expect(readDraft()).toBeNull();
   });
 
   it("设置持久化到 localStorage", () => {

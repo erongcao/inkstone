@@ -818,3 +818,65 @@
     box-shadow: 0 8px 24px rgba(1, 4, 9, 0.55);
   }
 }
+
+/*
+ * 崩溃恢复提示框
+ * ═══════════════════════════════════════════════════════════ */
+
+/*
+ * 独立于设置面板的覆盖层：设置面板 z-index 是 100，
+ * 恢复提示要压得住它（设置面板可能在恢复提示之前就开着）。
+ */
+.recovery-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(0, 0, 0, 0.32);
+}
+
+.recovery-panel {
+  width: min(480px, calc(100vw - 48px));
+  padding: 20px 22px 18px;
+  background-color: var(--ink-bg);
+  border: 1px solid var(--ink-border);
+  border-radius: var(--ink-radius-lg);
+  box-shadow: var(--ink-shadow-md);
+  font-family: var(--ink-ui-family, var(--ink-font-family));
+}
+
+.recovery-panel h2 {
+  margin: 0 0 12px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink-fg);
+}
+
+.recovery-text {
+  margin: 0 0 8px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--ink-fg);
+}
+
+.recovery-text code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background-color: var(--ink-bg-inset);
+  font-family: var(--ink-mono-family, monospace);
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.recovery-text--muted {
+  color: var(--ink-fg-muted);
+}
+
+.recovery-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}

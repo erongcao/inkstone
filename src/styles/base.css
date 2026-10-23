@@ -93,6 +93,12 @@ textarea,
   background-color: var(--ink-bg-soft);
 }
 
+/* 保存失败 / 恢复不可用：必须比旁边的灰字显眼 */
+.app__statusbar-error {
+  color: var(--ink-danger, #b42318);
+  font-weight: 600;
+}
+
 /* ── 通用 UI 元件 ── */
 .panel-tabs {
   display: flex;

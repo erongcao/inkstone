@@ -16,7 +16,15 @@ import { StatusBar } from "@/views/StatusBar";
 import { SettingsPanel } from "@/views/SettingsPanel";
 import { CommandPalette } from "@/views/CommandPalette";
 import { LinkPopover } from "@/views/LinkPopover";
+import { RecoveryDialog } from "@/views/RecoveryDialog";
 import { onIntent } from "@/editor/intents";
+import { startAutoSaveRuntime } from "@/document/autosave";
+import {
+  applyRecovery,
+  discardRecovery,
+  findRecoveryCandidate,
+  type RecoveryCandidate,
+} from "@/document/recovery";
 
 export default function App() {
   // 应用主题副作用（data-theme / data-mode / 版式变量 / 自定义 CSS）
@@ -26,11 +34,27 @@ export default function App() {
   const [sidebarVisible, setSidebarVisible] = useState(true);
   const { open, save, saveAs, create } = useDocument();
   const [settings, update] = useSettings();
+  const [recovery, setRecovery] = useState<RecoveryCandidate | null>(null);
 
   // 挂载原生菜单事件桥
   useEffect(() => {
     void initMenuBridge();
   }, []);
+
+  // 自动保存 + 崩溃恢复快照：跟着文档内容走，组件卸载时要停掉定时器
+  useEffect(() => startAutoSaveRuntime(), []);
+
+  // 启动时检查有没有上次没保存完的改动
+  useEffect(() => {
+    if (!settings.general.restoreSession) return;
+    let cancelled = false;
+    void findRecoveryCandidate().then((candidate) => {
+      if (!cancelled) setRecovery(candidate);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [settings.general.restoreSession]);
 
   // 从 Finder / 命令行打开文件
   useEffect(() => {
@@ -114,6 +138,19 @@ export default function App() {
       </main>
       <StatusBar />
       {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
+      {recovery && (
+        <RecoveryDialog
+          candidate={recovery}
+          onRestore={() => {
+            void applyRecovery(recovery);
+            setRecovery(null);
+          }}
+          onDiscard={() => {
+            discardRecovery();
+            setRecovery(null);
+          }}
+        />
+      )}
       <CommandPalette />
       <LinkPopover />
     </div>

@@ -19,6 +19,10 @@ export interface DocumentState {
   dirty: boolean;
   /** 当前文档标题（不含路径） */
   title: string;
+  /** 最近一次落盘失败的原因；null = 没有失败 */
+  saveError: string | null;
+  /** 崩溃恢复快照写不进去的原因；null = 没有失败 */
+  recoveryError: string | null;
 }
 
 type Backend = {
@@ -89,7 +93,22 @@ let state: DocumentState = {
   content: "",
   dirty: false,
   title: "未命名",
+  saveError: null,
+  recoveryError: null,
 };
+
+/**
+ * 磁盘上此刻的内容。
+ *
+ * 脏标记必须拿它比，不能拿「上一次的内容」比：
+ * 拿上一次比的话，用户敲了字又删回去（内容回到磁盘上的样子），
+ * 脏标记还是 true——于是一次保存本可以什么都不写，
+ * 而自动保存也会因为「有未保存改动」而反复触发。
+ *
+ * 它同时是「已保存」这个判断的唯一依据：
+ * 打开文件、另存为、保存成功，三处都要同步更新它。
+ */
+let savedContent = "";
 
 const listeners = new Set<() => void>();
 
@@ -123,11 +142,13 @@ function titleFromPath(path: string | null): string {
 export async function openDocument(): Promise<void> {
   const result = await getBackend().openFile();
   if (!result) return;
+  savedContent = result.content;
   setState({
     path: result.path,
     content: result.content,
     dirty: false,
     title: titleFromPath(result.path),
+    saveError: null,
   });
   await getBackend().setTitle(state.title);
 }
@@ -140,30 +161,74 @@ export async function openDocumentAt(path: string): Promise<void> {
   // 没有这道护栏，一次误点就会把用户刚敲的字换成磁盘上的旧版本。
   if (state.path === path && state.dirty) return;
   const content = await getBackend().readFile(path);
+  savedContent = content;
   setState({ path, content, dirty: false, title: titleFromPath(path) });
   await getBackend().setTitle(state.title);
 }
 
-export async function saveDocument(): Promise<void> {
-  if (!state.path) return;
-  await getBackend().saveFile(state.path, state.content);
-  setState({ dirty: false });
+/**
+ * 保存文档。
+ *
+ * 返回 true = 内容确实落到了磁盘上；false = 落盘失败（原因写进了 `saveError`）。
+ *
+ * ## 为什么失败不抛异常
+ * 自动保存是**定时**触发的，没人 await 它——抛出去就是 unhandled rejection，
+ * 用户什么都看不到。所以错误改成写进 store，由状态栏如实显示。
+ * 自动保存失败却一声不吭是最坏的结果：用户以为字已经存进磁盘了。
+ */
+export async function saveDocument(): Promise<boolean> {
+  if (!state.path) return false;
+  const path = state.path;
+  const content = state.content;
+  try {
+    await getBackend().saveFile(path, content);
+  } catch (error) {
+    setState({ saveError: describeError(error) });
+    return false;
+  }
+  // 落盘期间用户可能又改了内容：只有内容没变过才能清脏标记。
+  // 不加这道判断，会把「还没保存的新改动」标成已保存——那等于丢数据。
+  if (state.path === path && state.content === content) {
+    savedContent = content;
+    setState({ dirty: false, saveError: null });
+  }
+  return true;
 }
 
 export async function saveDocumentAs(): Promise<void> {
   const path = await getBackend().saveFileAs(state.content);
   if (!path) return;
-  setState({ path, dirty: false, title: titleFromPath(path) });
+  savedContent = state.content;
+  setState({ path, dirty: false, title: titleFromPath(path), saveError: null });
   await getBackend().setTitle(state.title);
 }
 
+/** 把异常变成一句人能读的话（后端抛的往往是一串 JSON） */
+function describeError(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+}
+
 export function newDocument(): void {
-  setState({ path: null, content: "", dirty: false, title: "未命名" });
+  savedContent = "";
+  setState({
+    path: null,
+    content: "",
+    dirty: false,
+    title: "未命名",
+    saveError: null,
+  });
   void getBackend().setTitle(state.title);
 }
 
 export function setDocumentContent(content: string): void {
-  setState({ content, dirty: state.content !== content });
+  // 脏标记 = 现在的内容与磁盘上的内容不同
+  setState({ content, dirty: content !== savedContent });
 }
 
 /**
@@ -209,6 +274,11 @@ export function currentDocumentPath(): string | null {
   return state.path;
 }
 
+/** 读一个文件的内容（非 hook 版本）。崩溃恢复要拿它和草稿快照比对 */
+export async function readFileContent(path: string): Promise<string> {
+  return await getBackend().readFile(path);
+}
+
 /**
  * 同步读当前文档内容（非 hook 版本）。
  *
@@ -217,6 +287,27 @@ export function currentDocumentPath(): string | null {
  */
 export function getDocumentContent(): string {
   return state.content;
+}
+
+/**
+ * 订阅文档状态变化（非 hook 版本）。
+ *
+ * 给自动保存运行时用：它要在 React 之外跟着内容变化做节流/防抖，
+ * 而 `useDocument()` 是 hook，运行时拿不到。
+ */
+export function subscribeDocument(listener: () => void): () => void {
+  return subscribe(listener);
+}
+
+/** 同步读整份文档状态（非 hook 版本） */
+export function getDocumentState(): DocumentState {
+  return state;
+}
+
+/** 记录「崩溃恢复快照写不进去」的原因；传 null 表示恢复正常 */
+export function setRecoveryError(message: string | null): void {
+  if (state.recoveryError === message) return;
+  setState({ recoveryError: message });
 }
 
 export function useDocument() {
