@@ -28,6 +28,10 @@ import {
 } from "@/editor/commands";
 import { closePalette, setPaletteQuery, usePalette } from "@/editor/palette";
 import { getActiveEditorView } from "@/editor/active-view";
+import { loadVaultFiles, matchVaultFiles, type VaultFile } from "@/file-tree/quick-open";
+import { useTreeRoot } from "@/file-tree/store";
+import { listRecentFiles } from "@/ipc/recent";
+import { openDocumentAt } from "@/ipc/document";
 
 /** 一行命令（含它的高亮位置与分类） */
 interface Row {
@@ -71,21 +75,77 @@ function Highlighted({ text, matched }: { text: string; matched: number[] }) {
 }
 
 export function CommandPalette() {
-  const { open, query } = usePalette();
+  const { open, query, mode } = usePalette();
   const [selected, setSelected] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
+  const treeRoot = useTreeRoot();
 
-  const groups = useMemo<{ category: string; rows: Row[] }[]>(() => {
-    if (!open) return [];
+  const commandGroups = useMemo<{ category: string; rows: Row[] }[]>(() => {
+    if (!open || mode !== "command") return [];
     const rows = matchCommands(commandsFor("palette", getActiveEditorView()), query).map(
       (hit) => ({ command: hit.command, matched: hit.matched }),
     );
     return groupByCategory(rows);
-  }, [open, query]);
+  }, [open, query, mode]);
+
+  /** 文件模式的候选：查询为空时给最近文件，否则给模糊匹配的文件 */
+  const [vaultFiles, setVaultFiles] = useState<VaultFile[]>([]);
+  const [recent, setRecent] = useState<string[]>([]);
+  useEffect(() => {
+    if (!open || mode !== "file") return;
+    let cancelled = false;
+    void (async () => {
+      const [files, recents] = await Promise.all([
+        treeRoot
+          ? loadVaultFiles(treeRoot).catch(() => [] as VaultFile[])
+          : Promise.resolve([]),
+        listRecentFiles().catch(() => [] as string[]),
+      ]);
+      if (cancelled) return;
+      setVaultFiles(files);
+      setRecent(recents);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, mode, treeRoot]);
+
+  const fileMatches = useMemo(() => {
+    if (!open || mode !== "file") return [];
+    if (!query.trim()) {
+      // 没有查询词：先给最近文件，重复的（也在文件列表里）去重
+      const seen = new Set<string>();
+      const rows: { file: VaultFile; matched: number[] }[] = [];
+      for (const path of recent) {
+        if (seen.has(path)) continue;
+        seen.add(path);
+        const slash = path.lastIndexOf("/");
+        rows.push({
+          file: {
+            path,
+            name: slash >= 0 ? path.slice(slash + 1) : path,
+            dir: slash >= 0 ? path.slice(0, slash) : "",
+          },
+          matched: [],
+        });
+      }
+      for (const file of vaultFiles) {
+        if (seen.has(file.path)) continue;
+        seen.add(file.path);
+        rows.push({ file, matched: [] });
+        if (rows.length >= 50) break;
+      }
+      return rows;
+    }
+    return matchVaultFiles(vaultFiles, query);
+  }, [open, mode, query, vaultFiles, recent]);
 
   /** 扁平顺序，↑↓ 与 Enter 都按这个顺序走 */
-  const flat = useMemo(() => groups.flatMap((group) => group.rows), [groups]);
+  const flat = useMemo(
+    () => commandGroups.flatMap((group) => group.rows),
+    [commandGroups],
+  );
 
   /**
    * 打开或查询变化时把选中项拉回第一条。
@@ -95,7 +155,7 @@ export function CommandPalette() {
    * 渲染期改 state 是 React 明确支持的（渲染到一半再改，React 会立刻重跑，
    * 且不会把中间状态提交出去）。
    */
-  const key = `${open}:${query}`;
+  const key = `${open}:${mode}:${query}`;
   const [lastKey, setLastKey] = useState(key);
   if (lastKey !== key) {
     setLastKey(key);
@@ -132,6 +192,15 @@ export function CommandPalette() {
   if (!open) return null;
 
   const activate = (index: number) => {
+    if (mode === "file") {
+      const hit = fileMatches[index];
+      if (!hit) return;
+      // 先关面板再打开文件：面板的 <input> 抢着焦点时打开文档，
+      // 光标会落在面板上而不是文档里
+      closePalette();
+      void openDocumentAt(hit.file.path);
+      return;
+    }
     const row = flat[index];
     if (!row) return;
     const command = row.command;
@@ -141,6 +210,9 @@ export function CommandPalette() {
     runCommand(command.id, getActiveEditorView());
   };
 
+  /** 当前模式下可选条目总数 */
+  const itemCount = mode === "file" ? fileMatches.length : flat.length;
+
   const onKeyDown = (event: React.KeyboardEvent) => {
     if (event.key === "Escape") {
       event.preventDefault();
@@ -149,12 +221,12 @@ export function CommandPalette() {
     }
     if (event.key === "ArrowDown") {
       event.preventDefault();
-      setSelected((index) => (flat.length ? (index + 1) % flat.length : 0));
+      setSelected((index) => (itemCount ? (index + 1) % itemCount : 0));
       return;
     }
     if (event.key === "ArrowUp") {
       event.preventDefault();
-      setSelected((index) => (flat.length ? (index - 1 + flat.length) % flat.length : 0));
+      setSelected((index) => (itemCount ? (index - 1 + itemCount) % itemCount : 0));
       return;
     }
     if (event.key === "Enter") {
@@ -173,53 +245,83 @@ export function CommandPalette() {
         className="palette"
         role="dialog"
         aria-modal="true"
-        aria-label="命令面板"
+        aria-label={mode === "file" ? "快速打开" : "命令面板"}
         onMouseDown={(event) => event.stopPropagation()}
       >
         <input
           ref={inputRef}
           className="palette__input"
           value={query}
-          placeholder="搜索命令…"
+          placeholder={mode === "file" ? "按文件名快速打开…" : "搜索命令…"}
           spellCheck={false}
           autoComplete="off"
           onChange={(event) => setPaletteQuery(event.target.value)}
           onKeyDown={onKeyDown}
         />
         <div className="palette__list" ref={listRef}>
-          {flat.length === 0 && <div className="palette__empty">没有匹配的命令</div>}
-          {groups.map((group) => (
-            <div key={group.category} className="palette__group">
-              <div className="palette__group-title">{group.category}</div>
-              {group.rows.map((row) => {
-                cursor++;
-                const index = cursor;
-                return (
-                  <button
-                    key={row.command.id}
-                    type="button"
-                    data-index={index}
-                    className="palette__item"
-                    aria-selected={index === selected}
-                    onMouseEnter={() => setSelected(index)}
-                    onClick={() => activate(index)}
-                  >
-                    <span className="palette__label">
-                      <Highlighted text={row.command.label} matched={row.matched} />
-                    </span>
-                    {row.command.keywords && (
-                      <span className="palette__hint">
-                        {row.command.keywords.split(/\s+/)[0]}
-                      </span>
-                    )}
-                    {row.command.shortcut && (
-                      <span className="palette__shortcut">{row.command.shortcut}</span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          ))}
+          {mode === "file" ? (
+            <>
+              {fileMatches.length === 0 && (
+                <div className="palette__empty">
+                  {treeRoot ? "没有匹配的文件" : "先选一个笔记库（或打开一个文件）"}
+                </div>
+              )}
+              {fileMatches.map((hit, index) => (
+                <button
+                  key={hit.file.path}
+                  type="button"
+                  data-index={index}
+                  className="palette__item"
+                  aria-selected={index === selected}
+                  onMouseEnter={() => setSelected(index)}
+                  onClick={() => activate(index)}
+                >
+                  <span className="palette__label">
+                    <Highlighted text={hit.file.name} matched={hit.matched} />
+                  </span>
+                  <span className="palette__hint">{hit.file.dir}</span>
+                </button>
+              ))}
+            </>
+          ) : (
+            <>
+              {flat.length === 0 && <div className="palette__empty">没有匹配的命令</div>}
+              {commandGroups.map((group) => (
+                <div key={group.category} className="palette__group">
+                  <div className="palette__group-title">{group.category}</div>
+                  {group.rows.map((row) => {
+                    cursor++;
+                    const index = cursor;
+                    return (
+                      <button
+                        key={row.command.id}
+                        type="button"
+                        data-index={index}
+                        className="palette__item"
+                        aria-selected={index === selected}
+                        onMouseEnter={() => setSelected(index)}
+                        onClick={() => activate(index)}
+                      >
+                        <span className="palette__label">
+                          <Highlighted text={row.command.label} matched={row.matched} />
+                        </span>
+                        {row.command.keywords && (
+                          <span className="palette__hint">
+                            {row.command.keywords.split(/\s+/)[0]}
+                          </span>
+                        )}
+                        {row.command.shortcut && (
+                          <span className="palette__shortcut">
+                            {row.command.shortcut}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
+            </>
+          )}
         </div>
       </div>
     </div>

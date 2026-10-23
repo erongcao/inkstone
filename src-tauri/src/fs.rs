@@ -83,7 +83,7 @@ fn trim_zeros(digits: &str) -> &str {
 ///
 /// 中文按 Unicode 码点比（不做拼音）：拼音表太大、维护成本高，
 /// 而用户找文件主要靠文件名本身（`需求`、`会议`），码点序已足够稳定可预期。
-fn natural_cmp(a: &str, b: &str) -> Ordering {
+pub(crate) fn natural_cmp(a: &str, b: &str) -> Ordering {
     let mut ai = a.chars().peekable();
     let mut bi = b.chars().peekable();
     loop {

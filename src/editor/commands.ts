@@ -208,6 +208,22 @@ export function matchCommands(
   return scored.slice(0, limit);
 }
 
+/**
+ * 模糊匹配一个字符串。
+ *
+ * 抽出来是为了给「快速打开」复用——命令名和文件名要的是同一套匹配手感：
+ * 前缀命中压过词首命中，词首压过子串，子串压过散落的子序列。
+ * 两处各写一套，迟早会调成不一样的手感。
+ *
+ * 返回 `null` 表示没匹配上。
+ */
+export function fuzzyScore(
+  text: string,
+  q: string,
+): { score: number; matched: number[] } | null {
+  return scoreOne(text, q);
+}
+
 function scoreOne(text: string, q: string): { score: number; matched: number[] } | null {
   const range = (from: number, len: number): number[] =>
     Array.from({ length: len }, (_, i) => from + i);

@@ -38,6 +38,7 @@ pub fn run() {
             fs::list_directory,
             fs::parent_of,
             search::search_files,
+            search::list_all_files,
             ai::secrets::ai_secret_status,
             ai::secrets::ai_set_secret,
             ai::secrets::ai_delete_secret,

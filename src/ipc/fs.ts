@@ -25,6 +25,7 @@ export interface DirEntry {
 
 type Backend = {
   listDirectory(path: string): Promise<DirEntry[]>;
+  listAllFiles(root: string): Promise<string[]>;
   parentOf(path: string): Promise<string | null>;
   pickFolder(): Promise<string | null>;
 };
@@ -143,6 +144,19 @@ const browserBackend: Backend = {
     }
     return entries;
   },
+  async listAllFiles(root) {
+    const prefix = root.endsWith("/") ? root : `${root}/`;
+    return (
+      Object.keys(SAMPLE_DIRS)
+        .flatMap((dir) => SAMPLE_DIRS[dir])
+        // 只要文件，**不要目录**——Rust 侧 `collect_files` 也只收文件，
+        // 两边不一致的话，快速打开里会冒出「01 进行中」这种目录项
+        .filter((entry) => !entry.isDir)
+        .map((entry) => entry.path)
+        .filter((path) => path.startsWith(prefix))
+        .sort()
+    );
+  },
   async parentOf(path) {
     const index = path.lastIndexOf("/");
     return index > 0 ? path.slice(0, index) : null;
@@ -159,6 +173,10 @@ const tauriBackend: Backend = {
   async listDirectory(path) {
     const { invoke } = await import("@tauri-apps/api/core");
     return await invoke<DirEntry[]>("list_directory", { path });
+  },
+  async listAllFiles(root) {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return await invoke<string[]>("list_all_files", { root });
   },
   async parentOf(path) {
     const { invoke } = await import("@tauri-apps/api/core");
@@ -178,6 +196,11 @@ function getBackend(): Backend {
 /** 列出一个目录的内容。读不到时 reject，**不返回空数组**。 */
 export function listDirectory(path: string): Promise<DirEntry[]> {
   return getBackend().listDirectory(path);
+}
+
+/** 列出 root 下的全部笔记文件（扁平路径列表），给「快速打开」用 */
+export function listAllFiles(root: string): Promise<string[]> {
+  return getBackend().listAllFiles(root);
 }
 
 /** 取一个文件所在的目录；没有则 null */

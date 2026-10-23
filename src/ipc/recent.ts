@@ -15,7 +15,11 @@ const isTauri = (): boolean =>
 
 const browserBackend: Backend = {
   async list() {
-    return [];
+    // 浏览器模式没有「最近打开」的概念，
+    // 但返回空数组的话快速打开就只剩一个空列表可看。
+    // 给样例库里的几个文件，行为和真实后端一致。
+    const { SAMPLE_ROOT } = await import("@/ipc/fs");
+    return [`${SAMPLE_ROOT}/README.md`, `${SAMPLE_ROOT}/01 进行中/需求.md`];
   },
   async clear() {
     /* 浏览器降级模式无持久化 */

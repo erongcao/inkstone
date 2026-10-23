@@ -16,6 +16,7 @@
 
 import { useCallback, useSyncExternalStore } from "react";
 import { isUnder, listDirectory, parentOf, pickFolder, type DirEntry } from "@/ipc/fs";
+import { invalidateVaultFiles } from "@/file-tree/quick-open";
 
 export interface TreeNode {
   path: string;
@@ -138,6 +139,8 @@ async function loadDirectory(path: string, isDir = true): Promise<boolean> {
 /** 换一个树根：丢掉全部旧节点，展开新根 */
 export async function setTreeRoot(path: string): Promise<void> {
   setState({ root: path, nodes: {} });
+  // 根变了，「快速打开」缓存的旧根文件列表就不能用了
+  invalidateVaultFiles();
   await loadDirectory(path);
 }
 
@@ -173,6 +176,8 @@ export function toggleNode(path: string): void {
 export async function refreshTree(): Promise<void> {
   const root = state.root;
   if (!root) return;
+  // 用户可能刚在编辑器里新建/删除了文件，文件列表要跟着更新
+  invalidateVaultFiles();
   const targets = Object.values(state.nodes)
     .filter((node) => node.isDir && isExpanded(node, root))
     .map((node) => node.path);

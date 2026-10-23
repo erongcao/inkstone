@@ -128,6 +128,10 @@ function buildExtensions(
       // 命令面板。放在 defaultKeymap 之前不必要（⌘K 与它不冲突），
       // 但和格式化快捷键放在一起，便于一眼看全「键盘能干什么」
       { key: "Mod-k", run: () => (openPalette(), true) },
+      // 快速打开：按文件名模糊匹配整个笔记库。
+      // 和 ⌘K 分开是因为意图不同——⌘K 找「命令」，⌘P 找「文件」，
+      // 混在一个列表里会互相干扰
+      { key: "Mod-p", run: () => (openPalette("", "file"), true) },
       { key: "Mod-b", run: (view) => runCommand("format.bold", view) },
       { key: "Mod-i", run: (view) => runCommand("format.italic", view) },
       { key: "Mod-e", run: (view) => runCommand("format.code", view) },

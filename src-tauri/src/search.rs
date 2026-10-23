@@ -108,6 +108,35 @@ fn build_matcher(query: &str, regex: bool, case_sensitive: bool) -> Result<Regex
         .map_err(|e| format!("正则表达式无效: {e}"))
 }
 
+/// 列出 `root` 下的所有笔记文件（扁平路径列表）。
+///
+/// 给「快速打开」用：文件树是**按需展开**的，只存了展开过的目录，
+/// 所以拿不到全量文件列表；这里一次性给出全部路径。
+///
+/// 排序按「文件名自然序 + 路径」：用户找文件是按**名字**找的，
+/// 而同名文件（不同目录）再按路径排，保证顺序是确定的。
+#[tauri::command]
+pub async fn list_all_files(root: String) -> Result<Vec<String>, String> {
+    tokio::task::spawn_blocking(move || {
+        let root_path = Path::new(&root);
+        if !root_path.is_dir() {
+            return Err(format!("路径不是目录或不存在: {root}"));
+        }
+        let mut files = collect_files(&root);
+        files.sort_by(|a, b| {
+            let na = a.file_name().unwrap_or_default().to_string_lossy();
+            let nb = b.file_name().unwrap_or_default().to_string_lossy();
+            crate::fs::natural_cmp(&na, &nb).then_with(|| a.cmp(b))
+        });
+        Ok(files
+            .into_iter()
+            .map(|p| p.to_string_lossy().into_owned())
+            .collect())
+    })
+    .await
+    .map_err(|e| format!("列目录失败: {e}"))?
+}
+
 /// 阻塞部分：遍历目录 → 读文件 → 逐行匹配
 fn search_blocking(root: &str, matcher: &Regex) -> Result<SearchResult, String> {
     let started = Instant::now();
@@ -250,6 +279,15 @@ fn search_one_file(path: &Path, matcher: &Regex) -> Option<Vec<SearchHit>> {
 mod tests {
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    /// 在 Tauri 自带的异步运行时里跑一段 async 测试代码。
+    ///
+    /// 不用 `#[tokio::test]`：那要额外开 `macros` + `rt` 特性，
+    /// 会带进 `tokio-macros` / `syn` / `quote` 几个依赖，
+    /// 而 Tauri 自己已经带了一个运行时——**用它才是应用真正跑代码的那个**。
+    fn block_on<F: std::future::Future<Output = ()>>(f: F) {
+        tauri::async_runtime::block_on(f);
+    }
 
     fn temp_dir(tag: &str) -> std::path::PathBuf {
         let nanos = SystemTime::now()
@@ -395,6 +433,41 @@ mod tests {
         )
         .unwrap_err();
         assert!(!err.is_empty());
+    }
+
+    #[test]
+    fn 列出全部文件且按文件名自然序() {
+        block_on(async {
+            let dir = temp_dir("all");
+            write(&dir, "b.md", "x");
+            write(&dir, "图 10.md", "x");
+            write(&dir, "图 2.md", "x");
+            write(&dir, "子/a.md", "x");
+            write(&dir, "子/b.txt", "x");
+            let files = list_all_files(dir.to_string_lossy().into_owned())
+                .await
+                .unwrap();
+            let names: Vec<String> = files
+                .iter()
+                .map(|p| p.rsplit('/').next().unwrap().to_string())
+                .collect();
+            // 「图 2」要在「图 10」前面
+            let i2 = names.iter().position(|n| n == "图 2.md").unwrap();
+            let i10 = names.iter().position(|n| n == "图 10.md").unwrap();
+            assert!(i2 < i10, "顺序不对: {names:?}");
+            // 非 Markdown 不该出现
+            assert!(!names.contains(&"b.txt".to_string()));
+            // 递归子目录
+            assert!(names.contains(&"a.md".to_string()));
+            std::fs::remove_dir_all(&dir).ok();
+        });
+    }
+
+    #[test]
+    fn 列出全部文件时目录不存在要报错() {
+        block_on(async {
+            assert!(list_all_files("/根本不存在/inkstone".into()).await.is_err());
+        });
     }
 
     /// 验收基准：`docs/plan.md` M3 要求「打开 1000 个文件的目录，搜索响应 < 200ms」。

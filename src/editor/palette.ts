@@ -11,12 +11,22 @@
 
 import { useSyncExternalStore } from "react";
 
+/**
+ * 面板的两种模式。
+ *
+ * `command` = ⌘K，列命令；`file` = ⌘P，列文件。
+ * 分成两个模式而不是靠查询词区分：用户按 ⌘P 的意图是「找文件」，
+ * 而命令面板里也会有一堆含「打开」字样的命令，两者混在一起会互相干扰。
+ */
+export type PaletteMode = "command" | "file";
+
 export interface PaletteState {
   open: boolean;
   query: string;
+  mode: PaletteMode;
 }
 
-const CLOSED: PaletteState = { open: false, query: "" };
+const CLOSED: PaletteState = { open: false, query: "", mode: "command" };
 
 let state: PaletteState = CLOSED;
 const listeners = new Set<() => void>();
@@ -36,8 +46,8 @@ function subscribe(listener: () => void): () => void {
 const getSnapshot = (): PaletteState => state;
 
 /** 打开面板。`initialQuery` 用于「已经打了半截词再按 ⌘K」的场景 */
-export function openPalette(initialQuery = ""): void {
-  set({ open: true, query: initialQuery });
+export function openPalette(initialQuery = "", mode: PaletteMode = "command"): void {
+  set({ open: true, query: initialQuery, mode });
 }
 
 export function closePalette(): void {
@@ -47,7 +57,7 @@ export function closePalette(): void {
 
 export function setPaletteQuery(query: string): void {
   if (!state.open || query === state.query) return;
-  set({ open: true, query });
+  set({ open: true, query, mode: state.mode });
 }
 
 /** 订阅面板状态 */
