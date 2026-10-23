@@ -13,6 +13,131 @@
   text-align: center;
 }
 
+/* 打不开和「是空的」必须长得不一样，否则用户会以为是程序没读到文件 */
+.panel-placeholder--error {
+  color: var(--ink-danger);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   文件树面板（M3）
+   ═══════════════════════════════════════════════════════════ */
+
+.file-tree {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.file-tree__bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px 8px;
+}
+
+.file-tree__root {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--ink-fg-muted);
+  /* 路径可能很长，截断而不是撑破侧边栏；完整值在 title 里 */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl; /* 保留更有信息量的尾部：目录名而不是 /Users */
+  text-align: left;
+}
+
+.file-tree__actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.file-tree__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.file-tree__row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 3px 8px 3px 0;
+  border: 0;
+  border-radius: var(--ink-radius-sm);
+  background: none;
+  color: var(--ink-fg-muted);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.file-tree__row:hover {
+  background-color: var(--ink-bg-soft);
+  color: var(--ink-fg);
+}
+
+.file-tree__row:focus-visible {
+  outline: 2px solid var(--ink-accent);
+  outline-offset: -2px;
+}
+
+/* 当前正在编辑的文件：比 hover 更强的提示，不能只靠颜色深浅区分 */
+.file-tree__row.is-active {
+  background-color: var(--ink-accent-soft);
+  color: var(--ink-accent);
+  font-weight: 600;
+}
+
+/* 三角：同一个元素用 data-open 切换，避免多一个节点参与布局 */
+.file-tree__caret {
+  flex-shrink: 0;
+  width: 12px;
+  text-align: center;
+  color: var(--ink-fg-faint);
+}
+
+.file-tree__caret::before {
+  content: "\25B8"; /* ▸ */
+}
+
+.file-tree__caret[data-open="true"]::before {
+  content: "\25BE"; /* ▾ */
+}
+
+/* 文件行没有三角，但要和目录行的文字左边缘对齐，否则名字会参差 */
+.file-tree__caret--leaf::before {
+  content: "\00B7"; /* · */
+}
+
+.file-tree__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-tree__sub-error,
+.file-tree__error {
+  font-size: 11px;
+  color: var(--ink-danger);
+  /* 后端的错误信息可能很长，带路径的 */
+  overflow-wrap: anywhere;
+}
+
+.file-tree__sub-error {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+
 /* ── 编辑区 ── */
 .editor-surface {
   display: flex;
@@ -138,7 +263,7 @@
 }
 
 .settings-reset:hover {
-  color: var(--ink-danger, #cf222e);
+  color: var(--ink-danger);
   background-color: var(--ink-bg-inset);
 }
 

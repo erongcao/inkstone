@@ -127,8 +127,13 @@ export async function openDocument(): Promise<void> {
   await getBackend().setTitle(state.title);
 }
 
-/** 直接打开指定路径（用于「从 Finder 双击打开」） */
+/** 直接打开指定路径（用于「从 Finder 双击打开」和文件树点击） */
 export async function openDocumentAt(path: string): Promise<void> {
+  // 已经在编辑这个文件、且有未保存改动时，再点一次**不能**重读磁盘。
+  // 文件树里当前文件那一行是可以再点到的，
+  // 而 Finder 双击同一个文件更是常规操作——
+  // 没有这道护栏，一次误点就会把用户刚敲的字换成磁盘上的旧版本。
+  if (state.path === path && state.dirty) return;
   const content = await getBackend().readFile(path);
   setState({ path, content, dirty: false, title: titleFromPath(path) });
   await getBackend().setTitle(state.title);
@@ -165,6 +170,16 @@ export function setDocumentContent(content: string): void {
  */
 export function currentDocumentPath(): string | null {
   return state.path;
+}
+
+/**
+ * 同步读当前文档内容（非 hook 版本）。
+ *
+ * 存在理由同 `currentDocumentPath()`：文件树、状态栏这些地方需要在组件外
+ * 看到文档此刻的内容，又不能为此订阅一份会频繁变化的状态。
+ */
+export function getDocumentContent(): string {
+  return state.content;
 }
 
 export function useDocument() {

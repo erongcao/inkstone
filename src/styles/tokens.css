@@ -49,6 +49,8 @@
   --ink-accent: #0969da;
   --ink-accent-hover: #0550ae;
   --ink-selection: rgba(9, 105, 218, 0.15);
+  /* 选中态的底色：文件树当前文件、列表当前项这类「不是 hover」的提示 */
+  --ink-accent-soft: #ddf4ff;
 
   --ink-code-bg: #f6f8fa;
   --ink-code-fg: #1f2328;
@@ -105,6 +107,7 @@
   --ink-accent: #4493f8;
   --ink-accent-hover: #58a6ff;
   --ink-selection: rgba(68, 147, 248, 0.25);
+  --ink-accent-soft: #121d2f;
 
   --ink-code-bg: #161b22;
   --ink-code-fg: #e6edf3;

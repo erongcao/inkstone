@@ -157,6 +157,21 @@ textarea,
   border-color: var(--ink-accent-hover);
 }
 
+/* 弱化按钮：侧边栏这类「工具条」上的次要动作 */
+.btn--ghost {
+  padding: 2px 8px;
+  font-size: 12px;
+  border-color: transparent;
+  background: none;
+  color: var(--ink-fg-muted);
+}
+
+.btn--ghost:hover {
+  border-color: var(--ink-border);
+  background-color: var(--ink-bg-soft);
+  color: var(--ink-fg);
+}
+
 /* 滚动条 */
 ::-webkit-scrollbar {
   width: 10px;

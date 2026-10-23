@@ -84,7 +84,11 @@ describe("应用交互", () => {
     expect(await screen.findByText("这份文档还没有标题")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("tab", { name: "文件" }));
-    expect(screen.getByText("文件树将在 M3 提供")).toBeTruthy();
+    // M3 起文件树已接通；还没选过文件夹时给的是引导文案
+    expect(screen.getByText(/还没有选择文件夹/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("tab", { name: "大纲" }));
+    expect(screen.getByText("这份文档还没有标题")).toBeTruthy();
   });
 
   it("大纲面板列出标题并可点击跳转", async () => {
