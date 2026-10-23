@@ -19,6 +19,19 @@ import {
 } from "@/file-tree/store";
 import { openDocumentAt, useDocument } from "@/ipc/document";
 
+/**
+ * 路径太长时从**前面**截断，保留尾部。
+ *
+ * 不用 CSS `direction: rtl` 做这件事：那样虽然能保住尾巴，
+ * 但路径开头的 `/` 会被 bidi 算法挪到末尾，
+ * 「/Users/me/notes」会显示成「Users/me/notes/」。
+ * 在这里切字符串没有歧义，代价只是要自己数长度。
+ */
+export function shortenPath(path: string, max = 36): string {
+  if (path.length <= max) return path;
+  return `…${path.slice(path.length - (max - 1))}`;
+}
+
 export function FileTreePanel() {
   const { tree, choose } = useFileTree();
   const { doc } = useDocument();
@@ -43,7 +56,7 @@ export function FileTreePanel() {
     <div className="file-tree">
       <div className="file-tree__bar">
         <span className="file-tree__root" title={root ?? undefined}>
-          {root ?? "未选择文件夹"}
+          {root === null ? "未选择文件夹" : shortenPath(root)}
         </span>
         <div className="file-tree__actions">
           <button

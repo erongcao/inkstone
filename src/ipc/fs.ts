@@ -58,24 +58,27 @@ const sub = (name: string): DirEntry => ({
  *
  * 注意这里**不**放非 Markdown 文件——过滤发生在 Rust 侧，
  * 真实运行时它们根本不会出现在列表里，样例库不该造出后端不可能返回的结果。
+ *
+ * 顺序必须与 Rust 侧 `sort_entries` 一致（目录在前 + 自然序）：
+ * 样例库是真实后端的替身，顺序对不上会让浏览器里的验收结论失真。
  */
 const SAMPLE_DIRS: Record<string, DirEntry[]> = {
   [SAMPLE_ROOT]: [
-    sub("02 归档"),
     sub("01 进行中"),
+    sub("02 归档"),
     sub("99 空目录"),
     file(`${SAMPLE_ROOT}/README.md`),
     file(`${SAMPLE_ROOT}/随手记.MARKDOWN`),
   ],
+  [`${SAMPLE_ROOT}/01 进行中`]: [
+    file(`${SAMPLE_ROOT}/01 进行中/周报 2.md`),
+    file(`${SAMPLE_ROOT}/01 进行中/周报 10.md`),
+    file(`${SAMPLE_ROOT}/01 进行中/需求池.md`),
+    file(`${SAMPLE_ROOT}/01 进行中/需求.md`),
+  ],
   [`${SAMPLE_ROOT}/02 归档`]: [
     file(`${SAMPLE_ROOT}/02 归档/2026-01-05 开篇.md`),
     file(`${SAMPLE_ROOT}/02 归档/2026-10-31 收束.md`),
-  ],
-  [`${SAMPLE_ROOT}/01 进行中`]: [
-    file(`${SAMPLE_ROOT}/01 进行中/周报 10.md`),
-    file(`${SAMPLE_ROOT}/01 进行中/周报 2.md`),
-    file(`${SAMPLE_ROOT}/01 进行中/需求池.md`),
-    file(`${SAMPLE_ROOT}/01 进行中/需求.md`),
   ],
   [`${SAMPLE_ROOT}/99 空目录`]: [],
 };
@@ -94,7 +97,10 @@ const browserBackend: Backend = {
     return index > 0 ? path.slice(0, index) : null;
   },
   async pickFolder() {
-    return null;
+    // 浏览器没有文件系统，「打开」直接选样例库。
+    // 返回 null 的话这个按钮在浏览器里就是个死按钮，
+    // 文件树也就永远没法在浏览器里验收。
+    return SAMPLE_ROOT;
   },
 };
 

@@ -44,7 +44,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  direction: rtl; /* 保留更有信息量的尾部：目录名而不是 /Users */
   text-align: left;
 }
 

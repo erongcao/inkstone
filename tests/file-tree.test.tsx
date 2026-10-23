@@ -20,7 +20,7 @@ import {
   setTreeRoot,
   toggleNode,
 } from "../src/file-tree/store";
-import { FileTreePanel } from "../src/views/FileTreePanel";
+import { FileTreePanel, shortenPath } from "../src/views/FileTreePanel";
 import {
   newDocument,
   getDocumentContent,
@@ -77,6 +77,17 @@ describe("路径判断", () => {
     expect(isUnder("/a/b", "/a/bc/d.md")).toBe(false);
     expect(isUnder("/a/b", "/a")).toBe(false);
   });
+
+  it("短路径原样显示，长路径从前面截断并保住尾部", () => {
+    expect(shortenPath("/Users/me/notes")).toBe("/Users/me/notes");
+    const long = "/Users/yirongcao/Documents/个人文档/我的笔记库/2026 归档";
+    const short = shortenPath(long);
+    expect(short.startsWith("…")).toBe(true);
+    // 尾部（也就是最有信息量的目录名）必须留住
+    expect(short.endsWith("2026 归档")).toBe(true);
+    // 开头的斜杠不能跑到末尾——那是 CSS direction: rtl 才会犯的错
+    expect(short.endsWith("/")).toBe(false);
+  });
 });
 
 describe("文件树 store", () => {
@@ -86,9 +97,11 @@ describe("文件树 store", () => {
 
     const tree = getTree();
     expect(tree.root).toBe(SAMPLE_ROOT);
+    // 顺序与 Rust 侧 `sort_entries` 一致（目录在前 + 自然序）：
+    // 样例库是真实后端的替身，顺序对不上会让浏览器里的验收结论失真
     expect(childrenOf(tree, SAMPLE_ROOT)?.map((e) => e.name)).toEqual([
-      "02 归档",
       "01 进行中",
+      "02 归档",
       "99 空目录",
       "README.md",
       "随手记.MARKDOWN",
@@ -109,12 +122,11 @@ describe("文件树 store", () => {
     });
     await settle();
 
-    // 样例库里的字面量顺序是「周报 10」在前。
-    // 这里断言前端**原样透传**后端顺序、不在前端重排——
+    // 断言前端**原样透传**后端顺序、不在前端重排——
     // 排序规则的真相源在 Rust 侧，前端再排一次就成了第二套规则。
     expect(childrenOf(getTree(), sub)?.map((e) => e.name)).toEqual([
-      "周报 10.md",
       "周报 2.md",
+      "周报 10.md",
       "需求池.md",
       "需求.md",
     ]);
