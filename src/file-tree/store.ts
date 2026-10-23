@@ -238,3 +238,17 @@ export function useFileTree() {
   const refresh = useCallback(() => void refreshTree(), []);
   return { tree, choose, refresh };
 }
+
+/**
+ * 只订阅「树根」这一项。
+ *
+ * 搜索面板要拿树根当搜索范围，但它不需要整棵树的节点——
+ * 订阅整个 store 会让它在每次展开/折叠时都重渲染。
+ */
+export function useTreeRoot(): string | null {
+  return useSyncExternalStore(
+    subscribe,
+    () => state.root,
+    () => state.root,
+  );
+}

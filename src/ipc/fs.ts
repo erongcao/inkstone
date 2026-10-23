@@ -83,6 +83,57 @@ const SAMPLE_DIRS: Record<string, DirEntry[]> = {
   [`${SAMPLE_ROOT}/99 空目录`]: [],
 };
 
+/**
+ * 样例文件的内容。
+ *
+ * 没有内容就没法在浏览器里验收搜索——搜索面板要显示行号、列号和高亮片段，
+ * 光有文件名是不够的。
+ */
+export const SAMPLE_CONTENTS: Record<string, string> = {
+  [`${SAMPLE_ROOT}/README.md`]: [
+    "# 样例笔记库",
+    "",
+    "这是浏览器降级模式用的样例内容。",
+    "搜索「样例」应该能命中这一行。",
+    "",
+    "TODO: later finish the README polish",
+  ].join("\n"),
+  [`${SAMPLE_ROOT}/随手记.MARKDOWN`]: [
+    "# 随手记",
+    "",
+    "随手记一行。",
+    "再记一行：需求 待确认。",
+  ].join("\n"),
+  [`${SAMPLE_ROOT}/01 进行中/周报 2.md`]: [
+    "# 第 2 周周报",
+    "",
+    "## 进展",
+    "- 完成了搜索面板",
+    "- 需求梳理",
+  ].join("\n"),
+  [`${SAMPLE_ROOT}/01 进行中/周报 10.md`]: [
+    "# 第 10 周周报",
+    "",
+    "## 进展",
+    "- 需求评审通过",
+  ].join("\n"),
+  [`${SAMPLE_ROOT}/01 进行中/需求池.md`]: ["# 需求池", "", "待整理的需求列表。"].join(
+    "\n",
+  ),
+  [`${SAMPLE_ROOT}/01 进行中/需求.md`]: [
+    "# 需求",
+    "",
+    "需求描述在这里。",
+    "验收标准：搜索能跳到命中的行。",
+  ].join("\n"),
+  [`${SAMPLE_ROOT}/02 归档/2026-01-05 开篇.md`]: ["# 开篇", "", "第一篇文章。"].join(
+    "\n",
+  ),
+  [`${SAMPLE_ROOT}/02 归档/2026-10-31 收束.md`]: ["# 收束", "", "最后一篇文章。"].join(
+    "\n",
+  ),
+};
+
 const browserBackend: Backend = {
   async listDirectory(path) {
     const entries = SAMPLE_DIRS[path];

@@ -26,6 +26,10 @@ serde_json = "1"
 # 图片走 base64 文本通道：Tauri 的 JSON IPC 会把字节数组展开成数字列表
 base64 = "0.22"
 tokio = { version = "1", features = ["fs", "sync"] }
+# 全局搜索：正则匹配 + 目录遍历。两者都已在 Cargo.lock 里（传递依赖），
+# 声明为直接依赖不会引入新下载。
+regex = "1"
+walkdir = "2"
 tauri-plugin-clipboard-manager = "2"
 keyring = { version = "3.6.3", features = ["apple-native", "windows-native", "sync-secret-service"] }
 reqwest = { version = "0.13.3", features = ["stream", "json", "native-tls"] }

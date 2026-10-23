@@ -2013,6 +2013,7 @@ dependencies = [
  "base64 0.22.1",
  "futures-util",
  "keyring",
+ "regex",
  "reqwest",
  "serde",
  "serde_json",
@@ -2023,6 +2024,7 @@ dependencies = [
  "tauri-plugin-fs",
  "tauri-plugin-opener",
  "tokio",
+ "walkdir",
 ]
 
 [[package]]

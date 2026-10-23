@@ -14,6 +14,7 @@ import {
 } from "@/editor/document-index";
 import { scrollEditorTo } from "@/editor/active-view";
 import { FileTreePanel } from "@/views/FileTreePanel";
+import { SearchPanel } from "@/views/SearchPanel";
 
 type PanelId = "outline" | "files" | "search";
 
@@ -52,7 +53,7 @@ export function Sidebar() {
       <div className="panel-body">
         {active === "outline" && <OutlinePanel index={index} />}
         {active === "files" && <FileTreePanel />}
-        {active === "search" && <p className="panel-placeholder">全局搜索将在 M3 提供</p>}
+        {active === "search" && <SearchPanel />}
       </div>
     </aside>
   );

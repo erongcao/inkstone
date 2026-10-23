@@ -41,7 +41,7 @@ const MARKDOWN_EXTS: [&str; 2] = ["md", "markdown"];
 /// 这个条目要不要出现在文件树里。
 ///
 /// 纯函数：文件名 + 是否目录，规则全在这里，可直接测。
-fn should_show(file_name: &str, is_dir: bool) -> bool {
+pub(crate) fn should_show(file_name: &str, is_dir: bool) -> bool {
     if file_name.is_empty() || file_name.starts_with('.') {
         return false;
     }

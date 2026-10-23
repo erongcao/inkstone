@@ -9,6 +9,7 @@
  */
 
 import { useCallback, useSyncExternalStore } from "react";
+import { scrollEditorTo } from "@/editor/active-view";
 
 export interface DocumentState {
   /** 文件绝对路径；null 表示未命名草稿 */
@@ -45,8 +46,12 @@ const browserBackend: Backend = {
   async setTitle() {
     /* 浏览器降级模式没有窗口标题 */
   },
-  async readFile() {
-    return "";
+  async readFile(path) {
+    // 样例库里的文件要能真的读出内容。
+    // 一律返回空串的话，文件树点开、搜索结果跳转在浏览器里都是「打开一片空白」，
+    // 那就没法在浏览器里验收这些功能了。
+    const { SAMPLE_CONTENTS } = await import("@/ipc/fs");
+    return SAMPLE_CONTENTS[path] ?? "";
   },
 };
 
@@ -159,6 +164,38 @@ export function newDocument(): void {
 
 export function setDocumentContent(content: string): void {
   setState({ content, dirty: state.content !== content });
+}
+
+/**
+ * 打开指定路径并跳到第 `line` 行（1 起）。
+ *
+ * 全局搜索的结果点击后走这里：先打开文件，再把光标和视口移到那一行。
+ * 分两步是因为「打开」要等磁盘内容回来，而跳转必须在内容就位之后做，
+ * 否则算出来的偏移量是按旧内容算的。
+ */
+export async function openDocumentAtLine(path: string, line: number): Promise<void> {
+  await openDocumentAt(path);
+  const offset = lineToOffset(state.content, line);
+  scrollEditorTo(offset);
+}
+
+/**
+ * 第 `line` 行（1 起）在文本里的起始偏移。
+ *
+ * 行号超界就夹到文档末尾：搜索结果对应的文件可能已经被外部改过了，
+ * 那时行号会失效——夹住比跳到一个不存在的位置好。
+ */
+export function lineToOffset(content: string, line: number): number {
+  if (line <= 1) return 0;
+  let offset = 0;
+  let current = 1;
+  while (current < line) {
+    const next = content.indexOf("\n", offset);
+    if (next === -1) return content.length;
+    offset = next + 1;
+    current += 1;
+  }
+  return Math.min(offset, content.length);
 }
 
 /**
