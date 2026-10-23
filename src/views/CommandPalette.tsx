@@ -175,10 +175,22 @@ export function CommandPalette() {
    * ⚠️ 判据是 `!open` 而不是 `open`：写成 `open` 的话，**打开时**也会跑一遍，
    * 于是编辑器在面板输入框 focus 之后又把焦点抢回去，用户接着打字就打在编辑器里，
    * 面板看着还开着、却什么都输不进去。
+   *
+   * ⚠️ 还焦前要看一眼焦点现在在哪儿：有些命令（如「查找 / 替换」）会**自己**
+   * 把焦点放到别的输入框上（CM6 搜索面板的查找框 / 替换框）。
+   * 那种情况下再无条件抢回编辑器，就等于把命令刚建立的焦点打掉——
+   * 症状是「面板开了、按钮都在、但打字没反应」。
+   *
+   * 面板自己的 <input> 在卸载后焦点会落回 body，所以「焦点无处可落」
+   * 正好对应「没有任何命令接管焦点」，这时候还给编辑器是对的。
    */
   useEffect(() => {
     if (open) return;
-    const timer = window.setTimeout(() => getActiveEditorView()?.focus(), 0);
+    const timer = window.setTimeout(() => {
+      const active = document.activeElement;
+      if (active && active !== document.body) return;
+      getActiveEditorView()?.focus();
+    }, 0);
     return () => window.clearTimeout(timer);
   }, [open]);
 

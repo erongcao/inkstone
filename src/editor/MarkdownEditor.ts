@@ -17,7 +17,8 @@ import {
 } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
 import { gfmMarkdownLanguage } from "./markdown-language";
-import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
+import { searchKeymap, highlightSelectionMatches, search } from "@codemirror/search";
+import { openFindPanel } from "./search-panel";
 import { languages } from "@codemirror/language-data";
 import { livePreview, setDisplayModeOf, setMathOptionsOf } from "./live-preview";
 import { setActiveEditorView } from "./active-view";
@@ -86,6 +87,10 @@ function buildExtensions(
     // 编辑历史（撤销/重做）
     history(),
     // 搜索
+    // 显式挂 `search()`：CM6 的 `openSearchPanel` 内部靠 `togglePanel` 状态效果
+    // 打开面板，而这个效果必须由 `searchState` 字段消费。挂上之后，
+    // 菜单的「查找 / 替换」和快捷键 ⌘F 走的是同一条路径，行为完全一致。
+    search(),
     highlightSelectionMatches(),
     // Markdown 语法高亮（源码模式下也有用）
     markdown({
@@ -123,7 +128,13 @@ function buildExtensions(
       { key: "Shift-Tab", run: outdentListItem },
       ...defaultKeymap,
       ...historyKeymap,
-      ...searchKeymap,
+      // CM6 的 `searchKeymap` 自带 Mod-f，但它绑的是**原生** `openSearchPanel`——
+      // 那个函数在首次打开面板时不会把焦点挪进查找框（面板的 mount() 只做了
+      // select()，那不改变焦点），焦点会留在编辑器里，
+      // 于是用户按完 ⌘F 再打字，字会打进正文而不是搜索框。
+      // 所以这里把 Mod-f 换掉，其余（F3 / Mod-g / Mod-d / Mod-Alt-g）照用。
+      ...searchKeymap.filter((binding) => binding.key !== "Mod-f"),
+      { key: "Mod-f", run: (view) => openFindPanel(view), scope: "editor search-panel" },
       indentWithTab,
       // 命令面板。放在 defaultKeymap 之前不必要（⌘K 与它不冲突），
       // 但和格式化快捷键放在一起，便于一眼看全「键盘能干什么」

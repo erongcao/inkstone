@@ -2,6 +2,8 @@ import { describe, expect, it, beforeEach } from "vitest";
 import { render, screen, fireEvent, cleanup, act } from "@testing-library/react";
 import { EditorView } from "@codemirror/view";
 import App from "../src/App";
+import { dispatchMenuAction } from "@/ipc/menu";
+import { openPalette } from "@/editor/palette";
 
 /**
  * 交互冒烟测试
@@ -122,6 +124,53 @@ describe("应用交互", () => {
     fireEvent.change(select, { target: { value: "academic" } });
 
     expect(document.documentElement.dataset.theme).toBe("academic");
+  });
+
+  it("原生菜单的「查找 / 替换」能叫出 CM6 搜索面板", () => {
+    render(<App />);
+
+    const view = getEditorView();
+    expect(view.dom.querySelector(".cm-search")).toBeNull();
+
+    // 「查找」：面板打开，焦点落在查找框
+    act(() => {
+      dispatchMenuAction("find");
+    });
+    const panel = view.dom.querySelector<HTMLElement>(".cm-search");
+    expect(panel).not.toBeNull();
+    expect(view.root.activeElement).toBe(
+      panel?.querySelector<HTMLInputElement>('input[name="search"]'),
+    );
+
+    // 「替换」：面板已经开着，CM6 自己只会聚焦查找框，
+    // 我们的接线要把焦点挪到替换框
+    act(() => {
+      dispatchMenuAction("replace");
+    });
+    expect(view.root.activeElement).toBe(
+      panel?.querySelector<HTMLInputElement>('input[name="replace"]'),
+    );
+  });
+
+  it("从命令面板执行「替换」后，焦点落在替换框（面板关闭时不能把焦点抢回编辑器）", async () => {
+    render(<App />);
+
+    act(() => {
+      openPalette("", "command");
+    });
+
+    const replaceItem = await screen.findByRole("button", { name: /替换/ });
+    await act(async () => {
+      fireEvent.click(replaceItem);
+      // 面板关闭后的「还焦给编辑器」是 setTimeout(0)，
+      // 必须等它跑完再断言——否则测的是还没发生的时序
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    const view = getEditorView();
+    const replaceInput = view.dom.querySelector<HTMLInputElement>('input[name="replace"]');
+    expect(replaceInput).not.toBeNull();
+    expect(view.root.activeElement).toBe(replaceInput);
   });
 
   it("设置持久化到 localStorage", () => {

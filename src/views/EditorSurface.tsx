@@ -9,6 +9,7 @@ import { useEffect, useRef } from "react";
 import { createMarkdownEditor, type MarkdownEditorHandle } from "@/editor/MarkdownEditor";
 import { useDocument } from "@/ipc/document";
 import { onMenuAction } from "@/ipc/menu";
+import { runCommand } from "@/editor/commands";
 import { useSettings } from "@/settings/store";
 import { MARKER_DISPLAY_MODES } from "@/settings/schema";
 
@@ -93,6 +94,17 @@ export function EditorSurface({ onOpenSettings }: Props) {
       onMenuAction("copy-as-html", () => void editorRef.current?.copyAsHtml()),
       onMenuAction("copy-as-markdown", () => void editorRef.current?.copyAsMarkdown()),
       onMenuAction("paste-as-plain-text", () => editorRef.current?.pasteAsPlainText()),
+      // 查找 / 替换：走命令表（`find.open` / `find.replace`），
+      // 这样原生菜单、命令面板、快捷键三条路是**同一个入口**，
+      // 不会出现「菜单里能用、面板里不能用」这种分叉。
+      onMenuAction("find", () => {
+        const view = editorRef.current?.view;
+        if (view) runCommand("find.open", view);
+      }),
+      onMenuAction("replace", () => {
+        const view = editorRef.current?.view;
+        if (view) runCommand("find.replace", view);
+      }),
     ];
     return () => {
       for (const off of offs) off();

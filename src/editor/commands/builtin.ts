@@ -21,6 +21,7 @@ import {
 } from "../command-editing";
 import { registerCommands, type InkstoneCommand } from "../commands";
 import { emitIntent } from "../intents";
+import { openFindPanel, openReplacePanel } from "../search-panel";
 import {
   commandAddTableColumn,
   commandAddTableRow,
@@ -280,6 +281,27 @@ export function builtinCommands(): InkstoneCommand[] {
         emitIntent("file.save");
         return true;
       },
+    },
+
+    /* ── 查找 / 替换（只在命令面板） ── */
+    // 命令面板里能搜到，是因为**原生菜单只在 Tauri 里存在**：
+    // 浏览器开发模式下「编辑 → 查找」是灰的，没有第二个入口就等于没法调试。
+    {
+      id: "find.open",
+      label: "查找",
+      category: "查找",
+      surfaces: ["palette"],
+      keywords: "find search sousuo zha",
+      shortcut: "⌘F",
+      run: (view) => openFindPanel(view),
+    },
+    {
+      id: "find.replace",
+      label: "替换",
+      category: "查找",
+      surfaces: ["palette"],
+      keywords: "replace tihuan",
+      run: (view) => openReplacePanel(view),
     },
 
     /* ── 表格（只在光标位于表格内时可用） ── */
