@@ -136,6 +136,9 @@ export function startAutoSaveRuntime(): () => void {
     draftWriter.call();
 
     if (!settings.general.autoSave) return;
+    // 文件在外部被改过、而用户还没决定怎么办时，**不写**：
+    // 现在写下去就是把对方的改动无声抹掉。
+    if (state.externalChange) return;
     cancelAutoSave();
     autoSaveTimer = setTimeout(() => {
       autoSaveTimer = null;

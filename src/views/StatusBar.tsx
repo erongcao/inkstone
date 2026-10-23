@@ -17,7 +17,9 @@ export function StatusBar() {
     ? `自动保存失败：${doc.saveError}`
     : doc.recoveryError
       ? `崩溃恢复不可用：${doc.recoveryError}`
-      : null;
+      : doc.externalChange
+        ? "文件已被外部修改，自动保存已暂停"
+        : null;
 
   return (
     <footer className="app__statusbar">
@@ -35,6 +37,11 @@ export function StatusBar() {
       {problem && (
         <span className="app__statusbar-error" role="status">
           {problem}
+        </span>
+      )}
+      {doc.notice && (
+        <span className="app__statusbar-notice" role="status">
+          {doc.notice}
         </span>
       )}
       <span style={{ marginLeft: "auto" }}>

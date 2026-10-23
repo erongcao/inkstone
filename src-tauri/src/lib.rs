@@ -5,6 +5,7 @@ mod fs;
 mod menu;
 mod recent;
 mod search;
+mod watch;
 
 use tauri::{Emitter, Manager, RunEvent};
 
@@ -23,6 +24,8 @@ pub fn run() {
             // 安装应用菜单（macOS 上作为系统应用菜单显示）
             menu::install(app.handle())?;
             recent::ensure_data_dir(app.handle());
+            // 启动文件监听轮询线程（检测当前文档在外部被修改）
+            watch::spawn(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -31,6 +34,8 @@ pub fn run() {
             document::save_document_as,
             document::set_document_title,
             document::read_document,
+            watch::watch_document,
+            watch::unwatch_document,
             asset::save_image,
             asset::read_image_data_url,
             recent::list_recent_files,

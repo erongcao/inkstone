@@ -1,10 +1,16 @@
-import { describe, expect, it, beforeEach } from "vitest";
+import { describe, expect, it, beforeEach, vi } from "vitest";
 import { render, screen, fireEvent, cleanup, act } from "@testing-library/react";
 import { EditorView } from "@codemirror/view";
 import App from "../src/App";
 import { dispatchMenuAction } from "@/ipc/menu";
 import { openPalette } from "@/editor/palette";
 import { readDraft, writeDraft } from "@/document/draft-store";
+import * as documentModule from "@/ipc/document";
+import { openDocumentAt, setDocumentContent } from "@/ipc/document";
+import { handleExternalChange } from "@/document/conflict";
+import { SAMPLE_ROOT } from "@/ipc/fs";
+
+const README = `${SAMPLE_ROOT}/README.md`;
 
 /**
  * 交互冒烟测试
@@ -209,6 +215,25 @@ describe("应用交互", () => {
 
     expect(screen.queryByRole("dialog", { name: "恢复未保存的改动" })).toBeNull();
     expect(readDraft()).toBeNull();
+  });
+
+  it("外部修改且本地有改动时弹出冲突提示", async () => {
+    render(<App />);
+
+    await act(async () => {
+      await openDocumentAt(README);
+    });
+    vi.spyOn(documentModule, "readFileContent").mockResolvedValue("外部改过的内容");
+    act(() => {
+      setDocumentContent("我本地写的内容");
+    });
+    await act(async () => {
+      await handleExternalChange(README);
+    });
+
+    expect(await screen.findByRole("dialog", { name: "文件冲突" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "用磁盘版本" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "保留我的版本" })).toBeTruthy();
   });
 
   it("设置持久化到 localStorage", () => {

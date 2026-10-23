@@ -17,8 +17,15 @@ import { SettingsPanel } from "@/views/SettingsPanel";
 import { CommandPalette } from "@/views/CommandPalette";
 import { LinkPopover } from "@/views/LinkPopover";
 import { RecoveryDialog } from "@/views/RecoveryDialog";
+import { ConflictDialog } from "@/views/ConflictDialog";
 import { onIntent } from "@/editor/intents";
 import { startAutoSaveRuntime } from "@/document/autosave";
+import {
+  resolveKeepLocal,
+  resolveWithDisk,
+  startWatchRuntime,
+  useConflict,
+} from "@/document/conflict";
 import {
   applyRecovery,
   discardRecovery,
@@ -35,6 +42,7 @@ export default function App() {
   const { open, save, saveAs, create } = useDocument();
   const [settings, update] = useSettings();
   const [recovery, setRecovery] = useState<RecoveryCandidate | null>(null);
+  const conflict = useConflict();
 
   // 挂载原生菜单事件桥
   useEffect(() => {
@@ -43,6 +51,9 @@ export default function App() {
 
   // 自动保存 + 崩溃恢复快照：跟着文档内容走，组件卸载时要停掉定时器
   useEffect(() => startAutoSaveRuntime(), []);
+
+  // 文件监听：检测当前文档在外部被修改
+  useEffect(() => startWatchRuntime(), []);
 
   // 启动时检查有没有上次没保存完的改动
   useEffect(() => {
@@ -153,6 +164,13 @@ export default function App() {
       )}
       <CommandPalette />
       <LinkPopover />
+      {conflict && (
+        <ConflictDialog
+          conflict={conflict}
+          onUseDisk={() => resolveWithDisk()}
+          onKeepLocal={() => resolveKeepLocal()}
+        />
+      )}
     </div>
   );
 }

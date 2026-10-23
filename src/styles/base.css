@@ -99,6 +99,11 @@ textarea,
   font-weight: 600;
 }
 
+/* 短提示：比错误轻，但也要看得见 */
+.app__statusbar-notice {
+  color: var(--ink-fg);
+}
+
 /* ── 通用 UI 元件 ── */
 .panel-tabs {
   display: flex;

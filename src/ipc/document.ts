@@ -23,6 +23,15 @@ export interface DocumentState {
   saveError: string | null;
   /** 崩溃恢复快照写不进去的原因；null = 没有失败 */
   recoveryError: string | null;
+  /**
+   * 磁盘上的内容与我们知道的不一致（文件在外部被改过）。
+   *
+   * 为 true 期间**自动保存会暂停**：再往这个文件上写就是把对方的改动无声抹掉。
+   * 用户明确保存（⌘S）或者选择「用磁盘版本」之后才解除。
+   */
+  externalChange: boolean;
+  /** 一条要显示给用户的短提示；null = 没有 */
+  notice: string | null;
 }
 
 type Backend = {
@@ -95,6 +104,8 @@ let state: DocumentState = {
   title: "未命名",
   saveError: null,
   recoveryError: null,
+  externalChange: false,
+  notice: null,
 };
 
 /**
@@ -149,6 +160,7 @@ export async function openDocument(): Promise<void> {
     dirty: false,
     title: titleFromPath(result.path),
     saveError: null,
+    externalChange: false,
   });
   await getBackend().setTitle(state.title);
 }
@@ -162,7 +174,13 @@ export async function openDocumentAt(path: string): Promise<void> {
   if (state.path === path && state.dirty) return;
   const content = await getBackend().readFile(path);
   savedContent = content;
-  setState({ path, content, dirty: false, title: titleFromPath(path) });
+  setState({
+    path,
+    content,
+    dirty: false,
+    title: titleFromPath(path),
+    externalChange: false,
+  });
   await getBackend().setTitle(state.title);
 }
 
@@ -190,7 +208,8 @@ export async function saveDocument(): Promise<boolean> {
   // 不加这道判断，会把「还没保存的新改动」标成已保存——那等于丢数据。
   if (state.path === path && state.content === content) {
     savedContent = content;
-    setState({ dirty: false, saveError: null });
+    // 用户明确保存 = 明确接受用本地版本覆盖磁盘上的外部改动
+    setState({ dirty: false, saveError: null, externalChange: false });
   }
   return true;
 }
@@ -199,7 +218,13 @@ export async function saveDocumentAs(): Promise<void> {
   const path = await getBackend().saveFileAs(state.content);
   if (!path) return;
   savedContent = state.content;
-  setState({ path, dirty: false, title: titleFromPath(path), saveError: null });
+  setState({
+    path,
+    dirty: false,
+    title: titleFromPath(path),
+    saveError: null,
+    externalChange: false,
+  });
   await getBackend().setTitle(state.title);
 }
 
@@ -222,6 +247,7 @@ export function newDocument(): void {
     dirty: false,
     title: "未命名",
     saveError: null,
+    externalChange: false,
   });
   void getBackend().setTitle(state.title);
 }
@@ -308,6 +334,61 @@ export function getDocumentState(): DocumentState {
 export function setRecoveryError(message: string | null): void {
   if (state.recoveryError === message) return;
   setState({ recoveryError: message });
+}
+
+/**
+ * 我们相信磁盘上此刻的内容。
+ *
+ * 外部修改检测就是拿它和磁盘上的实际内容比：
+ * 不一样就说明有人（另一个编辑器、git checkout、脚本）动过这个文件。
+ */
+export function getSavedContent(): string {
+  return savedContent;
+}
+
+/** 标记「文件在外部被改过」——自动保存会因此暂停 */
+export function markExternalChange(): void {
+  if (state.externalChange) return;
+  setState({ externalChange: true });
+}
+
+/** 解除「文件在外部被改过」 */
+export function clearExternalChange(): void {
+  if (!state.externalChange) return;
+  setState({ externalChange: false });
+}
+
+/**
+ * 用磁盘上的内容替换当前内容（外部修改、且本地没有未保存改动时用）。
+ *
+ * 同时更新 `savedContent`——它就是「我们相信磁盘上是什么」的答案，
+ * 不同步的话，下一次外部修改检测会把同一份内容又当成新改动。
+ */
+export function reloadFromDisk(content: string): void {
+  savedContent = content;
+  setState({ content, dirty: false, externalChange: false });
+}
+
+/**
+ * 显示一条短提示。
+ *
+ * 自动消失（默认 5 秒）——短提示是用来让人知道「刚才发生了什么」，
+ * 一直挂着会变成噪声。传 null 立即清掉。
+ */
+let noticeTimer: ReturnType<typeof setTimeout> | null = null;
+
+export function setNotice(message: string | null, durationMs = 5000): void {
+  if (noticeTimer) {
+    clearTimeout(noticeTimer);
+    noticeTimer = null;
+  }
+  setState({ notice: message });
+  if (message !== null && durationMs > 0) {
+    noticeTimer = setTimeout(() => {
+      noticeTimer = null;
+      if (state.notice === message) setState({ notice: null });
+    }, durationMs);
+  }
 }
 
 export function useDocument() {
