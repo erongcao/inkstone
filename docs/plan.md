@@ -619,7 +619,7 @@ CM6 的 `EditorView.inputHandler` 扩展点实现，设置项 `editor.autoPairMo
 - [x] 任务列表交互（点击勾选写回源码）
 - [x] 代码高亮（highlight.js `lib/core`，亮/暗双主题走 CSS 变量）
 - [x] 公式 KaTeX：块级 `$$…$$` + 行内 `$…$`（定界符策略做成设置项，见 §8 D9）
-- [x] Mermaid 图表（懒加载独立 chunk；elkjs 是 EPL-2.0 弱 copyleft，已登记为待签字例外）
+- [x] Mermaid 图表（懒加载独立 chunk；elkjs 是 EPL-2.0 弱 copyleft，2026-10-25 已签字接受）
 - [x] 焦点模式 / 打字机模式
 - [x] Emoji 自动补全（`:smile` / `:笑`，1914 条含中文别名）
 - [x] 图片：拖放 / 剪贴板粘贴 / 相对路径 / **尺寸 `=WxH`**（Typora / Obsidian 扩展；尺寸写进 Markdown，不引入第二个真相源）

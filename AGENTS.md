@@ -844,7 +844,7 @@ Pending 重新查询一次。这是**我们要的**：`:smi` → `:smil` 的候�
 
 ## Mermaid：包体 + 许可证 + 防抖（2026-10-23）
 
-### 许可证：`elkjs` 是 EPL-2.0 弱 copyleft，**待负责人签字**
+### 许可证：`elkjs` 是 EPL-2.0 弱 copyleft，**已签字接受**（2026-10-25）
 
 mermaid 12.2.0 的**必需**直接依赖（在 `dependencies` 里，不在 `optionalDependencies`）
 elkjs 0.9.3 是 **EPL-2.0**。这不是 GPL 那种病毒式传染——EPL-2.0 是**文件级弱 copyleft**，
@@ -854,6 +854,10 @@ EUPL-1.1/1.2（Eclipse 的旧许可），EPL-2.0 是它的继任者、条款结�
 `scripts/check-licenses.mjs` 新增 **`ACKNOWLEDGED`** 一档，**刻意与 `ALLOWED` 分开**：
 `ALLOWED` 是「闭着眼也没问题」，`ACKNOWLEDGED` 是「技术上可用但弱于 MIT，需要有人点头」。
 混在一起半年后就没人分得清了。它不阻断 CI（出口码 0），但**每次都单独打印**、不静默。
+
+**签字记录：2026-10-25，项目负责人曹忆嵘接受**（保留 mermaid）。
+撤回方式没变：`git revert` 掉 M2-4 的提交即可整体撤下 mermaid，
+`ACKNOWLEDGED` 那一档也会跟着消失。
 
 ### 包体：+5.0 MB，所以启动**不**预热
 

@@ -113,7 +113,8 @@ const ACKNOWLEDGED = {
    * 风险与现状：mermaid 是 Markdown 生态的事实标准，Typora / Obsidian /
    * VS Code / GitHub 都用它，elkjs 的 EPL-2.0 同样在它们身上。
    *
-   * ⚠️ 待项目负责人确认。若不接受，`git revert` 掉 M2-4 的提交即可整体撤下。
+   * ✅ 2026-10-25 项目负责人（曹忆嵘）已签字接受。
+   * 撤回方式仍然保留：`git revert` 掉 M2-4 的提交即可整体撤下 mermaid。
    */
   elkjs: "EPL-2.0（弱 copyleft），mermaid 的必需直接依赖；只作为库调用不产生义务",
   /**
@@ -318,7 +319,7 @@ function main() {
 
   // 已审阅的弱 copyleft 例外：单独一节，永远打印，绝不静默
   if (acknowledgedHits.length > 0) {
-    console.log(`\n⚠️  已登记的弱 copyleft 例外 ${acknowledgedHits.length} 条（需负责人签字）：`);
+    console.log(`\n⚠️  已登记的弱 copyleft 例外 ${acknowledgedHits.length} 条（已签字接受，仍每次打印）：`);
     for (const dep of acknowledgedHits) {
       console.log(`  ⚠ ${dep.name} — ${dep.license}`);
       console.log(`     理由：${dep.reason}`);
