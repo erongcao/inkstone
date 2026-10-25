@@ -4,7 +4,8 @@
  * jsdom 不实现部分浏览器 API，这里补齐应用用到的部分。
  */
 
-import { beforeEach, vi } from "vitest";
+import { afterEach, beforeEach, vi } from "vitest";
+import { cleanup } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 
@@ -111,4 +112,40 @@ beforeEach(() => {
   localStorage.clear();
   document.documentElement.removeAttribute("data-theme");
   document.documentElement.removeAttribute("data-mode");
+});
+
+/*
+ * 每个测试后卸载 React 树。
+ *
+ * ## 为什么必须自己写
+ *
+ * @testing-library/react 的**自动 cleanup** 靠全局 `afterEach` 注册：
+ *
+ *   if (typeof afterEach === "function") afterEach(() => cleanup())
+ *
+ * 而 `vitest.config.ts` 里 `globals: false` —— 没有全局 `afterEach`，
+ * 于是**自动 cleanup 根本没注册**。
+ * 结果：测试文件里 render 出来的 React 树会活过整个文件，
+ * 连同挂在上面的 CodeMirror 实例一起。
+ *
+ * ## 活过文件会怎样
+ *
+ * CM6 内部有个 10ms 的 focus 定时器（`updateForFocusChange`），
+ * 视图销毁时它**不会被取消**。文件跑完 → vitest 拆掉 jsdom 环境 →
+ * `populateGlobal` 的清理把 globalThis 上的 `requestAnimationFrame` 删掉
+ * （jsdom 环境里 `document.defaultView === globalThis`，
+ *  所以 CM6 的 `view.win` 就是 globalThis）。
+ * 那个定时器这时才触发 → `view.update([])` → `requestMeasure()` →
+ * `this.win.requestAnimationFrame` → **TypeError**。
+ *
+ * 表现是「所有用例都过了，但 vitest 报 1 个 unhandled error，退出码 1」——
+ * CI 上就是这个（Node 22 job 挂了，本地复现不了：本地 teardown 比 10ms 慢，
+ * 定时器赶在环境销毁前就触发了）。
+ *
+ * 有了这个 afterEach，React 树在每个用例结束时就被卸载，
+ * `editor.destroy()` → `view.destroy()` → 视图标记为已销毁，
+ * 那个定时器再触发时 `update()` 会提前返回，什么都不做。
+ */
+afterEach(() => {
+  cleanup();
 });

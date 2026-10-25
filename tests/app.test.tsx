@@ -262,4 +262,27 @@ describe("应用交互", () => {
     expect(raw).toBeTruthy();
     expect(JSON.parse(raw!).editor.autoPairMode).toBe("off");
   });
+
+  it("卸载后 CodeMirror 实例被销毁", () => {
+    /*
+     * 这条守住「React 树卸载 → 视图销毁」这条链。
+     *
+     * 它不只是洁癖：CM6 内部有个 10ms 的 focus 定时器，
+     * 视图销毁时它不会被取消。视图要是活着活过测试文件，
+     * 那个定时器会在 jsdom 环境被拆掉之后才触发，
+     * 那时 globalThis 上的 requestAnimationFrame 已经被删了 →
+     * `this.win.requestAnimationFrame is not a function` →
+     * vitest 报 unhandled error、退出码 1，
+     * 尽管**所有用例都过了**。
+     *
+     * （CI 上真的这么挂过一次：Node 22 job。）
+     */
+    render(<App />);
+    const view = getEditorView();
+    const probe = view as unknown as { destroyed: boolean };
+
+    expect(probe.destroyed).toBe(false);
+    cleanup();
+    expect(probe.destroyed).toBe(true);
+  });
 });

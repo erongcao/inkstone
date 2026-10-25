@@ -11,7 +11,11 @@ mod search;
 mod shortcuts;
 mod watch;
 
-use tauri::{AppHandle, Emitter, Manager, RunEvent};
+use tauri::{AppHandle, Emitter, Manager};
+// `RunEvent` 只在 macOS / iOS / Android 上用得到（见下），
+// 其它平台上它是未用 import —— clippy 的 `-D warnings` 会当错误报出来。
+#[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
+use tauri::RunEvent;
 
 /// 前端监听的事件名：从 Finder / 命令行打开文件时通知前端
 const OPEN_FILE_EVENT: &str = "document://open";
@@ -75,6 +79,15 @@ pub fn run() {
         .expect("构建 Inkstone 失败");
 
     app.run(|app, event| {
+        /*
+         * `RunEvent::Opened` 只在 macOS / iOS / Android 上**存在**
+         * （tauri-2.12.4 `src/app.rs:261` 的 cfg 门控）。
+         *
+         * 不加同样的 cfg 的话，Linux / Windows 上这段代码**根本编译不过**——
+         * 而且本地 macOS 永远发现不了，只有 CI 在 Linux 上编译时才炸。
+         * （M5-5 三平台 CI 第一次实跑就撞上了这个。）
+         */
+        #[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
         if let RunEvent::Opened { urls } = event {
             // macOS：从 Finder 双击打开，或用 `open -a Inkstone file.md` 启动
             for url in urls {
