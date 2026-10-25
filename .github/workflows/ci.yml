@@ -110,9 +110,16 @@ jobs:
             target: x86_64-apple-darwin
           - os: windows-latest
             target: x86_64-pc-windows-msvc
+          # Windows on ARM：公开仓库可用的 windows-11-arm runner。
+          # 它是较新的 runner，失败不影响其它平台的结论，
+          # 所以单独放一个 job 而不是塞进上面的矩阵。
+          - os: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            allow_failure: true
           - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
     runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.allow_failure || false }}
     steps:
       - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v4

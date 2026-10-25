@@ -431,7 +431,7 @@ Typora 导出体系的核心设计有两点值得直接继承：
 | Python | 3.12.7 | ✅ |
 | **磁盘可用** | **仅 49 GB（已用 95%）** | 🔴 **Tauri target 目录 3–8 GB，必须先清理** |
 | macOS | 27.0.1 (26A434) | ✅ Apple Silicon 原生 |
-| git 仓库根 | `/Users/yirongcao`（家目录本身是 repo） | ⚠️ 新项目**不能**放在家目录 git 树内 → 定为 `~/Documents/GitHub/inkstone` |
+| git 仓库根 | 家目录本身是 repo | ⚠️ 新项目**不能**放在家目录 git 树内 → 定为 `~/Documents/GitHub/inkstone` |
 
 ---
 

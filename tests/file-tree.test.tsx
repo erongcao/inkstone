@@ -80,7 +80,7 @@ describe("路径判断", () => {
 
   it("短路径原样显示，长路径从前面截断并保住尾部", () => {
     expect(shortenPath("/Users/me/notes")).toBe("/Users/me/notes");
-    const long = "/Users/yirongcao/Documents/个人文档/我的笔记库/2026 归档";
+    const long = "/Users/someone/Documents/个人文档/我的笔记库/2026 归档";
     const short = shortenPath(long);
     expect(short.startsWith("…")).toBe(true);
     // 尾部（也就是最有信息量的目录名）必须留住

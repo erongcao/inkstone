@@ -1,0 +1,95 @@
+name: Release
+
+# 打 tag 时发布：构建三平台产物并创建 GitHub Release。
+#
+# 与 ci.yml 的关系：ci.yml 负责**验证**（每次 push/PR），
+# 本文件负责**产出**（只在 tag 时跑）。两者共用同一套依赖安装步骤。
+#
+# 自动更新走的是「检查更新 → 打开下载页」的形态（v0.1.0 阶段的取舍），
+# 所以**不需要** updater 签名密钥——那套东西留给以后的静默更新。
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "要发布的 tag（如 v0.1.0）"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: 构建 ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            label: macOS (Apple Silicon)
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            label: macOS (Intel)
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            label: Windows (x64)
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            label: Linux (x64)
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          tag: ${{ inputs.tag || github.ref_name }}
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: ${{ matrix.target }}
+
+      - name: 安装 Linux 系统依赖
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: 构建并发布产物
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: .
+          tagName: ${{ inputs.tag || github.ref_name }}
+          releaseName: Inkstone ${{ inputs.tag || github.ref_name }}
+          releaseBody: 见 [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/${{ inputs.tag || github.ref_name }}/CHANGELOG.md)
+          releaseDraft: true
+          args: --target ${{ matrix.target }}

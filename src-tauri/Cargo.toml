@@ -6,7 +6,10 @@ authors = ["Inkstone contributors"]
 edition = "2021"
 rust-version = "1.77"
 license = "MIT"
-repository = "https://github.com/inkstone-editor/inkstone"
+repository = "https://github.com/erongcao/inkstone"
+homepage = "https://github.com/erongcao/inkstone"
+keywords = ["markdown", "editor", "typora", "live-preview", "tauri"]
+categories = ["text-editors"]
 
 # Tauri v2 约定：lib 供移动端入口复用，binary 只做转发
 [lib]
