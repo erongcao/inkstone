@@ -31,11 +31,8 @@
  */
 
 import { useEffect, useState } from "react";
-import {
-  formatShortcutLabel,
-  resolveExportItems,
-  type ResolvedExportItem,
-} from "@/export/items";
+import { resolveExportItems, type ResolvedExportItem } from "@/export/items";
+import { formatShortcut } from "@/shortcuts";
 import { detectPandoc, type PandocInfo } from "@/ipc/export";
 import type { ExportResult } from "@/export/service";
 import { readSettings } from "@/settings/store";
@@ -170,7 +167,7 @@ function ExportRow({ item, disabled, busy, onRun }: RowProps) {
       <span className="export-item-desc">{format.description}</span>
       <span className="export-item-ext">{format.extension}</span>
       {item.shortcut && (
-        <span className="export-item-shortcut">{formatShortcutLabel(item.shortcut)}</span>
+        <span className="export-item-shortcut">{formatShortcut(item.shortcut)}</span>
       )}
       {busy && <span className="export-item-busy">导出中…</span>}
     </button>

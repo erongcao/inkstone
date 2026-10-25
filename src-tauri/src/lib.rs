@@ -7,6 +7,7 @@ mod pandoc;
 mod print;
 mod recent;
 mod search;
+mod shortcuts;
 mod watch;
 
 use tauri::{Emitter, Manager, RunEvent};

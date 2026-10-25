@@ -22,6 +22,7 @@ import {
 import { registerCommands, type InkstoneCommand } from "../commands";
 import { emitIntent } from "../intents";
 import { openFindPanel, openReplacePanel } from "../search-panel";
+import { KEYS } from "@/shortcuts";
 import {
   commandAddTableColumn,
   commandAddTableRow,
@@ -276,7 +277,7 @@ export function builtinCommands(): InkstoneCommand[] {
       category: "文件",
       surfaces: ["palette"],
       keywords: "save baocun",
-      shortcut: "⌘S",
+      shortcut: KEYS.save,
       run: () => {
         emitIntent({ type: "file.save" });
         return true;
@@ -289,7 +290,7 @@ export function builtinCommands(): InkstoneCommand[] {
       category: "文件",
       surfaces: ["palette"],
       keywords: "export daochu docx pdf epub html word",
-      shortcut: "⌘⇧E",
+      shortcut: KEYS.exportDocument,
       run: () => {
         emitIntent({ type: "file.export" });
         return true;
@@ -340,7 +341,7 @@ export function builtinCommands(): InkstoneCommand[] {
       category: "查找",
       surfaces: ["palette"],
       keywords: "find search sousuo zha",
-      shortcut: "⌘F",
+      shortcut: KEYS.find,
       run: (view) => openFindPanel(view),
     },
     {

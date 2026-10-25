@@ -3,30 +3,17 @@
  *
  * 约定：Rust 侧 `on_menu_event` 收到点击后，以菜单项 id 作为事件名 emit 到前端。
  * 这里统一监听并派发到内部的 action 总线。
+ *
+ * ## 动作清单的来源
+ *
+ * `MenuAction` 类型与监听列表都从 `src/shortcuts.ts` 的 `MENU_ACTION_IDS` 派生。
+ * 之前这个文件里**同一个清单写了两遍**（联合类型 + 数组），
+ * 加一个动作要改两处，漏一处就静默失效——菜单点了没反应。
  */
 
-export type MenuAction =
-  | "new-document"
-  | "open-document"
-  | "save-document"
-  | "save-document-as"
-  | "export-document"
-  | "preferences"
-  | "find"
-  | "replace"
-  | "copy-as-markdown"
-  | "copy-as-html"
-  | "paste-as-plain-text"
-  | "toggle-sidebar"
-  | "toggle-source-mode"
-  | "toggle-focus-mode"
-  | "toggle-typewriter-mode"
-  | "zoom-in"
-  | "zoom-out"
-  | "zoom-reset"
-  | "markdown-reference"
-  | "shortcuts"
-  | "open-homepage";
+import { MENU_ACTION_IDS, type MenuAction } from "@/shortcuts";
+
+export type { MenuAction };
 
 type ActionHandler = (action: MenuAction) => void;
 
@@ -58,32 +45,9 @@ export async function initMenuBridge(): Promise<void> {
   if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return;
 
   const { listen } = await import("@tauri-apps/api/event");
-  const actions: MenuAction[] = [
-    "new-document",
-    "open-document",
-    "save-document",
-    "save-document-as",
-    "export-document",
-    "preferences",
-    "find",
-    "replace",
-    "copy-as-markdown",
-    "copy-as-html",
-    "paste-as-plain-text",
-    "toggle-sidebar",
-    "toggle-source-mode",
-    "toggle-focus-mode",
-    "toggle-typewriter-mode",
-    "zoom-in",
-    "zoom-out",
-    "zoom-reset",
-    "markdown-reference",
-    "shortcuts",
-    "open-homepage",
-  ];
 
   await Promise.all(
-    actions.map((action) =>
+    MENU_ACTION_IDS.map((action) =>
       listen(action, () => dispatchMenuAction(action)).then((unlisten) => {
         // 保存 unlisten 以便热重载时清理
         unlisteners.push(unlisten);

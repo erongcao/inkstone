@@ -21,12 +21,12 @@ import { BUILTIN_THEMES } from "@/theme/themes";
 import { BUILTIN_VARIABLE_LABELS } from "@/export/variables";
 import {
   availableExtraFormats,
-  formatShortcutLabel,
   materializeExportItems,
   parseShortcut,
   resolveExportItems,
   shortcutConflict,
 } from "@/export/items";
+import { formatShortcut } from "@/shortcuts";
 import type { ExportItemSetting, ExportVariableSetting } from "@/settings/schema";
 import { AiSection } from "./AiSettingsSection";
 
@@ -635,7 +635,7 @@ function ExportItemsSection({ settings, patch }: { settings: Settings; patch: Pa
                 />
                 {parsed && !error && (
                   <span className="export-item-shortcut-preview">
-                    {formatShortcutLabel(parsed)}
+                    {formatShortcut(parsed)}
                   </span>
                 )}
                 {error && <span className="export-item-shortcut-error">{error}</span>}

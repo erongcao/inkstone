@@ -6,11 +6,25 @@
 //! API 说明：Tauri 2.12 的菜单以 Builder 风格提供
 //! （`MenuBuilder` / `SubmenuBuilder` / `MenuItemBuilder`），
 //! `Submenu::with_items` 在该版本需要额外的 `enabled` 参数，且 items 为 `&[&dyn IsMenuItem]`。
+//!
+//! ## 加速键不写在这里
+//!
+//! 菜单项的加速键全部来自 `shortcuts::accelerator(id)`——
+//! 那份清单由 `scripts/gen-shortcuts.ts` 从前端的快捷键注册表生成。
+//!
+//! 之前加速键直接写在本文件里，于是同一批键位有两份真相源，
+//! 而且永远不会互相提醒：⌘E 同时给了菜单和 CM6，NSApp 先吃按键，
+//! CM6 那个功能**静默失灵**；「放大」写的 `CmdOrCtrl+Plus` 更是解析不了，
+//! Tauri 的 `.parse().ok()` 把错误吞掉，菜单项直接没有快捷键。
+//!
+//! 现在：**本文件里一个加速键字符串都没有**，只有一个动作 id。
 
 use tauri::menu::{
     AboutMetadata, CheckMenuItemBuilder, MenuBuilder, MenuItemBuilder, SubmenuBuilder,
 };
 use tauri::{AppHandle, Emitter};
+
+use crate::shortcuts;
 
 /// 菜单动作 → 前端事件名
 ///
@@ -53,21 +67,28 @@ pub fn install(app: &AppHandle) -> tauri::Result<()> {
 }
 
 /// 创建一个会向前端发事件的菜单项
+///
+/// 加速键从 `shortcuts::accelerator(id)` 取——**不在这里写死**。
+/// 清单里没有的菜单项（比如「Markdown 语法参考」）就没有加速键。
 fn action(
     app: &AppHandle,
     id: &str,
     text: &str,
-    accelerator: Option<&str>,
 ) -> tauri::Result<tauri::menu::MenuItem<tauri::Wry>> {
     let mut builder = MenuItemBuilder::with_id(id, text);
-    if let Some(accel) = accelerator {
-        builder = builder.accelerator(accel);
+    if let Some(accelerator) = shortcuts::accelerator(id) {
+        builder = builder.accelerator(accelerator);
+    } else if !shortcuts::is_known_action(id) {
+        // 菜单项 id 没登记在快捷键清单里
+        // → 前端的 initMenuBridge 不会监听它 → 点了没有任何反应，
+        // 而且不会有任何报错能指到这里。启动时就说清楚。
+        eprintln!("菜单项 \"{id}\" 不在 shortcuts.json 里，前端收不到它的动作");
     }
     builder.build(app)
 }
 
 fn build_app_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Submenu<tauri::Wry>> {
-    let settings = action(app, "preferences", "偏好设置…", Some("CmdOrCtrl+,"))?;
+    let settings = action(app, "preferences", "偏好设置…")?;
 
     SubmenuBuilder::new(app, "Inkstone")
         .about_with_text(
@@ -92,24 +113,11 @@ fn build_app_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Submenu<tauri::
 }
 
 fn build_file_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Submenu<tauri::Wry>> {
-    let new_doc = action(app, "new-document", "新建文档", Some("CmdOrCtrl+N"))?;
-    let open = action(app, "open-document", "打开…", Some("CmdOrCtrl+O"))?;
-    let save = action(app, "save-document", "保存", Some("CmdOrCtrl+S"))?;
-    let save_as = action(
-        app,
-        "save-document-as",
-        "另存为…",
-        Some("CmdOrCtrl+Shift+S"),
-    )?;
-    let export_doc = action(
-        app,
-        "export-document",
-        "导出…",
-        // ⌘⇧E 而不是 ⌘E：⌘E 已经被编辑器的「行内代码」占着（CM6 的 Mod-e）。
-        // 原生菜单的加速键在 macOS 上由 NSApp 先吃掉，webview 根本收不到这个键，
-        // 撞车的后果是**后绑的那个功能彻底失效**，而不是两个功能一起触发。
-        Some("CmdOrCtrl+Shift+E"),
-    )?;
+    let new_doc = action(app, "new-document", "新建文档")?;
+    let open = action(app, "open-document", "打开…")?;
+    let save = action(app, "save-document", "保存")?;
+    let save_as = action(app, "save-document-as", "另存为…")?;
+    let export_doc = action(app, "export-document", "导出…")?;
 
     SubmenuBuilder::new(app, "文件")
         .item(&new_doc)
@@ -125,28 +133,11 @@ fn build_file_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Submenu<tauri:
 }
 
 fn build_edit_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Submenu<tauri::Wry>> {
-    let find = action(app, "find", "查找…", Some("CmdOrCtrl+F"))?;
-    let replace = action(app, "replace", "替换…", Some("CmdOrCtrl+H"))?;
-    let copy_as_md = action(
-        app,
-        "copy-as-markdown",
-        "复制为 Markdown 源码",
-        Some("CmdOrCtrl+Shift+C"),
-    )?;
-    let copy_as_html = action(
-        app,
-        "copy-as-html",
-        "复制为 HTML",
-        // ⌘⌥C 而不是 ⌘⇧C：⌘⇧C 已经给了「复制为 Markdown 源码」，
-        // 编辑器内的复制为 HTML 原本也绑在 ⌘⇧C 上，两边抢同一个键。
-        Some("CmdOrCtrl+Alt+C"),
-    )?;
-    let paste_as_plain_text = action(
-        app,
-        "paste-as-plain-text",
-        "粘贴为纯文本",
-        Some("CmdOrCtrl+Shift+V"),
-    )?;
+    let find = action(app, "find", "查找…")?;
+    let replace = action(app, "replace", "替换…")?;
+    let copy_as_md = action(app, "copy-as-markdown", "复制为 Markdown 源码")?;
+    let copy_as_html = action(app, "copy-as-html", "复制为 HTML")?;
+    let paste_as_plain_text = action(app, "paste-as-plain-text", "粘贴为纯文本")?;
 
     SubmenuBuilder::new(app, "编辑")
         .undo()
@@ -167,30 +158,13 @@ fn build_edit_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Submenu<tauri:
 }
 
 fn build_view_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Submenu<tauri::Wry>> {
-    let sidebar = action(
-        app,
-        "toggle-sidebar",
-        "显示/隐藏侧边栏",
-        // ⌘⌥B 而不是 ⌘B：⌘B 是编辑器内「加粗」的通用肌肉记忆，
-        // 侧边栏开关是低频操作，让位给它。加 Alt 保留 B=Bar 的联想。
-        Some("CmdOrCtrl+Alt+B"),
-    )?;
-    let source_mode = action(app, "toggle-source-mode", "源码模式", Some("CmdOrCtrl+/"))?;
-    let focus_mode = action(
-        app,
-        "toggle-focus-mode",
-        "专注模式",
-        Some("CmdOrCtrl+Shift+F"),
-    )?;
-    let typewriter = action(
-        app,
-        "toggle-typewriter-mode",
-        "打字机模式",
-        Some("CmdOrCtrl+Shift+T"),
-    )?;
-    let zoom_in = action(app, "zoom-in", "放大", Some("CmdOrCtrl+Plus"))?;
-    let zoom_out = action(app, "zoom-out", "缩小", Some("CmdOrCtrl+-"))?;
-    let zoom_reset = action(app, "zoom-reset", "实际大小", Some("CmdOrCtrl+0"))?;
+    let sidebar = action(app, "toggle-sidebar", "显示/隐藏侧边栏")?;
+    let source_mode = action(app, "toggle-source-mode", "源码模式")?;
+    let focus_mode = action(app, "toggle-focus-mode", "专注模式")?;
+    let typewriter = action(app, "toggle-typewriter-mode", "打字机模式")?;
+    let zoom_in = action(app, "zoom-in", "放大")?;
+    let zoom_out = action(app, "zoom-out", "缩小")?;
+    let zoom_reset = action(app, "zoom-reset", "实际大小")?;
 
     // 复选框菜单项：状态与前端设置双向同步（M2 起接通）
     let sidebar_check = CheckMenuItemBuilder::with_id("check-sidebar", "显示侧边栏")
@@ -225,9 +199,9 @@ fn build_window_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Submenu<taur
 }
 
 fn build_help_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Submenu<tauri::Wry>> {
-    let markdown_ref = action(app, "markdown-reference", "Markdown 语法参考", None)?;
-    let shortcuts = action(app, "shortcuts", "快捷键一览", None)?;
-    let homepage = action(app, "open-homepage", "项目主页", None)?;
+    let markdown_ref = action(app, "markdown-reference", "Markdown 语法参考")?;
+    let shortcuts = action(app, "shortcuts", "快捷键一览")?;
+    let homepage = action(app, "open-homepage", "项目主页")?;
 
     SubmenuBuilder::new(app, "帮助")
         .item(&markdown_ref)

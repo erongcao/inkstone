@@ -721,8 +721,32 @@ CM6 的 `EditorView.inputHandler` 扩展点实现，设置项 `editor.autoPairMo
 - [ ] Linux `.deb` / `.rpm` / AppImage / Wayland 兼容
 - [ ] 自动更新
 - [ ] i18n（简中 / 繁中 / 英文）
-- [ ] 快捷键映射层（macOS ⌘ ↔ Win/Linux Ctrl 统一抽象）
+- [x] 快捷键映射层（macOS ⌘ ↔ Win/Linux Ctrl 统一抽象）
 - **验收**：三平台 CI 全绿，各平台产出一个可安装包
+
+#### M5-1 开仓地基（2026-10-25）
+- ✅ 公开仓库 `erongcao/inkstone` 已建，main 已推
+- ✅ README 重写（原版写着「M0 开发中」、技术栈写 Milkdown/Shiki——全是错的）
+- ✅ CHANGELOG（M0–M4 分组）、release workflow（tag 触发，三平台产出，draft release）
+- ✅ CI 首跑暴露真实问题：Rust job 漏了 `pnpm/action-setup` → `pnpm: command not found`（127）
+
+#### M5-2 快捷键映射层（2026-10-25）
+- ✅ `src/shortcuts.ts` 成为**唯一真相源**：
+  五处手抄的键位（CM6 keymap / Rust 菜单 / 保留键表 / 命令表 / `MenuAction`）全部改为派生
+- ✅ 三类作用域 `editor` / `app` / `both`；冲突检查跨作用域（M4-6 漏的就是这一步）
+- ✅ 平台感知显示：macOS 用符号（⌃⌥⇧⌘），Windows / Linux 用单词；
+  `currentPlatform()` 走 `navigator.userAgent`，**不引 OS 插件**
+- ✅ Rust 侧**一个加速键字符串都不写死**：
+  `scripts/gen-shortcuts.ts` 生成 `src-tauri/shortcuts.json`，Rust 读它，
+  CI 用 `pnpm gen:shortcuts -- --check` 校验没过期
+- ✅ 顺带修掉两个**静默失效**（都是读源码才发现的，不是跑出来的）：
+  - 「替换」的 ⌘H 与系统「隐藏」撞车，AppKit 取靠前的那项 → 替换从来没生效过；
+    改成 `Ctrl-h`（mac ⌃H / Win Ctrl+H）
+  - 「放大」的 `CmdOrCtrl+Plus` 在 muda 的物理键表里不存在，
+    而 Tauri 用 `.parse().ok()` 把解析失败**静默吞掉** → 菜单项压根没有快捷键；
+    改用 `Equal`（⌘=）
+- ✅ 测试：前端 15 条（注册表自洽 / 平台显示 / 加速键转换）+ Rust 7 条
+  （含「每个加速键都能被 muda 解析」——只有 Rust 侧有解析器）
 
 ### 长期（P2+，不排期）
 GitHub Alerts / 脚注 / RTL / 插件系统 / 主题市场 / 图片图床 / EPUB 精修 / RevealJS 幻灯片 / 多人协作

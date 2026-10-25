@@ -28,6 +28,7 @@ import {
 } from "@/editor/commands";
 import { closePalette, setPaletteQuery, usePalette } from "@/editor/palette";
 import { getActiveEditorView } from "@/editor/active-view";
+import { formatShortcut } from "@/shortcuts";
 import { loadVaultFiles, matchVaultFiles, type VaultFile } from "@/file-tree/quick-open";
 import { useTreeRoot } from "@/file-tree/store";
 import { listRecentFiles } from "@/ipc/recent";
@@ -324,7 +325,7 @@ export function CommandPalette() {
                         )}
                         {row.command.shortcut && (
                           <span className="palette__shortcut">
-                            {row.command.shortcut}
+                            {formatShortcut(row.command.shortcut)}
                           </span>
                         )}
                       </button>

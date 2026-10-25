@@ -23,7 +23,8 @@
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\"",
     "licenses:check": "node scripts/check-licenses.mjs",
-    "gen:emoji": "tsx scripts/gen-emoji.ts"
+    "gen:emoji": "tsx scripts/gen-emoji.ts",
+    "gen:shortcuts": "tsx scripts/gen-shortcuts.ts"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.4",

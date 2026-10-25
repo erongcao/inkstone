@@ -1914,6 +1914,91 @@ Ollama / LM Studio / vLLM **不需要 API Key**。之前 `openai-compatible` 的
 现在按上下文的种类给不同文案（替换选区 / 替换当前段落 / 替换当前章节 / 替换整篇文档）。
 上下文的种类是 `ResolvedContext` 的一部分，面板直接显示它。
 
+## M5-2：快捷键映射层（2026-10-25）
+
+### 快捷键只有一个真相源
+
+快捷键原本散在**五处**：
+
+| 位置 | 形式 | 谁在用 |
+|---|---|---|
+| `src/editor/MarkdownEditor.ts` 的 keymap | `Mod-Shift-e` | 编辑器内（CM6） |
+| `src-tauri/src/menu.rs` | `CmdOrCtrl+Shift+E` | 原生菜单（全局） |
+| `src/export/items.ts` 的 `RESERVED_SHORTCUTS` | `Mod-Shift-e` | 冲突检查 |
+| `src/editor/commands/builtin.ts` 的 `shortcut` | `⌘⇧E` | 命令面板显示 |
+| `src/ipc/menu.ts` 的 `MenuAction` | action id | 菜单事件桥接 |
+
+五处手抄同一批键位，于是 M4-6 出了那个 bug：
+**⌘E 被原生菜单和 CM6 同时占用，NSApp 先吃掉按键，CM6 那个功能彻底失效**——
+不是两个功能一起触发，是后绑的那个**静默失灵**。
+
+现在 `src/shortcuts.ts` 是唯一真相源：
+
+- `KEYS` 常量 → CM6 keymap、命令表共用
+- `SHORTCUTS` 注册表 → 冲突检查、命令面板显示、菜单加速键，全部派生
+- `MENU_ACTION_IDS` → 前端 `MenuAction` 类型与监听列表都从它派生
+  （之前那个文件里**同一个清单写了两遍**：联合类型 + 数组）
+- `scripts/gen-shortcuts.ts` → 生成 `src-tauri/shortcuts.json`，
+  Rust 侧读它，CI 用 `pnpm gen:shortcuts -- --check` 校验没过期
+
+### 三类作用域：editor / app / both
+
+| scope | 谁处理按键 | 冲突后果 |
+|---|---|---|
+| `editor` | CM6（编辑器有焦点时） | 同一键绑两个功能 → 前面的赢 |
+| `app` | 原生菜单（全局） | 同上，但 **NSApp 先吃**，webview 收不到 |
+| `both` | 两边都绑（**同一个功能**） | 不是冲突——是同一个功能的两个入口 |
+
+冲突检查必须**跨作用域**：`app` 的键会吃掉 `editor` 的同名键，
+各查各的就会漏掉 M4-6 那类撞车。
+而 `both` 不是冲突——同一个功能在两层各有一个入口是正常的
+（原生菜单全局可用，CM6 那份是浏览器开发模式下的唯一入口）。
+
+### 平台感知显示：Windows 上不能给用户显示 ⌘
+
+`formatShortcut(key, platform)`：macOS 用符号（顺序按苹果惯例 ⌃⌥⇧⌘），
+Windows / Linux 用单词（`Ctrl+Shift+Alt`）。
+
+之前只有 macOS 一种写法，于是 Windows 上会把 ⌘ 显示给用户——
+**那是个不存在的键**。
+
+`currentPlatform()` 用 `navigator.userAgent` 判断，不引 `@tauri-apps/plugin-os`：
+一个依赖都不加就能覆盖三种平台，而 OS 插件是整个项目里唯一的依赖增量。
+
+### Rust 侧一个加速键字符串都不写死
+
+`src-tauri/src/menu.rs` 现在只有动作 id，加速键从 `shortcuts::accelerator(id)` 取。
+清单里没有的菜单项（比如「Markdown 语法参考」）就没有加速键。
+
+菜单项 id 要是没登记在清单里，启动时会打一行警告——
+因为那种情况下前端 `initMenuBridge` 根本不会监听它，
+**点了没有任何反应，也不会有报错能指到这里**。
+
+### 实测发现的两个静默失效（都靠读源码发现）
+
+**一、替换的 ⌘H 从来没生效过。**
+muda 的预定义项 `Hide` 就是 `CmdOrCtrl+KeyH`（`predefined.rs:655`），
+而我们的「替换…」也用 ⌘H。两项撞车时 AppKit 取**菜单树里靠前**的那个——
+应用菜单在前，于是「隐藏」赢，「替换」的 ⌘H 静默失效。
+改成 `Ctrl-h`（mac 上 ⌃H，与 macOS 文本编辑器的「替换全部」一致；
+Windows / Linux 上仍是 Ctrl+H，与原来相同）。
+
+**二、「放大」的 `CmdOrCtrl+Plus` 解析失败，被静默吞掉。**
+muda 的**物理键表**（`Code`）里没有 `Plus`（只有 `NumpadAdd`），
+而 Tauri 建菜单时用的是 `.parse().ok()`——
+**解析失败不报错，只是那个菜单项没有加速键**。
+旧代码里「放大」正是这么写的：菜单显示得好好的，按 ⌘+ 什么都不会发生。
+改用 `Equal`（⌘=），它能解析。
+
+这两条都有测试钉住（`src-tauri/src/shortcuts.rs`）：
+「每个加速键都能被 muda 解析」+「muda 的物理键表里没有加号键」。
+生成器那边也拦：`CmdOrCtrl+H/Q/W/M`（macOS 系统保留键）直接报错。
+
+### 减号需要别名
+
+`-` 既是分隔符又是键名，分隔符优先级更高，所以减号没法直接写进规范形式。
+`KEY_ALIASES` 里只有 `Minus` 一条：显示成 `-`，Tauri 加速键用 `Minus`。
+
 ## 目录
 
 ```
@@ -1926,11 +2011,12 @@ src/ai/         AI 能力（provider / 端点预设 / 上下文切片 / 写回�
 src/settings/   设置模型与存储
 src/theme/      主题注册表与运行时
 src/ipc/        与 Rust 侧接口
+src/shortcuts.ts 快捷键**单一注册表**（KEYS / SHORTCUTS / 平台感知显示 / Tauri 加速键）
 src/document/   文档生命周期（自动保存 / 崩溃恢复 / 外部修改冲突）
 src/dev/        开发期测量台与 AI mock（不进生产包）
-src-tauri/src/  Rust 后端（document / menu / recent / fs / search / watch / pandoc / print）
+src-tauri/src/  Rust 后端（document / menu / recent / fs / search / watch / pandoc / print / shortcuts）
 tests/corpus/   round-trip 语料库
-scripts/        开发工具脚本（bench-parser / bench-decorations / verify-incremental / dump-lezer-tree / check-licenses）
+scripts/        开发工具脚本（bench-parser / bench-decorations / verify-incremental / dump-lezer-tree / check-licenses / gen-shortcuts）
 perf.html       Live Preview 性能测量台（vite dev 下访问 /perf.html）
 docs/           计划书与调研文档
 ```
@@ -2061,3 +2147,13 @@ M3 全部完成（2026-10-23）。M4（导出）进行中（2026-10-25）：
 - **验收（真实本机模型）**：Ollama `qwen3.8:27b-mlx` 端到端走通——
   改写「流式 → 预览（文档不动）→ 替换段落 → ⌘Z 撤销还原」，
   总结「流式 → 预览 → 追加到文末」
+
+**M5 跨平台进行中（2026-10-25）**：
+
+- **M5-1 开仓地基**：公开仓库 `erongcao/inkstone` 已建并推 main；
+  README 重写、CHANGELOG、release workflow（tag 触发，三平台产出，draft release）；
+  CI 首跑暴露「Rust job 漏了 pnpm 引导」→ 已修（`pnpm: command not found`）
+- **M5-2 快捷键映射层**：`src/shortcuts.ts` 成为**唯一真相源**，
+  五处手抄的键位全部改为派生（详见上文 M5-2 段）；
+  顺带修掉两个**静默失效**：「替换」的 ⌘H 被系统「隐藏」吃掉、
+  「放大」的 `CmdOrCtrl+Plus` 解析失败被吞掉

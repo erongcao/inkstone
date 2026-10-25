@@ -39,6 +39,7 @@ import {
   findExportFormat,
   type ExportFormat,
 } from "./registry";
+import { MENU_CHROME, SHORTCUTS } from "@/shortcuts";
 import type { ExportItemSetting } from "@/settings/schema";
 
 /** 解析后的导出项：一定能用 */
@@ -155,30 +156,14 @@ export function availableExtraFormats(settings?: ExportItemSetting[]): ExportFor
  *
  * 原生菜单的加速键也在表里：那些键由 NSApp 处理，
  * webview 根本收不到——绑上去也不会生效，所以要提前挡掉。
+ *
+ * **从注册表派生**（`src/shortcuts.ts`），不再手抄：
+ * 手抄过一次就出过错——注册表里有的键没抄进来，
+ * 用户就能把导出项绑到一个已经被占用的键上。
  */
 export const RESERVED_SHORTCUTS: { key: string; label: string }[] = [
-  // 编辑器内（CM6 键位表）
-  { key: "Mod-b", label: "加粗" },
-  { key: "Mod-i", label: "斜体" },
-  { key: "Mod-e", label: "行内代码" },
-  { key: "Mod-k", label: "命令面板" },
-  { key: "Mod-p", label: "快速打开" },
-  { key: "Mod-f", label: "查找" },
-  { key: "Mod-Alt-c", label: "复制为 HTML" },
-  { key: "Mod-Shift-v", label: "粘贴为纯文本" },
-  // 原生菜单（NSApp 吃掉，webview 收不到）
-  { key: "Mod-n", label: "新建文档" },
-  { key: "Mod-o", label: "打开…" },
-  { key: "Mod-s", label: "保存" },
-  { key: "Mod-Shift-s", label: "另存为…" },
-  { key: "Mod-Shift-e", label: "导出…" },
-  { key: "Mod-Shift-c", label: "复制为 Markdown 源码" },
-  { key: "Mod-Alt-b", label: "显示/隐藏侧边栏" },
-  { key: "Mod-h", label: "替换…" },
-  { key: "Mod-,", label: "偏好设置…" },
-  { key: "Mod-/", label: "源码模式" },
-  { key: "Mod-Shift-f", label: "专注模式" },
-  { key: "Mod-Shift-t", label: "打字机模式" },
+  ...SHORTCUTS.map((item) => ({ key: item.key, label: item.label })),
+  ...MENU_CHROME.map((item) => ({ key: item.key, label: item.label })),
 ];
 
 /** 修饰符的别名 → 规范名 */
@@ -306,34 +291,6 @@ function normalizeKey(key: string): string {
   if (/^f\d{1,2}$/i.test(key)) return key.toUpperCase();
   if (NAMED_KEYS.has(key)) return key;
   return "";
-}
-
-/**
- * 把规范形式转成给人看的标签。
- *
- * 一律用 macOS 的符号（⌘⇧⌥⌃）——本项目 macOS 优先，
- * 而命令面板里已有的快捷键标签也是这个风格（`⌘S` / `⌘F`）。
- *
- * 符号顺序按 macOS 惯例：⌃⌥⇧⌘（与存储顺序无关）。
- */
-export function formatShortcutLabel(shortcut: string): string {
-  if (!shortcut) return "";
-  const parts = shortcut.split("-");
-  const key = parts.pop() ?? "";
-  const modifiers = new Set(parts);
-  const symbols: [string, string][] = [
-    ["Ctrl", "⌃"],
-    ["Alt", "⌥"],
-    ["Shift", "⇧"],
-    ["Mod", "⌘"],
-  ];
-  const prefix = symbols
-    .filter(([name]) => modifiers.has(name))
-    .map(([, symbol]) => symbol)
-    .join("");
-  // 单个字母统一大写显示（⌘A 而不是 ⌘a）——macOS 菜单里就是这么写的
-  const displayKey = key.length === 1 ? key.toUpperCase() : key;
-  return `${prefix}${displayKey}`;
 }
 
 /**

@@ -13,7 +13,6 @@ import { describe, expect, it, beforeEach } from "vitest";
 import {
   availableExtraFormats,
   findResolvedExportItem,
-  formatShortcutLabel,
   materializeExportItems,
   parseShortcut,
   resolveExportItems,
@@ -234,19 +233,6 @@ describe("快捷键解析", () => {
     expect(parseShortcut("Mod-")).toBe("");
     expect(parseShortcut("Hyper-1")).toBe("");
     expect(parseShortcut("Mod-不存在的键")).toBe("");
-  });
-});
-
-describe("快捷键标签", () => {
-  it("转成 macOS 的符号", () => {
-    expect(formatShortcutLabel("Mod-Shift-1")).toBe("⇧⌘1");
-    expect(formatShortcutLabel("Mod-a")).toBe("⌘A");
-    expect(formatShortcutLabel("Mod-Alt-c")).toBe("⌥⌘C");
-    expect(formatShortcutLabel("Alt-Ctrl-k")).toBe("⌃⌥K");
-  });
-
-  it("没有快捷键时是空串", () => {
-    expect(formatShortcutLabel("")).toBe("");
   });
 });
 

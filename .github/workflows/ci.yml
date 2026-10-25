@@ -45,6 +45,12 @@ jobs:
       - name: 单元测试 / round-trip
         run: pnpm test
 
+      - name: 校验快捷键清单未过期
+        # src-tauri/shortcuts.json 是从 src/shortcuts.ts 生成的。
+        # 改了注册表却忘了重新生成 → Rust 菜单里的加速键与前端不一致，
+        # 而这种不一致不会报错，只会「按下去没反应」。
+        run: pnpm gen:shortcuts -- --check
+
       - name: 前端构建
         run: pnpm exec vite build
 
@@ -69,6 +75,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      # Rust job 也要跑 pnpm（tauri build 前要装前端依赖），
+      # 所以不能省掉 pnpm/action-setup —— 首跑就是漏了它，
+      # 结果 `pnpm: command not found` 直接 127 退出。
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
