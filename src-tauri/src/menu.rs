@@ -101,7 +101,15 @@ fn build_file_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Submenu<tauri:
         "另存为…",
         Some("CmdOrCtrl+Shift+S"),
     )?;
-    let export_doc = action(app, "export-document", "导出…", Some("CmdOrCtrl+E"))?;
+    let export_doc = action(
+        app,
+        "export-document",
+        "导出…",
+        // ⌘⇧E 而不是 ⌘E：⌘E 已经被编辑器的「行内代码」占着（CM6 的 Mod-e）。
+        // 原生菜单的加速键在 macOS 上由 NSApp 先吃掉，webview 根本收不到这个键，
+        // 撞车的后果是**后绑的那个功能彻底失效**，而不是两个功能一起触发。
+        Some("CmdOrCtrl+Shift+E"),
+    )?;
 
     SubmenuBuilder::new(app, "文件")
         .item(&new_doc)
@@ -125,7 +133,14 @@ fn build_edit_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Submenu<tauri:
         "复制为 Markdown 源码",
         Some("CmdOrCtrl+Shift+C"),
     )?;
-    let copy_as_html = action(app, "copy-as-html", "复制为 HTML", None)?;
+    let copy_as_html = action(
+        app,
+        "copy-as-html",
+        "复制为 HTML",
+        // ⌘⌥C 而不是 ⌘⇧C：⌘⇧C 已经给了「复制为 Markdown 源码」，
+        // 编辑器内的复制为 HTML 原本也绑在 ⌘⇧C 上，两边抢同一个键。
+        Some("CmdOrCtrl+Alt+C"),
+    )?;
     let paste_as_plain_text = action(
         app,
         "paste-as-plain-text",
@@ -156,7 +171,9 @@ fn build_view_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Submenu<tauri:
         app,
         "toggle-sidebar",
         "显示/隐藏侧边栏",
-        Some("CmdOrCtrl+B"),
+        // ⌘⌥B 而不是 ⌘B：⌘B 是编辑器内「加粗」的通用肌肉记忆，
+        // 侧边栏开关是低频操作，让位给它。加 Alt 保留 B=Bar 的联想。
+        Some("CmdOrCtrl+Alt+B"),
     )?;
     let source_mode = action(app, "toggle-source-mode", "源码模式", Some("CmdOrCtrl+/"))?;
     let focus_mode = action(

@@ -289,7 +289,7 @@ export function builtinCommands(): InkstoneCommand[] {
       category: "文件",
       surfaces: ["palette"],
       keywords: "export daochu docx pdf epub html word",
-      shortcut: "⌘E",
+      shortcut: "⌘⇧E",
       run: () => {
         emitIntent("file.export");
         return true;

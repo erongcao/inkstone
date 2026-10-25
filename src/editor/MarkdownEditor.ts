@@ -147,7 +147,7 @@ function buildExtensions(
       { key: "Mod-i", run: (view) => runCommand("format.italic", view) },
       { key: "Mod-e", run: (view) => runCommand("format.code", view) },
       {
-        key: "Mod-Shift-c",
+        key: "Mod-Alt-c",
         run: (view) => {
           void copySelectionAsHtml(view);
           return true;

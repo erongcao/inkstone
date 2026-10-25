@@ -366,6 +366,14 @@
   min-height: 0;
   display: grid;
   grid-template-columns: 140px 1fr;
+  /* 必须显式声明唯一的行。
+     隐式行是 auto 尺寸，会被 .settings-content 的内容撑到超过面板高度；
+     那时 .settings-content 自己的 clientHeight == scrollHeight，
+     overflow:auto 永远不会出现滚动条，整块内容溢出面板后被
+     .settings-panel 的 overflow:hidden 裁掉——底部控件（如「添加变量」）
+     在任何窗口尺寸下都点不到。
+     minmax(0, 1fr) 把行钉死在面板剩余高度上，超出部分交给内容区滚动。 */
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .settings-nav {
@@ -375,6 +383,9 @@
   padding: 10px 8px;
   border-right: 1px solid var(--ink-border);
   background-color: var(--ink-bg-soft);
+  /* 与内容区同理：行高被钉死后，导航项多时也要能滚 */
+  min-height: 0;
+  overflow: auto;
 }
 
 .settings-nav .panel-tab {
