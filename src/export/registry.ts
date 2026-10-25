@@ -41,6 +41,13 @@ export interface ExportFormat {
   pandocFormat?: string;
   /** 面板里的一行说明 */
   description: string;
+  /**
+   * 是否是内置项。
+   *
+   * 内置项默认出现在导出面板里；额外项（`builtin: false`）
+   * 要用户主动「添加」才会出现——否则面板会被二十几种 pandoc 格式淹掉。
+   */
+  builtin: boolean;
 }
 
 /**
@@ -57,6 +64,7 @@ export const BUILTIN_EXPORT_FORMATS: ExportFormat[] = [
     extension: ".html",
     kind: "html",
     description: "内嵌主题样式与代码高亮的单文件网页",
+    builtin: true,
   },
   {
     id: "pdf",
@@ -64,6 +72,7 @@ export const BUILTIN_EXPORT_FORMATS: ExportFormat[] = [
     extension: ".pdf",
     kind: "pdf",
     description: "通过系统打印面板输出，可选择「存储为 PDF」",
+    builtin: true,
   },
   {
     id: "docx",
@@ -72,6 +81,7 @@ export const BUILTIN_EXPORT_FORMATS: ExportFormat[] = [
     kind: "pandoc",
     pandocFormat: "docx",
     description: "Microsoft Word 文档",
+    builtin: true,
   },
   {
     id: "odt",
@@ -80,6 +90,7 @@ export const BUILTIN_EXPORT_FORMATS: ExportFormat[] = [
     kind: "pandoc",
     pandocFormat: "odt",
     description: "LibreOffice / OpenOffice 文档",
+    builtin: true,
   },
   {
     id: "epub",
@@ -88,6 +99,7 @@ export const BUILTIN_EXPORT_FORMATS: ExportFormat[] = [
     kind: "pandoc",
     pandocFormat: "epub",
     description: "电子书",
+    builtin: true,
   },
   {
     id: "rtf",
@@ -96,6 +108,7 @@ export const BUILTIN_EXPORT_FORMATS: ExportFormat[] = [
     kind: "pandoc",
     pandocFormat: "rtf",
     description: "富文本格式",
+    builtin: true,
   },
   {
     id: "latex",
@@ -104,6 +117,7 @@ export const BUILTIN_EXPORT_FORMATS: ExportFormat[] = [
     kind: "pandoc",
     pandocFormat: "latex",
     description: "LaTeX 源码",
+    builtin: true,
   },
   {
     id: "mediawiki",
@@ -112,6 +126,7 @@ export const BUILTIN_EXPORT_FORMATS: ExportFormat[] = [
     kind: "pandoc",
     pandocFormat: "mediawiki",
     description: "MediaWiki 维基标记",
+    builtin: true,
   },
   {
     id: "rst",
@@ -120,12 +135,140 @@ export const BUILTIN_EXPORT_FORMATS: ExportFormat[] = [
     kind: "pandoc",
     pandocFormat: "rst",
     description: "reStructuredText 源码",
+    builtin: true,
   },
+];
+
+/**
+ * 可以**额外添加**的 pandoc 输出格式。
+ *
+ * 内置那 9 种覆盖了绝大多数需求，但 pandoc 支持的远不止这些。
+ * 「导出项可自定义」里的「增」就是从这里挑——
+ * 全部用本机 pandoc 3.8 实测转换过（见 AGENTS.md 的 M4 段）。
+ *
+ * id 用 `pandoc:` 前缀，跟内置项区分开——
+ * 用户自定义的 id 存在设置文件里，前缀能避免和内置 id 撞车。
+ */
+export const EXTRA_PANDOC_FORMATS: ExportFormat[] = [
+  {
+    id: "pandoc:html5",
+    label: "HTML 5（pandoc）",
+    extension: ".html",
+    kind: "pandoc",
+    pandocFormat: "html5",
+    description: "pandoc 生成的 HTML（与内置 HTML 导出是两条不同的链路）",
+    builtin: false,
+  },
+  {
+    id: "pandoc:gfm",
+    label: "GitHub Markdown",
+    extension: ".md",
+    kind: "pandoc",
+    pandocFormat: "gfm",
+    description: "GitHub 风格的 Markdown",
+    builtin: false,
+  },
+  {
+    id: "pandoc:commonmark",
+    label: "CommonMark",
+    extension: ".md",
+    kind: "pandoc",
+    pandocFormat: "commonmark",
+    description: "CommonMark 规范的 Markdown",
+    builtin: false,
+  },
+  {
+    id: "pandoc:docbook",
+    label: "DocBook",
+    extension: ".xml",
+    kind: "pandoc",
+    pandocFormat: "docbook",
+    description: "DocBook XML",
+    builtin: false,
+  },
+  {
+    id: "pandoc:pptx",
+    label: "PowerPoint (pptx)",
+    extension: ".pptx",
+    kind: "pandoc",
+    pandocFormat: "pptx",
+    description: "幻灯片",
+    builtin: false,
+  },
+  {
+    id: "pandoc:asciidoc",
+    label: "AsciiDoc",
+    extension: ".adoc",
+    kind: "pandoc",
+    pandocFormat: "asciidoc",
+    description: "AsciiDoc 文档",
+    builtin: false,
+  },
+  {
+    id: "pandoc:org",
+    label: "Org Mode",
+    extension: ".org",
+    kind: "pandoc",
+    pandocFormat: "org",
+    description: "Org Mode 文档",
+    builtin: false,
+  },
+  {
+    id: "pandoc:context",
+    label: "ConTeXt",
+    extension: ".tex",
+    kind: "pandoc",
+    pandocFormat: "context",
+    description: "ConTeXt 源码",
+    builtin: false,
+  },
+  {
+    id: "pandoc:texinfo",
+    label: "Texinfo",
+    extension: ".texi",
+    kind: "pandoc",
+    pandocFormat: "texinfo",
+    description: "Texinfo 文档",
+    builtin: false,
+  },
+  {
+    id: "pandoc:man",
+    label: "roff (man)",
+    extension: ".man",
+    kind: "pandoc",
+    pandocFormat: "man",
+    description: "man page 源码",
+    builtin: false,
+  },
+  {
+    id: "pandoc:dokuwiki",
+    label: "DokuWiki",
+    extension: ".txt",
+    kind: "pandoc",
+    pandocFormat: "dokuwiki",
+    description: "DokuWiki 标记",
+    builtin: false,
+  },
+  {
+    id: "pandoc:json",
+    label: "pandoc AST (JSON)",
+    extension: ".json",
+    kind: "pandoc",
+    pandocFormat: "json",
+    description: "pandoc 的 JSON 抽象语法树",
+    builtin: false,
+  },
+];
+
+/** 全部已知格式：内置项 + 可添加的额外项 */
+export const ALL_EXPORT_FORMATS: ExportFormat[] = [
+  ...BUILTIN_EXPORT_FORMATS,
+  ...EXTRA_PANDOC_FORMATS,
 ];
 
 /** 按 id 找导出项；找不到返回 undefined */
 export function findExportFormat(id: string): ExportFormat | undefined {
-  return BUILTIN_EXPORT_FORMATS.find((format) => format.id === id);
+  return ALL_EXPORT_FORMATS.find((format) => format.id === id);
 }
 
 /**

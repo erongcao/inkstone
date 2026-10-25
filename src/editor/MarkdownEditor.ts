@@ -21,6 +21,7 @@ import { searchKeymap, highlightSelectionMatches, search } from "@codemirror/sea
 import { openFindPanel } from "./search-panel";
 import { languages } from "@codemirror/language-data";
 import { livePreview, setDisplayModeOf, setMathOptionsOf } from "./live-preview";
+import { emitIntent } from "./intents";
 import { setActiveEditorView } from "./active-view";
 import { autoPair } from "./auto-pair";
 import {
@@ -78,10 +79,14 @@ export interface MarkdownEditorOptions {
  *
  * `autoPairBox` 是 Compartment：自动配对要在运行时切换（设置面板改一下就生效），
  * 而 Compartment 可以在不重建编辑器的前提下换掉一组扩展。
+ *
+ * `exportShortcutBox` 同理：导出项的快捷键是用户自定义的，
+ * 改设置时要立刻生效，不能要求重启。
  */
 function buildExtensions(
   options: MarkdownEditorOptions,
   autoPairBox: Compartment,
+  exportShortcutBox: Compartment,
 ): Extension[] {
   return [
     // 编辑历史（撤销/重做）
@@ -115,6 +120,14 @@ function buildExtensions(
     linkPopoverTrigger,
     // 复制：同时写 Markdown 源码与渲染后的 HTML
     markdownCopy(),
+    // 导出项快捷键（用户在设置里自己绑的）。
+    //
+    // 放在主 keymap **之前**：用户显式绑定的键要压过内置键位——
+    // 他按下那个键时的意图是「导出」，不是「加粗」。
+    //
+    // 只在编辑器有焦点时生效（CM6 的 keymap 是编辑器作用域的）。
+    // 原生菜单的加速键是全局的，两者不是一回事。
+    exportShortcutBox.of(keymap.of([])),
     // 键盘映射
     // 剪贴板快捷键：Tauri 里原生菜单的 accelerator 也会响应，
     // 重复执行是无害的（复制幂等、纯文本标志是幂等的置位），
@@ -208,6 +221,18 @@ function buildExtensions(
   ];
 }
 
+/**
+ * 导出项快捷键的绑定。
+ *
+ * `shortcut` 用 CM6 的键名（规范形式，如 `Mod-Shift-1`）——
+ * 解析与规范化在 `src/export/items.ts` 里做，这里只管传。
+ */
+export interface ExportShortcutBinding {
+  shortcut: string;
+  /** 要导出的导出项 id */
+  formatId: string;
+}
+
 export interface MarkdownEditorHandle {
   /** 获取当前内容 */
   getValue(): string;
@@ -225,6 +250,12 @@ export interface MarkdownEditorHandle {
   setFocusMode(enabled: boolean): void;
   /** 切换打字机模式（光标固定在视口垂直中线） */
   setTypewriterMode(enabled: boolean): void;
+  /**
+   * 设置导出项的快捷键绑定。
+   *
+   * 运行时可换（用户在设置面板改一下就生效），走 Compartment。
+   */
+  setExportShortcuts(bindings: ExportShortcutBinding[]): void;
   /** 复制为渲染后的 HTML（同时附带 Markdown 源码作为纯文本兜底） */
   copyAsHtml(): Promise<void>;
   /** 复制为 Markdown 源码（纯文本） */
@@ -257,9 +288,10 @@ export function createMarkdownEditor(
   options: MarkdownEditorOptions,
 ): MarkdownEditorHandle {
   const autoPairBox = new Compartment();
+  const exportShortcutBox = new Compartment();
   // 扩展只建一次：所有标签页的状态共用同一套扩展（Compartment 也共用），
   // 这样切换状态时自动配对级别之类的运行时配置不会丢
-  const extensions = buildExtensions(options, autoPairBox);
+  const extensions = buildExtensions(options, autoPairBox, exportShortcutBox);
   const state = EditorState.create({
     doc: options.doc ?? "",
     extensions,
@@ -305,6 +337,24 @@ export function createMarkdownEditor(
       setMathOptionsOf(view, { singleDollarTextMath: enabled }),
     setFocusMode: (enabled: boolean) => setFocusModeOf(view, enabled),
     setTypewriterMode: (enabled: boolean) => setTypewriterModeOf(view, enabled),
+    setExportShortcuts: (bindings: ExportShortcutBinding[]) => {
+      view.dispatch({
+        effects: exportShortcutBox.reconfigure(
+          keymap.of(
+            bindings.map((binding) => ({
+              key: binding.shortcut,
+              run: () => {
+                // 只发意图，不直接调导出服务——
+                // 导出服务要 import editor 的模块，
+                // 反过来 import 会形成依赖环
+                emitIntent({ type: "file.export", formatId: binding.formatId });
+                return true;
+              },
+            })),
+          ),
+        ),
+      });
+    },
     copyAsHtml: () => copySelectionAsHtml(view),
     copyAsMarkdown: () => copySelectionAsMarkdown(view),
     pasteAsPlainText: () => {

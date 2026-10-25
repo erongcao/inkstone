@@ -19,7 +19,15 @@ import {
 } from "@/settings/schema";
 import { BUILTIN_THEMES } from "@/theme/themes";
 import { BUILTIN_VARIABLE_LABELS } from "@/export/variables";
-import type { ExportVariableSetting } from "@/settings/schema";
+import {
+  availableExtraFormats,
+  formatShortcutLabel,
+  materializeExportItems,
+  parseShortcut,
+  resolveExportItems,
+  shortcutConflict,
+} from "@/export/items";
+import type { ExportItemSetting, ExportVariableSetting } from "@/settings/schema";
 import { AiSection } from "./AiSettingsSection";
 
 interface Props {
@@ -417,8 +425,265 @@ function ExportSection({ settings, patch }: { settings: Settings; patch: PatchFn
         />
       </label>
 
+      <ExportItemsSection settings={settings} patch={patch} />
+
       <ExportVariablesSection settings={settings} patch={patch} />
     </section>
+  );
+}
+
+/**
+ * 导出项自定义：重命名、重排、绑定快捷键、移除、添加。
+ *
+ * ## 为什么写操作都先「物化」成完整列表
+ *
+ * 设置里的 `export.items` 为空表示「没有自定义」。
+ * 用户第一次改任何一项时，写回去的必须是**完整列表**——
+ * 否则「只改了一个名字」会变成「只留了一个名字，其余全被删了」。
+ *
+ * `materializeExportItems` 负责这一步：把当前解析结果转成一份完整的、
+ * 覆盖全部内置项与用户已添加项的列表。
+ *
+ * ## 快捷键为什么不能边打边规范化
+ *
+ * 用户输入「⌘」时，规范化会得到空串（修饰符不成键），
+ * 输入框会立刻被清空——没法打字。
+ *
+ * 所以输入期间保留**草稿**，失焦时才解析并提交；
+ * 解析失败或与已有绑定冲突时，把原因显示出来，但**不覆盖**用户已绑的值。
+ */
+function ExportItemsSection({ settings, patch }: { settings: Settings; patch: PatchFn }) {
+  const items = settings.export.items;
+  const resolved = resolveExportItems(items);
+  const active = resolved.filter((item) => item.visible);
+  const removed = resolved.filter((item) => !item.visible);
+  const extras = availableExtraFormats(items);
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const write = (next: ExportItemSetting[]) => patch("export", { items: next });
+
+  /** 改某一项之前，先把当前状态物化成完整列表 */
+  const updateItem = (id: string, mutate: (entry: ExportItemSetting) => void) => {
+    const next = materializeExportItems(items);
+    const entry = next.find((item) => item.id === id);
+    if (!entry) return;
+    mutate(entry);
+    write(next);
+  };
+
+  const rename = (id: string, label: string) =>
+    updateItem(id, (entry) => {
+      if (label.trim()) entry.label = label.trim();
+      else delete entry.label;
+    });
+
+  const move = (id: string, delta: number) => {
+    const next = materializeExportItems(items);
+    const index = next.findIndex((item) => item.id === id);
+    const target = index + delta;
+    if (index < 0 || target < 0 || target >= next.length) return;
+    const [entry] = next.splice(index, 1);
+    next.splice(target, 0, entry);
+    write(next);
+  };
+
+  const remove = (id: string) =>
+    updateItem(id, (entry) => {
+      entry.visible = false;
+    });
+
+  const restore = (id: string) =>
+    updateItem(id, (entry) => {
+      delete entry.visible;
+    });
+
+  const add = (formatId: string) => {
+    if (!formatId) return;
+    const next = materializeExportItems(items);
+    if (next.some((item) => item.id === formatId)) return;
+    next.push({ id: formatId });
+    write(next);
+  };
+
+  const clearDraft = (id: string) => {
+    setDrafts((current) => {
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
+    setErrors((current) => {
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
+  };
+
+  /** 失焦时提交快捷键 */
+  const commitShortcut = (id: string) => {
+    const draft = drafts[id];
+    if (draft === undefined) return;
+    const text = draft.trim();
+
+    if (!text) {
+      updateItem(id, (entry) => {
+        delete entry.shortcut;
+      });
+      clearDraft(id);
+      return;
+    }
+
+    const parsed = parseShortcut(text);
+    if (!parsed) {
+      setErrors((current) => ({ ...current, [id]: "看不懂这个快捷键" }));
+      return;
+    }
+
+    const taken = resolved
+      .filter((item) => item.format.id !== id)
+      .map((item) => item.shortcut)
+      .filter((value): value is string => Boolean(value));
+    const conflict = shortcutConflict(parsed, taken);
+    if (conflict) {
+      setErrors((current) => ({ ...current, [id]: conflict }));
+      return;
+    }
+
+    updateItem(id, (entry) => {
+      entry.shortcut = parsed;
+    });
+    clearDraft(id);
+  };
+
+  return (
+    <>
+      <h3>导出项</h3>
+      <p className="settings-hint">
+        可以改名字、调整顺序、绑定快捷键，或移除不用的格式。快捷键写成{" "}
+        <code>Mod-Shift-1</code> 或 <code>⌘⇧1</code> 这样的形式都行。
+      </p>
+
+      <div className="export-item-list">
+        {active.map((item, index) => {
+          const id = item.format.id;
+          const draft = drafts[id];
+          const error = errors[id];
+          const shortcutText = draft ?? item.shortcut;
+          const parsed = shortcutText ? parseShortcut(shortcutText) : "";
+          return (
+            <div key={id} className="export-item-row">
+              <div className="export-item-move">
+                <button
+                  type="button"
+                  className="btn btn--icon"
+                  disabled={index === 0}
+                  onClick={() => move(id, -1)}
+                  aria-label="上移"
+                  title="上移"
+                >
+                  ↑
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--icon"
+                  disabled={index === active.length - 1}
+                  onClick={() => move(id, 1)}
+                  aria-label="下移"
+                  title="下移"
+                >
+                  ↓
+                </button>
+              </div>
+
+              <input
+                type="text"
+                className="export-item-name"
+                aria-label="名称"
+                placeholder={item.format.label}
+                value={item.label === item.format.label ? "" : item.label}
+                onChange={(event) => rename(id, event.target.value)}
+              />
+
+              <button
+                type="button"
+                className="btn"
+                onClick={() => remove(id)}
+                title="从导出面板里移除（可以在下面恢复）"
+              >
+                移除
+              </button>
+
+              <div className="export-item-shortcut">
+                <span className="export-item-shortcut-label">快捷键</span>
+                <input
+                  type="text"
+                  className="export-item-shortcut-input"
+                  aria-label="快捷键"
+                  placeholder="未绑定"
+                  value={shortcutText}
+                  onChange={(event) =>
+                    setDrafts((current) => ({ ...current, [id]: event.target.value }))
+                  }
+                  onBlur={() => commitShortcut(id)}
+                />
+                {parsed && !error && (
+                  <span className="export-item-shortcut-preview">
+                    {formatShortcutLabel(parsed)}
+                  </span>
+                )}
+                {error && <span className="export-item-shortcut-error">{error}</span>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {extras.length > 0 && (
+        <label className="field">
+          <span>添加导出项</span>
+          {/* key 随可添加项的数量变化：加完一个就重挂载，下拉复位，
+              用户可以连续加好几个。
+              （不要用 `event.target.value = ""` 直接改 DOM——
+                那是绕过 React 去写受控元素的值。） */}
+          <select
+            key={extras.length}
+            defaultValue=""
+            onChange={(event) => add(event.target.value)}
+          >
+            <option value="">从 pandoc 的更多格式里添加…</option>
+            {extras.map((format) => (
+              <option key={format.id} value={format.id}>
+                {format.label}（{format.extension}）
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+
+      {removed.length > 0 && (
+        <details className="export-item-removed">
+          <summary>已移除的格式（{removed.length}）</summary>
+          {removed.map((item) => (
+            <div key={item.format.id} className="export-item-removed-row">
+              <span>{item.format.label}</span>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => restore(item.format.id)}
+              >
+                恢复
+              </button>
+            </div>
+          ))}
+        </details>
+      )}
+
+      <div className="export-item-actions">
+        <button type="button" className="btn" onClick={() => write([])}>
+          恢复默认导出项
+        </button>
+      </div>
+    </>
   );
 }
 

@@ -15,21 +15,43 @@
  *
  * 与命令面板、链接浮层一致——它们都是「盖在编辑器上面的浮层」，
  * 不是编辑器的一部分。用 React 组件实现，样式与生命周期都好管。
+ *
+ * ## 为什么面板只负责「显示」，不负责「执行」
+ *
+ * 执行在 App 那边（见 `App.tsx` 的 `runExport`）。两个原因：
+ *
+ *   1. **快捷键也要能导出**。用户在设置里给某个导出项绑了 ⌘⇧1，
+ *      按下去就该直接导出——这条路径不经过面板。
+ *      执行逻辑只有一处，两条路径的行为才不会分叉。
+ *   2. **React 的规矩**。自动执行导出需要在 effect 里跑，
+ *      而 effect 里同步 setState 会被 `react-hooks/set-state-in-effect` 拦下。
+ *      把执行放到事件处理器（App 的意图回调）里，规则自然满足。
+ *
+ * 所以面板是**受控组件**：状态由 App 给，动作由 App 接。
  */
 
 import { useEffect, useState } from "react";
-import { BUILTIN_EXPORT_FORMATS, type ExportFormat } from "@/export/registry";
+import {
+  formatShortcutLabel,
+  resolveExportItems,
+  type ResolvedExportItem,
+} from "@/export/items";
 import { detectPandoc, type PandocInfo } from "@/ipc/export";
-import { exportDocument, type ExportResult } from "@/export/service";
+import type { ExportResult } from "@/export/service";
+import { readSettings } from "@/settings/store";
 
 interface Props {
   onClose: () => void;
+  /** 正在导出的格式 id */
+  busy: string | null;
+  /** 最近一次导出的结果 */
+  result: ExportResult | null;
+  /** 点某个导出项 */
+  onRun: (formatId: string) => void;
 }
 
-export function ExportPanel({ onClose }: Props) {
+export function ExportPanel({ onClose, busy, result, onRun }: Props) {
   const [pandoc, setPandoc] = useState<PandocInfo | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [result, setResult] = useState<ExportResult | null>(null);
 
   // 面板一打开就探测 pandoc——
   // 否则用户要点一下才知道自己能不能导 Word
@@ -43,28 +65,14 @@ export function ExportPanel({ onClose }: Props) {
     };
   }, []);
 
-  const run = async (format: ExportFormat) => {
-    setBusy(format.id);
-    setResult(null);
-    try {
-      const outcome = await exportDocument(format.id);
-      setResult(outcome);
-      // 成功且**没有警告**时才自动关面板——
-      // 有警告时用户得留下来看到它（比如「公式在 Word 里变成了源码」）
-      if (outcome.ok && !outcome.warnings?.length && format.kind !== "pdf") {
-        setTimeout(onClose, 600);
-      }
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const nativeFormats = BUILTIN_EXPORT_FORMATS.filter(
-    (format) => format.kind !== "pandoc",
+  // 导出项按用户的自定义来（增删、重排、重命名、快捷键）。
+  // 直接读设置而不是 React state：面板是一次性的快照，
+  // 用户在设置面板改完再打开导出面板，看到的必须是新的。
+  const items = resolveExportItems(readSettings().export.items).filter(
+    (item) => item.visible,
   );
-  const pandocFormats = BUILTIN_EXPORT_FORMATS.filter(
-    (format) => format.kind === "pandoc",
-  );
+  const nativeItems = items.filter((item) => item.format.kind !== "pandoc");
+  const pandocItems = items.filter((item) => item.format.kind === "pandoc");
 
   return (
     <div className="export-overlay" role="dialog" aria-modal="true" aria-label="导出">
@@ -77,39 +85,47 @@ export function ExportPanel({ onClose }: Props) {
         </header>
 
         <div className="export-body">
-          <h3 className="export-group-title">直接导出</h3>
-          <div className="export-list">
-            {nativeFormats.map((format) => (
-              <ExportRow
-                key={format.id}
-                format={format}
-                disabled={busy !== null}
-                busy={busy === format.id}
-                onRun={() => void run(format)}
-              />
-            ))}
-          </div>
+          {nativeItems.length > 0 && (
+            <>
+              <h3 className="export-group-title">直接导出</h3>
+              <div className="export-list">
+                {nativeItems.map((item) => (
+                  <ExportRow
+                    key={item.format.id}
+                    item={item}
+                    disabled={busy !== null}
+                    busy={busy === item.format.id}
+                    onRun={onRun}
+                  />
+                ))}
+              </div>
+            </>
+          )}
 
-          <h3 className="export-group-title">
-            通过 pandoc 导出
-            {pandoc && !pandoc.available && (
-              <span className="export-group-hint">{pandoc.reason}</span>
-            )}
-            {pandoc?.available && (
-              <span className="export-group-hint">{pandoc.version}</span>
-            )}
-          </h3>
-          <div className="export-list">
-            {pandocFormats.map((format) => (
-              <ExportRow
-                key={format.id}
-                format={format}
-                disabled={busy !== null || !pandoc?.available}
-                busy={busy === format.id}
-                onRun={() => void run(format)}
-              />
-            ))}
-          </div>
+          {pandocItems.length > 0 && (
+            <>
+              <h3 className="export-group-title">
+                通过 pandoc 导出
+                {pandoc && !pandoc.available && (
+                  <span className="export-group-hint">{pandoc.reason}</span>
+                )}
+                {pandoc?.available && (
+                  <span className="export-group-hint">{pandoc.version}</span>
+                )}
+              </h3>
+              <div className="export-list">
+                {pandocItems.map((item) => (
+                  <ExportRow
+                    key={item.format.id}
+                    item={item}
+                    disabled={busy !== null || !pandoc?.available}
+                    busy={busy === item.format.id}
+                    onRun={onRun}
+                  />
+                ))}
+              </div>
+            </>
+          )}
 
           {result && (
             <p className={`export-result${result.ok ? "" : " export-result--error"}`}>
@@ -134,24 +150,28 @@ export function ExportPanel({ onClose }: Props) {
 }
 
 interface RowProps {
-  format: ExportFormat;
+  item: ResolvedExportItem;
   disabled: boolean;
   busy: boolean;
-  onRun: () => void;
+  onRun: (formatId: string) => void;
 }
 
-function ExportRow({ format, disabled, busy, onRun }: RowProps) {
+function ExportRow({ item, disabled, busy, onRun }: RowProps) {
+  const { format } = item;
   return (
     <button
       type="button"
       className="export-item"
       disabled={disabled}
-      onClick={onRun}
+      onClick={() => onRun(format.id)}
       data-export-id={format.id}
     >
-      <span className="export-item-label">{format.label}</span>
+      <span className="export-item-label">{item.label}</span>
       <span className="export-item-desc">{format.description}</span>
       <span className="export-item-ext">{format.extension}</span>
+      {item.shortcut && (
+        <span className="export-item-shortcut">{formatShortcutLabel(item.shortcut)}</span>
+      )}
       {busy && <span className="export-item-busy">导出中…</span>}
     </button>
   );

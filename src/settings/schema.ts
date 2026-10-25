@@ -177,6 +177,35 @@ export interface ExportSettings {
    * 而且同名变量可以按顺序覆盖（后者优先）。
    */
   variables: ExportVariableSetting[];
+  /**
+   * 导出项的用户自定义（增删、重排、重命名、绑定快捷键）。
+   *
+   * **空数组 = 没有自定义**，此时用内置默认（注册表顺序，全部可见）。
+   *
+   * 非空时它是**权威的有序列表**：
+   *   - 顺序 = 面板里的显示顺序
+   *   - `visible === false` = 移除（但条目仍留在列表里，
+   *     这样设置面板能把它列在「已移除」一栏，用户想恢复时找得到）
+   *   - 没被提及的内置项按默认显示（这样以后新增的内置格式会自动出现）
+   */
+  items: ExportItemSetting[];
+}
+
+/**
+ * 一个导出项的用户自定义。
+ *
+ * 形状与 `src/export/items.ts` 的 `ResolvedExportItem` 不同：
+ * 这里存的是**用户填的**（可能只有 id），那边是**解析后的**（一定有名字和格式）。
+ */
+export interface ExportItemSetting {
+  /** 导出项 id：内置的（`html` / `docx` …）或额外 pandoc 格式的（`pandoc:gfm`） */
+  id: string;
+  /** 自定义显示名；空 = 用默认名 */
+  label?: string;
+  /** 绑定的快捷键（CM6 语法，如 `Mod-Shift-1`）；空 = 不绑定 */
+  shortcut?: string;
+  /** 是否在导出面板里显示；默认 true */
+  visible?: boolean;
 }
 
 /**
@@ -343,6 +372,8 @@ export const DEFAULT_SETTINGS: Settings = {
     htmlExtraHead: "",
     htmlExtraBody: "",
     variables: [],
+    // 空数组 = 没有自定义，用内置默认
+    items: [],
   },
   general: {
     language: "zh-CN",

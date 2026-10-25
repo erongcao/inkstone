@@ -661,8 +661,13 @@ CM6 的 `EditorView.inputHandler` 扩展点实现，设置项 `editor.autoPairMo
 - [x] pandoc 桥：DOCX / EPUB / ODT / RTF / LaTeX / MediaWiki / RST
   - 独立进程调用（GPL 不传染）；二进制不经 JS 边界；
     显式对齐 `tex_math_dollars` 扩展；pandoc 的警告如实带回
-- [ ] 导出项可自定义（增删、重排、重命名、绑定快捷键）
-  - 注册表已就绪（`src/export/registry.ts`），自定义 UI 待做
+- [x] 导出项可自定义（增删、重排、重命名、绑定快捷键）
+  - 三层分离：格式（注册表）/ 设置（`export.items`）/ 解析结果（`ResolvedExportItem`）；
+    上层只认解析结果，设置与实际可用格式不会分叉
+  - 移除用 `visible: false` 而非删除条目；未被提及的内置项补在末尾
+  - 快捷键规范形式 `Mod-Shift-1`；20 条保留键全部拒绝绑定（含原生菜单加速键）
+  - 额外可添加 12 种 pandoc 格式（全部用本机 pandoc 3.8 实测转换过）
+  - CM6 动态 keymap（Compartment）+ 意图总线判别联合；导出执行上移到 App
 - [x] 导出变量系统（`${title}` `${author}` `${today}` …）
   - 只在导出产物上替换，绝不碰文档正文；未定义变量原样保留
 - [x] YAML front matter 覆盖导出设置（需显式开关，出于安全）
@@ -681,6 +686,15 @@ CM6 的 `EditorView.inputHandler` 扩展点实现，设置项 `editor.autoPairMo
   - 🐛 修掉：`tests/export-service.test.ts` 里混入裸控制字节，git 把它当二进制
   - ⚠️ 已知缺口（非 M4）：`==高亮==` 解析层不支持，编辑器与导出**一致**地显示为字面量；
     但「高亮」命令与 `settings.markdown.highlight` 开关目前是无效的
+- **验收（M4-7 浏览器 UI）**：2026-10-25 真实浏览器逐项走通
+  - ✅ 改名（HTML → 「网页版」）、重排（PDF 移到第一位，首项的 ↑ 正确禁用）
+  - ✅ 移除（RTF 进入「已移除的格式」折叠区，带「恢复」按钮）
+  - ✅ 添加（选 `pandoc:gfm` → 末行出现「GitHub Markdown」）
+  - ✅ 绑定快捷键（输入 `⌘⇧1` → 规范形式 `Mod-Shift-1`，预览显示 `⇧⌘1`）
+  - ✅ 冲突检测（给 PDF 绑 `⌘B` → 显示「已被「加粗」占用」，草稿保留但未提交）
+  - ✅ 导出面板最终态：改名与顺序生效、RTF 已消失、pandoc:gfm 已加入
+
+**M4 全部完成（2026-10-25）。**
 
 ### M5 · 跨平台（目标：4 周）
 - [ ] Windows x64 + ARM64 构建与打包

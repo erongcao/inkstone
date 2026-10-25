@@ -30,12 +30,8 @@ import {
   type VariableContext,
 } from "./variables";
 import { exportToHtml } from "./html";
-import {
-  BUILTIN_EXPORT_FORMATS,
-  sanitizeFileName,
-  suggestFileName,
-  type ExportFormat,
-} from "./registry";
+import { sanitizeFileName, suggestFileName, type ExportFormat } from "./registry";
+import { findResolvedExportItem } from "./items";
 import {
   convertWithPandoc,
   detectPandoc,
@@ -237,8 +233,12 @@ export { sanitizeFileName };
  * @param formatId 导出格式 id
  */
 export async function exportDocument(formatId: string): Promise<ExportResult> {
-  const format = BUILTIN_EXPORT_FORMATS.find((item) => item.id === formatId);
-  if (!format) {
+  const settings = readSettings();
+  // 按**解析后的导出项**查找，而不是直接查内置清单——
+  // 用户加的额外格式（pandoc:gfm 之类）也要能导出，
+  // 而被移除的项不该还能被触发。
+  const item = findResolvedExportItem(formatId, settings.export.items);
+  if (!item) {
     return {
       ok: false,
       path: null,
@@ -246,8 +246,15 @@ export async function exportDocument(formatId: string): Promise<ExportResult> {
       error: `未知的导出格式: ${formatId}`,
     };
   }
-
-  const settings = readSettings();
+  if (!item.visible) {
+    return {
+      ok: false,
+      path: null,
+      message: "该导出项已被移除",
+      error: `导出项 ${formatId} 已被用户移除`,
+    };
+  }
+  const format = item.format;
   const context = prepareExport(format);
 
   // pandoc 格式：先探测可用性，别让用户等完对话框才发现没装

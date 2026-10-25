@@ -434,7 +434,10 @@ describe("意图总线", () => {
       runCommand("view.focus-mode", createEditor());
       // 注意：发出去的**意图**是 view.toggle-focus-mode，
       // 与命令 id（view.focus-mode）是两回事——意图描述的是「要做什么」
-      expect(seen).toEqual(["view.source", "view.toggle-focus-mode"]);
+      expect(seen).toEqual([
+        { type: "view.source" },
+        { type: "view.toggle-focus-mode" },
+      ]);
     } finally {
       off();
     }

@@ -1052,7 +1052,7 @@
 
 .export-item {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto 1fr auto auto;
   align-items: baseline;
   gap: 4px 10px;
   width: 100%;
@@ -1091,6 +1091,122 @@
   font-family: var(--ink-mono-family, monospace);
   font-size: 11px;
   color: var(--ink-fg-faint);
+}
+
+/* 导出项上绑定的快捷键（设置里自定义的） */
+.export-item-shortcut {
+  font-family: var(--ink-mono-family, monospace);
+  font-size: 11px;
+  color: var(--ink-fg-muted);
+  background-color: var(--ink-bg-inset);
+  border-radius: var(--ink-radius-sm);
+  padding: 1px 5px;
+}
+
+/* ── 设置面板里的「导出项」 ── */
+
+.export-item-list {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 10px;
+}
+
+.export-item-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 6px 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--ink-border);
+}
+
+.export-item-move {
+  display: flex;
+  gap: 2px;
+}
+
+/* 只画一个字符的小按钮（上移 / 下移） */
+.btn--icon {
+  min-width: 24px;
+  padding: 2px 6px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.export-item-name,
+.export-item-shortcut-input {
+  min-width: 0;
+  padding: 4px 8px;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--ink-fg);
+  background-color: var(--ink-bg);
+  border: 1px solid var(--ink-border);
+  border-radius: var(--ink-radius-sm);
+}
+
+.export-item-name:focus,
+.export-item-shortcut-input:focus {
+  outline: none;
+  border-color: var(--ink-accent);
+}
+
+/* 快捷键那一行：标签 + 输入框 + 预览/错误 */
+.export-item-shortcut {
+  grid-column: 2 / 4;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.export-item-shortcut-label {
+  font-size: 12px;
+  color: var(--ink-fg-muted);
+  white-space: nowrap;
+}
+
+.export-item-shortcut-input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--ink-mono-family, monospace);
+  font-size: 12px;
+}
+
+.export-item-shortcut-preview {
+  font-family: var(--ink-mono-family, monospace);
+  font-size: 12px;
+  color: var(--ink-fg-muted);
+  white-space: nowrap;
+}
+
+.export-item-shortcut-error {
+  font-size: 12px;
+  color: var(--ink-danger);
+  white-space: nowrap;
+}
+
+/* 已移除的格式：折叠起来，不占地方 */
+.export-item-removed {
+  margin: 8px 0;
+  font-size: 12px;
+  color: var(--ink-fg-muted);
+}
+
+.export-item-removed > summary {
+  cursor: pointer;
+  color: var(--ink-fg-faint);
+}
+
+.export-item-removed-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 0 4px 12px;
+}
+
+.export-item-actions {
+  margin-top: 8px;
 }
 
 .export-item-busy {

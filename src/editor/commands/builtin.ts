@@ -209,7 +209,7 @@ export function builtinCommands(): InkstoneCommand[] {
       surfaces: ["palette"],
       keywords: "live preview typora shishi",
       run: () => {
-        emitIntent("view.live");
+        emitIntent({ type: "view.live" });
         return true;
       },
     },
@@ -220,7 +220,7 @@ export function builtinCommands(): InkstoneCommand[] {
       surfaces: ["palette"],
       keywords: "dimmed ulysses ruohua",
       run: () => {
-        emitIntent("view.dimmed");
+        emitIntent({ type: "view.dimmed" });
         return true;
       },
     },
@@ -231,7 +231,7 @@ export function builtinCommands(): InkstoneCommand[] {
       surfaces: ["palette"],
       keywords: "source code yuanma",
       run: () => {
-        emitIntent("view.source");
+        emitIntent({ type: "view.source" });
         return true;
       },
     },
@@ -242,7 +242,7 @@ export function builtinCommands(): InkstoneCommand[] {
       surfaces: ["palette"],
       keywords: "focus mode jiaodian",
       run: () => {
-        emitIntent("view.toggle-focus-mode");
+        emitIntent({ type: "view.toggle-focus-mode" });
         return true;
       },
     },
@@ -253,7 +253,7 @@ export function builtinCommands(): InkstoneCommand[] {
       surfaces: ["palette"],
       keywords: "typewriter daru ji",
       run: () => {
-        emitIntent("view.toggle-typewriter-mode");
+        emitIntent({ type: "view.toggle-typewriter-mode" });
         return true;
       },
     },
@@ -266,7 +266,7 @@ export function builtinCommands(): InkstoneCommand[] {
       surfaces: ["palette"],
       keywords: "new create xinjian",
       run: () => {
-        emitIntent("file.new");
+        emitIntent({ type: "file.new" });
         return true;
       },
     },
@@ -278,7 +278,7 @@ export function builtinCommands(): InkstoneCommand[] {
       keywords: "save baocun",
       shortcut: "⌘S",
       run: () => {
-        emitIntent("file.save");
+        emitIntent({ type: "file.save" });
         return true;
       },
     },
@@ -291,7 +291,7 @@ export function builtinCommands(): InkstoneCommand[] {
       keywords: "export daochu docx pdf epub html word",
       shortcut: "⌘⇧E",
       run: () => {
-        emitIntent("file.export");
+        emitIntent({ type: "file.export" });
         return true;
       },
     },

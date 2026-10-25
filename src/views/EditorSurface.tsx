@@ -5,7 +5,7 @@
  * 对外仍然只暴露「Markdown 文本」，不泄露编辑器内部结构。
  */
 
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type { EditorState } from "@codemirror/state";
 import { createMarkdownEditor, type MarkdownEditorHandle } from "@/editor/MarkdownEditor";
 import { useDocument, takePendingScroll } from "@/ipc/document";
@@ -14,6 +14,7 @@ import { onMenuAction } from "@/ipc/menu";
 import { runCommand } from "@/editor/commands";
 import { useSettings } from "@/settings/store";
 import { MARKER_DISPLAY_MODES } from "@/settings/schema";
+import { resolveExportItems } from "@/export/items";
 
 interface Props {
   onOpenSettings: () => void;
@@ -27,6 +28,19 @@ export function EditorSurface({ onOpenSettings }: Props) {
   const inlineMathSingleDollar = settings.markdown.inlineMathSingleDollar;
   const focusMode = settings.editor.focusMode;
   const typewriterMode = settings.editor.typewriterMode;
+  /**
+   * 导出项的快捷键绑定。
+   *
+   * 依赖 `settings.export.items` 的**引用**——设置没改这个数组时引用不变，
+   * 于是 useMemo 不会重算，下面的 effect 也不会重配 keymap。
+   */
+  const exportShortcuts = useMemo(
+    () =>
+      resolveExportItems(settings.export.items)
+        .filter((item) => item.visible && item.shortcut)
+        .map((item) => ({ shortcut: item.shortcut, formatId: item.format.id })),
+    [settings.export.items],
+  );
   const hostRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<MarkdownEditorHandle | null>(null);
   /** 上一次同步进编辑器的值，用来避免回环更新 */
@@ -130,6 +144,11 @@ export function EditorSurface({ onOpenSettings }: Props) {
   useEffect(() => {
     editorRef.current?.setTypewriterMode(typewriterMode);
   }, [typewriterMode]);
+
+  // 导出项快捷键变化 → 重配编辑器的 keymap
+  useEffect(() => {
+    editorRef.current?.setExportShortcuts(exportShortcuts);
+  }, [exportShortcuts]);
 
   // 菜单动作：剪贴板相关（作用在编辑器实例上，所以订阅放在这一层）
   useEffect(() => {

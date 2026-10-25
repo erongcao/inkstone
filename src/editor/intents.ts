@@ -11,16 +11,28 @@
  * 方向永远是单向的。反过来（React 主动触发命令）用 `runCommand` 就行，不需要总线。
  */
 
-/** 目前已知的意图 */
+/**
+ * 目前已知的意图。
+ *
+ * 用**带 `type` 字段的对象**而不是裸字符串：
+ * 「导出指定格式」这类意图要带参数（导的是哪个格式），字符串装不下参数。
+ * 判别联合让 TypeScript 能根据 `type` 收窄出对应的参数。
+ */
 export type Intent =
-  | "view.live"
-  | "view.dimmed"
-  | "view.source"
-  | "view.toggle-focus-mode"
-  | "view.toggle-typewriter-mode"
-  | "file.new"
-  | "file.save"
-  | "file.export";
+  | { type: "view.live" }
+  | { type: "view.dimmed" }
+  | { type: "view.source" }
+  | { type: "view.toggle-focus-mode" }
+  | { type: "view.toggle-typewriter-mode" }
+  | { type: "file.new" }
+  | { type: "file.save" }
+  /**
+   * 打开导出面板。
+   *
+   * 带 `formatId` 时是「直接导出这个格式」——
+   * 用户在设置里给某个导出项绑了快捷键，按下去就不该再开面板让用户点一次。
+   */
+  | { type: "file.export"; formatId?: string };
 
 type Listener = (intent: Intent) => void;
 
