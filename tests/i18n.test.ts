@@ -120,7 +120,18 @@ describe("字典完整性", () => {
   });
 
   it("字典里没有用不到的条目", () => {
-    const unused = Object.keys(en).filter((key) => !JOINED_SOURCE.includes(key));
+    /*
+     * 两种写法都算「用到了」：
+     *   - 原文：绝大多数键（"保存"）
+     *   - 转义形式：含换行的键。语法速查表里的多行示例
+     *     （代码块、表格、块级公式）在源码里是 "```js\nconst a = 1;\n```"
+     *     这种带转义的字面量，运行时才是真正的换行——
+     *     直接拿运行时键去比源码文本，比不到。
+     */
+    const unused = Object.keys(en).filter((key) => {
+      if (JOINED_SOURCE.includes(key)) return false;
+      return !JOINED_SOURCE.includes(JSON.stringify(key).slice(1, -1));
+    });
     expect(unused).toEqual([]);
   });
 

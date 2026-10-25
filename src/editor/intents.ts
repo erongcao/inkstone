@@ -45,7 +45,19 @@ export type Intent =
    * 原生菜单的「检查更新…」与命令面板里的是**同一个动作**——
    * 两条入口，一条执行路径（都在 App 里落到 `runUpdateCheck`）。
    */
-  | { type: "app.check-update" };
+  | { type: "app.check-update" }
+  /**
+   * 打开「帮助」里的两个速查面板。
+   *
+   * 同样是**两条入口一条执行路径**：原生菜单的「快捷键一览」/
+   * 「Markdown 语法参考」与命令面板里的是同一个动作。
+   *
+   * 为什么命令面板也要有：原生菜单只在 Tauri 里存在，
+   * 浏览器构建（`pnpm dev:web`）下菜单是空的——
+   * 没有第二条入口，这些功能在浏览器里就**完全触达不到**。
+   */
+  | { type: "app.show-shortcuts" }
+  | { type: "app.show-markdown-reference" };
 
 type Listener = (intent: Intent) => void;
 

@@ -24,6 +24,7 @@
     "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\"",
     "licenses:check": "node scripts/check-licenses.mjs",
     "i18n:check": "tsx scripts/check-i18n-scope.ts src",
+    "bundle:check": "tsx scripts/check-bundle-ascii.ts",
     "gen:emoji": "tsx scripts/gen-emoji.ts",
     "gen:shortcuts": "tsx scripts/gen-shortcuts.ts"
   },

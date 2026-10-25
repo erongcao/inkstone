@@ -46,7 +46,7 @@
       {
         "ext": ["md", "markdown", "mdown", "mkd", "mdwn", "mdtxt", "text"],
         "name": "Markdown",
-        "description": "Markdown 文档",
+        "description": "Markdown document",
         "role": "Editor",
         "mimeType": "text/markdown"
       }

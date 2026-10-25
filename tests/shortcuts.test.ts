@@ -105,6 +105,18 @@ describe("平台感知显示", () => {
     expect(formatShortcut("Mod-Minus", "windows")).toBe("Ctrl+-");
   });
 
+  it("放大显示成 = 而不是物理键名 Equal", () => {
+    // `Equal` 是键的**物理名**，用户按的是键盘上印着 `=` 的那个键。
+    // 显示成「⌘Equal」等于告诉用户去按一个不存在的键——
+    // 这种速查表比没有更糟（M5-5 做「快捷键一览」时被逮住）。
+    //
+    // 但**加速键**必须还是 Equal：muda 的物理键表里没有 Plus，
+    // `CmdOrCtrl+Plus` 解析失败，而 Tauri 用 `.parse().ok()` 静默吞掉失败。
+    expect(formatShortcut("Mod-Equal", "mac")).toBe("⌘=");
+    expect(formatShortcut("Mod-Equal", "windows")).toBe("Ctrl+=");
+    expect(toAccelerator("Mod-Equal")).toBe("CmdOrCtrl+Equal");
+  });
+
   it("空串是空串", () => {
     expect(formatShortcut("", "mac")).toBe("");
     expect(formatShortcut("", "windows")).toBe("");

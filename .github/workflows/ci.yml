@@ -57,6 +57,13 @@ jobs:
         # 而这种不一致不会报错，只会「按下去没反应」。
         run: pnpm gen:shortcuts -- --check
 
+      - name: 校验打包元数据是 ASCII
+        # Windows 的 MSI 数据库代码页是 1252，装不下中文。
+        # 文件关联的 description 会被写进每个扩展名的 <ProgId Description="…">，
+        # 一旦有中文，Windows 打包 job 会在编译完七八分钟后挂在 WiX 上。
+        # 这道闸门在秒级就能拦下它。
+        run: pnpm bundle:check
+
       - name: 前端构建
         run: pnpm exec vite build
 

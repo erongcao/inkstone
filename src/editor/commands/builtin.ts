@@ -310,6 +310,30 @@ export function builtinCommands(): InkstoneCommand[] {
       },
     },
 
+    /* ── 帮助（原生菜单 + 命令面板两个入口） ── */
+    {
+      id: "app.show-shortcuts",
+      label: "快捷键一览",
+      category: "帮助",
+      surfaces: ["palette"],
+      keywords: "shortcuts keyboard kuaijiejian hotkey shortcut",
+      run: () => {
+        emitIntent({ type: "app.show-shortcuts" });
+        return true;
+      },
+    },
+    {
+      id: "app.show-markdown-reference",
+      label: "Markdown 语法参考",
+      category: "帮助",
+      surfaces: ["palette"],
+      keywords: "markdown syntax reference yufa shuofa",
+      run: () => {
+        emitIntent({ type: "app.show-markdown-reference" });
+        return true;
+      },
+    },
+
     /* ── AI（只在命令面板） ── */
     {
       id: "ai.open",

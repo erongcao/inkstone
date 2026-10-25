@@ -22,6 +22,8 @@ import { LinkPopover } from "@/views/LinkPopover";
 import { RecoveryDialog } from "@/views/RecoveryDialog";
 import { ConflictDialog } from "@/views/ConflictDialog";
 import { UpdateDialog } from "@/views/UpdateDialog";
+import { ShortcutsDialog } from "@/views/ShortcutsDialog";
+import { MarkdownReferenceDialog } from "@/views/MarkdownReferenceDialog";
 import { onIntent } from "@/editor/intents";
 import { startAutoSaveRuntime } from "@/document/autosave";
 import { exportDocument, type ExportResult } from "@/export/service";
@@ -74,6 +76,8 @@ export default function App() {
     result: ExportResult | null;
   }>({ busy: null, result: null });
   const [sidebarVisible, setSidebarVisible] = useState(true);
+  /** 「帮助」菜单里的两个速查面板（同一时刻只开一个） */
+  const [helpPanel, setHelpPanel] = useState<"shortcuts" | "reference" | null>(null);
   /** 检查更新对话框的状态（结果与失败原因都在这里） */
   const [updateCheck, setUpdateCheck] = useState<{
     open: boolean;
@@ -216,6 +220,12 @@ export default function App() {
           // 原生菜单与命令面板是同一个动作，都落到这一处
           void runUpdateCheck();
           break;
+        case "app.show-shortcuts":
+          setHelpPanel("shortcuts");
+          break;
+        case "app.show-markdown-reference":
+          setHelpPanel("reference");
+          break;
         case "ai.open":
           openAiPanel(intent.tab ?? "rewrite");
           break;
@@ -253,6 +263,10 @@ export default function App() {
         update({ editor: { typewriterMode: !settings.editor.typewriterMode } }),
       ),
       onMenuAction("check-update", () => void runUpdateCheck()),
+      // 「Markdown 语法参考」与「快捷键一览」之前也是**注册了但没人处理**
+      // 的菜单项——点了没反应。现在一个给语法速查表，一个给键位表。
+      onMenuAction("markdown-reference", () => setHelpPanel("reference")),
+      onMenuAction("shortcuts", () => setHelpPanel("shortcuts")),
       // 「项目主页」之前是**注册了但没人处理**的菜单项——点了没反应。
       onMenuAction(
         "open-homepage",
@@ -314,6 +328,12 @@ export default function App() {
       )}
       <CommandPalette />
       <LinkPopover />
+      {helpPanel === "shortcuts" && (
+        <ShortcutsDialog onClose={() => setHelpPanel(null)} />
+      )}
+      {helpPanel === "reference" && (
+        <MarkdownReferenceDialog onClose={() => setHelpPanel(null)} />
+      )}
       {conflict && (
         <ConflictDialog
           conflict={conflict}

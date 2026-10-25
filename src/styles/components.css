@@ -916,6 +916,112 @@
 }
 
 /*
+ * 帮助菜单里的两个速查面板
+ * ═══════════════════════════════════════════════════════════ */
+
+/* 速查表比恢复提示宽得多：480px 放不下两列表格 */
+.recovery-panel--wide {
+  width: min(680px, calc(100vw - 48px));
+  max-height: calc(100vh - 64px);
+  display: flex;
+  flex-direction: column;
+}
+
+/* 内容区自己滚动，标题和「关闭」按钮留在原地 */
+.syntax-reference,
+.shortcut-reference {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
+  scrollbar-width: thin;
+}
+
+.syntax-reference__group,
+.shortcut-reference__group {
+  margin-bottom: 14px;
+}
+
+.syntax-reference__title,
+.shortcut-reference__title {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--ink-fg-muted);
+}
+
+.syntax-reference__note {
+  margin: 0 0 8px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink-fg-muted);
+}
+
+.syntax-reference__samples {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/*
+ * 源码示例按原样显示：缩进是 Markdown 语法的一部分
+ * （嵌套列表靠它），所以不能折叠空白。
+ */
+.syntax-reference__sample {
+  display: block;
+  padding: 4px 8px;
+  border-radius: var(--ink-radius-sm);
+  background-color: var(--ink-bg-inset);
+  font-family: var(--ink-mono-family, monospace);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--ink-fg);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.shortcut-reference__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.shortcut-reference__table th {
+  padding: 3px 10px 3px 0;
+  font-weight: 400;
+  text-align: left;
+  color: var(--ink-fg);
+  white-space: nowrap;
+}
+
+.shortcut-reference__keys {
+  padding: 3px 10px 3px 0;
+  white-space: nowrap;
+}
+
+.shortcut-reference__key {
+  display: inline-block;
+  padding: 1px 6px;
+  border: 1px solid var(--ink-border);
+  border-radius: var(--ink-radius-sm);
+  background-color: var(--ink-bg-inset);
+  font-family: var(--ink-mono-family, monospace);
+  font-size: 12px;
+  color: var(--ink-fg);
+}
+
+.shortcut-reference__scope {
+  padding: 3px 0;
+  font-size: 12px;
+  color: var(--ink-fg-muted);
+  white-space: nowrap;
+}
+
+/*
  * 标签栏
  * ═══════════════════════════════════════════════════════════ */
 

@@ -717,11 +717,12 @@ CM6 的 `EditorView.inputHandler` 扩展点实现，设置项 `editor.autoPairMo
   - ✅ 单元测试 32 条覆盖契约（可撤销 / 放弃不动文档 / 原文被改则拒绝）
 
 ### M5 · 跨平台（目标：4 周）
-- [ ] Windows x64 + ARM64 构建与打包
-- [ ] Linux `.deb` / `.rpm` / AppImage / Wayland 兼容
+- [x] Windows x64 + ARM64 构建与打包（首跑挂在 WiX 1252 代码页 → 已修，待重跑确认）
+- [x] Linux `.deb` / `.rpm` / AppImage / Wayland 兼容（Ubuntu 打包首跑即通过）
 - [x] 自动更新（最简形态：检查更新 → 打开下载页）
 - [x] i18n（简中 / 繁中 / 英文）
 - [x] 快捷键映射层（macOS ⌘ ↔ Win/Linux Ctrl 统一抽象）
+- [x] 「帮助」菜单的两个速查面板（语法参考 / 快捷键一览）
 - **验收**：三平台 CI 全绿，各平台产出一个可安装包
 
 #### M5-1 开仓地基（2026-10-25）
@@ -808,6 +809,37 @@ CM6 的 `EditorView.inputHandler` 扩展点实现，设置项 `editor.autoPairMo
 - ✅ 测试 13 条（版本比较 7 + 对话框 6）；Rust 4 条（release 字段解析）
 - ✅ 验收（浏览器 UI）：命令面板 → 应用 → 检查更新… →
   「还没有正式发布的版本。当前是 0.1.0」（仓库目前只有 draft release）
+
+#### M5-5 三平台 CI 实跑 + 两个死菜单项（2026-10-26）
+- ✅ **首轮三平台 CI**：前端检查（Node 22 / 24）、Rust 检查、依赖许可证全绿；
+  Ubuntu 与 macOS 打包成功；**两个 Windows job 全红**
+- ✅ **根因**：WiX 的 **LGHT0311** —— MSI 数据库代码页是 1252，装不下中文。
+  Tauri 把 `fileAssociations[].description` 原样写进每个扩展名的 `<ProgId Description>`，
+  7 个扩展名 = 正好 7 处报错（行号间隔 5，与模板的 `{{#each ext}}` 循环对得上）。
+  Rust 侧编译是过的——挂的是**编译之后**的打包环节，一轮要等七八分钟
+- ✅ **修法**：文件关联描述改英文。`shortDescription` / `longDescription`
+  **不在** WiX 模板里（只在 Info.plist 与 .desktop 出现，那两处是 UTF-8），
+  所以它们继续用中文；`fileAssociations[].description` 是全局字段、
+  没有按平台区分的余地，也没有改 MSI 代码页的选项 → 只能保证它能被 1252 编码
+- ✅ **新增闸门** `pnpm bundle:check`（判据是「能被 Windows-1252 编码」，
+  不是「纯 ASCII」——`©` `…` `—` 1252 装得下）。
+  跑在秒级，本地与 CI 前端 job 都拦
+- ✅ **接上两个死菜单项**：
+  - 「快捷键一览」——内容**从注册表生成**（`SHORTCUTS` + `MENU_CHROME`），
+    手抄的清单一定会漂移，而一个「和你实际按的键不一样」的速查表比没有更糟
+  - 「Markdown 语法参考」——一份**实测过的数据**（`src/reference/markdown-syntax.ts`），
+    写的是 Inkstone **支持什么**；不写还没实现的语法（`==高亮==`），
+    用户照着写而屏幕上什么都不发生比不写更糟
+- ✅ 两条入口：原生菜单 + 命令面板（命令面板那条不是可选的——
+  原生菜单只在 Tauri 里存在，浏览器构建下没有第二条入口就完全触达不到）
+- ✅ **速查表逮住一个真 bug**：`formatShortcut` 把「放大」显示成 `⌘Equal`，
+  用户按的是键盘上印着 `=` 的那个键 → 改为 `⌘=`。
+  但加速键那一侧**必须仍是 `Equal`**（muda 物理键表里没有 `Plus`，
+  `CmdOrCtrl+Plus` 解析失败会被 `.parse().ok()` 静默吞掉）
+- ✅ 词典 426 → **486** 条；测试 1088 → **1101** 条（51 个文件）
+- ✅ 浏览器实测三语（简 / 繁 / 英）：两个面板的 DOM 里**零中文残留**、
+  繁体零简体残留；多行示例（代码块 / 表格 / mermaid / 块级公式）缩进与换行原样保留
+- ⏳ **待验收**：重跑 CI，确认 Windows 的 MSI 与 NSIS 都出包
 
 ### 长期（P2+，不排期）
 GitHub Alerts / 脚注 / RTL / 插件系统 / 主题市场 / 图片图床 / EPUB 精修 / RevealJS 幻灯片 / 多人协作

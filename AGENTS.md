@@ -1342,9 +1342,27 @@ pnpm typecheck      # tsc --noEmit
 pnpm lint           # eslint，0 warning 容忍
 pnpm format:check   # prettier
 pnpm test           # vitest：round-trip + 组件交互
+pnpm i18n:check     # 模块作用域里不许调 t()（导入时定型，语言切换就不生效）
+pnpm bundle:check   # 打包元数据必须能被 Windows-1252 编码（否则 MSI 打包挂）
 pnpm licenses:check # 依赖许可证白名单
 cd src-tauri && cargo fmt --check && cargo clippy --all-targets
 ```
+
+### 闸门不是越多越好，是「每个都拦住过一类真 bug」
+
+九道闸门，每一道背后都有一次实打实的翻车：
+
+| 闸门 | 拦住过什么 |
+|---|---|
+| `typecheck` | 类型不一致（例行） |
+| `lint` | `react-hooks/set-state-in-effect` 等规则违反 |
+| `format:check` | 格式漂移 |
+| `test` | 功能回归；round-trip 保证 Live Preview 不腐蚀用户文件 |
+| `i18n:check` | 模块常量在定义处调 `t()` → 语言切换后那部分永远停在旧语言 |
+| `bundle:check` | 中文进 MSI → Windows 打包挂在 WiX（原来要等七八分钟才知道） |
+| `licenses:check` | 依赖许可证进白名单外 |
+| `gen:shortcuts --check` | 改了注册表忘了重新生成 `shortcuts.json` → 菜单加速键与前端不一致 |
+| `cargo fmt` / `clippy` | Rust 侧格式与 lint |
 
 ### round-trip 测试是本项目最重要的质量基建
 
@@ -2222,9 +2240,125 @@ M5-2 的 `action()` 只检查「id 在不在清单里」，
 **管不到「有没有人真的处理它」**——这是那套机制的盲区。
 这次把它接上了。
 
-「Markdown 语法参考」与「快捷键一览」目前仍然没接（同样点了没反应），先记着。
+「Markdown 语法参考」与「快捷键一览」同样是没接的死菜单项，
+已在 M5-5 接上（详见下文 M5-5 段）。
 
-## 目录
+## M5-5：三平台 CI 实跑 + 两个死菜单项（2026-10-26）
+
+### Windows 打包挂在 WiX：MSI 的代码页装不下中文
+
+第一次三平台 CI 实跑，Ubuntu 与 macOS 的打包都过了，**两个 Windows job 全红**：
+
+```
+main.wxs(111) : error LGHT0311 : A string was provided with characters
+that are not available in the specified database code page '1252'.
+```
+
+Rust 侧编译是过的——挂的是**编译之后**的打包环节，
+所以一轮 CI 要等七八分钟才看得到结果。
+
+根因不在 Rust，也不在 Tauri 的 bug：**MSI 数据库的代码页是 1252，装不下中文**。
+Tauri 的 WiX 模板把 `fileAssociations[].description` 原样写进每个扩展名：
+
+```xml
+<ProgId Id="Inkstone.md" Advertise="yes" Description="{{association.description}}">
+```
+
+七个扩展名 → 七个 `<ProgId>` → **正好七个 LGHT0311**（行号 111/116/121/126/131/136/141，
+间隔 5 行，与模板里 `{{#each ext}}` 的循环结构对得上）。
+
+能改的地方比想象的多：
+
+- `bundle.shortDescription` / `longDescription` **不在** WiX 模板里
+  （只在 macOS 的 Info.plist 与 Linux 的 .desktop 出现，那两处是 UTF-8），
+  所以它们**可以继续用中文**；
+- `fileAssociations[].description` 是**全局**字段，
+  `BundleConfig` 里**没有按平台区分的余地**，也没有「改 MSI 代码页」的选项
+  （`WixConfig` 只有 `language` / `template` / `fragmentPaths` 这些）；
+- 于是唯一能做的就是：**进 MSI 的字符串必须是 1252 能编码的**。
+
+判据不是「纯 ASCII」——`©`、`…`、`—` 这些 1252 **装得下**，
+不必为了保险把它们也换掉。真正的判据是「能被 Windows-1252 编码」，
+`scripts/check-bundle-ascii.ts` 用 `TextDecoder("windows-1252")` 反查字节表来判。
+
+**这道闸门的价值在于它跑在秒级**：原来的失败要等七八分钟才知道，
+现在 `pnpm bundle:check` 在本地与 CI 的前端 job 里立刻拦下。
+
+### 两个死菜单项：语法参考 + 快捷键一览
+
+M5-4 接好了「项目主页」，但「Markdown 语法参考」与「快捷键一览」还挂着——
+**注册了、菜单里看得见、点了没反应**。
+
+M5-2 的 `action()` 只检查「id 在不在清单里」，
+**管不到「有没有人真的处理它」**——这是那套机制的盲区，
+Rust 侧的测试也管不着（它只保证「前端收得到」，不保证「前端会做」）。
+
+两个面板的定位刻意不同：
+
+| 面板 | 内容来源 | 为什么这样 |
+|---|---|---|
+| 快捷键一览 | **从注册表生成**（`SHORTCUTS` + `MENU_CHROME`） | 手抄的清单一定会漂移；一个「和你实际按的键不一样」的速查表，比没有更糟 |
+| Markdown 语法参考 | 一份**数据文件**（`src/reference/markdown-syntax.ts`） | 写的是 **Inkstone 支持什么**，不是「Markdown 规范怎么说」 |
+
+速查表里**不写还没实现的语法**（比如 `==高亮==`）——
+用户照着写而屏幕上什么都不发生，比不写更糟。
+所以表里每一行都是实测过的：表格能编辑、脚注能跳转、公式走 KaTeX、mermaid 会渲染成图。
+
+**为什么速查表不渲染成「预览」**：渲染路径有两套——
+编辑器里的实时预览是 CodeMirror 装饰器，导出走 remark → rehype。
+两套输出的样式不完全一样，给出「导出时的样子」反而会让人以为编辑器里也是那样。
+速查表要的是**可靠**，不是好看。
+
+### 两条入口：原生菜单 + 命令面板
+
+和「检查更新」一样的结构：
+原生菜单走 `onMenuAction`，命令面板走意图总线（`app.show-shortcuts` /
+`app.show-markdown-reference`），两条都落到 App 里的 `setHelpPanel()`。
+
+命令面板这一条不是可有可无的：**原生菜单只在 Tauri 里存在**，
+浏览器构建（`pnpm dev:web`）下菜单是空的——
+没有第二条入口，这两个功能在浏览器里就完全触达不到（也就没法真跑验收）。
+
+### 速查表逮住的一个真 bug：`⌘Equal`
+
+「快捷键一览」一做完就暴露了 `formatShortcut` 的一个显示错误：
+
+```
+放大    ⌘Equal    ← 错，用户按的是键盘上印着 "=" 的那个键
+```
+
+`Equal` 是键的**物理名**，不是给人看的写法。修法是给 `KEY_ALIASES` 加一条别名
+（`Equal: { display: "=", accel: "Equal" }`）。
+
+但**加速键那一侧必须仍然是 `Equal`**——muda 的物理键表里**没有 `Plus`**，
+`CmdOrCtrl+Plus` 解析失败，而 Tauri 建菜单时用的是 `.parse().ok()`，
+**解析失败会被静默吞掉**，菜单项直接没有快捷键还不报错。
+所以这两个别名是**方向相反**的两件事：
+显示要 `=`，加速键要 `Equal`。
+
+### 词典那条测试也得跟着改
+
+速查表的数据是**多行**的（代码块、表格、mermaid、块级公式），
+在源码里是 `"```js\nconst a = 1;\n```"` 这种带转义的字面量，
+运行时才是真正的换行。
+
+`tests/i18n.test.ts` 的「字典里没有用不到的条目」原来直接拿**运行时键**
+去比**源码文本**，多行的键一个都匹配不上——把 4 条多行示例判成了「陈旧键」。
+
+改法不是放宽判据，而是**把两种写法都算「用到了」**：
+原文，或它的转义形式（转义形式才是源码里真实的写法）。
+
+### 数据驱动的文案，字典层测试抓不到
+
+速查表与快捷键表的文案**不是源码里的 `t("…")` 字面量**——
+它们来自数据文件与注册表。所以 `tests/i18n.test.ts` 那条
+「`t()` 的字面量都在字典里」**抓不到它们**，漏译在这里是静默的：
+英文界面里夹一段中文示例，不报错。
+
+于是 `tests/help-panels.test.tsx` 补了两道：
+把数据逐条对着两份词典查一遍，再把面板真的渲染出来查 DOM 里有没有漏网的语言。
+
+
 
 ```
 src/parser/     Markdown 解析层（唯一语义来源，remark/mdast）
@@ -2235,6 +2369,7 @@ src/export/     导出管线（M4：注册表 / 变量 / front matter / HTML / P
 src/ai/         AI 能力（provider / 端点预设 / 上下文切片 / 写回契约 / 面板 store / SSE）
 src/settings/   设置模型与存储
 src/i18n/       界面国际化（手写轻量：t / tParts / 字典模块 / 原生语言同步）
+src/reference/  Markdown 语法速查表的数据（帮助菜单用）
 src/theme/      主题注册表与运行时
 src/ipc/        与 Rust 侧接口
 src/shortcuts.ts 快捷键**单一注册表**（KEYS / SHORTCUTS / 平台感知显示 / Tauri 加速键）
@@ -2242,7 +2377,7 @@ src/document/   文档生命周期（自动保存 / 崩溃恢复 / 外部修改�
 src/dev/        开发期测量台与 AI mock（不进生产包）
 src-tauri/src/  Rust 后端（document / menu / recent / fs / search / watch / pandoc / print / shortcuts / i18n）
 tests/corpus/   round-trip 语料库
-scripts/        开发工具脚本（bench-parser / bench-decorations / verify-incremental / dump-lezer-tree / check-licenses / check-i18n-scope / gen-shortcuts）
+scripts/        开发工具脚本（bench-parser / bench-decorations / verify-incremental / dump-lezer-tree / check-licenses / check-i18n-scope / check-bundle-ascii / gen-shortcuts）
 perf.html       Live Preview 性能测量台（vite dev 下访问 /perf.html）
 docs/           计划书与调研文档
 ```
@@ -2384,7 +2519,7 @@ M3 全部完成（2026-10-23）。M4（导出）进行中（2026-10-25）：
   顺带修掉两个**静默失效**：「替换」的 ⌘H 被系统「隐藏」吃掉、
   「放大」的 `CmdOrCtrl+Plus` 解析失败被吞掉
 - **M5-3 界面国际化**：手写轻量 `t()`，零依赖；
-  三种语言（简 / 繁 / 英），426 条文案；
+  三种语言（简 / 繁 / 英），M5-3 落地时 426 条文案、M5-5 后 486 条；
   语言存在 `settings.general.language`（那个字段早就存在但**一直没接线**）；
   原生菜单另有一张 Rust 侧文案表，`set_locale` 命令通知重建；
   顺带修掉五个**静默失效**：两份字典键集漂移（繁体露简体 50 多处）、
@@ -2395,3 +2530,10 @@ M3 全部完成（2026-10-23）。M4（导出）进行中（2026-10-25）：
   版本比较放在 TS 那边（能被 vitest 直接测），Rust 只做一次 HTTP GET；
   原生菜单 + 命令面板两个入口，浏览器里也能直接 fetch 验收；
   顺带修好「项目主页」这个**注册了却没人处理**的死菜单项（详见上文 M5-4 段）
+- **M5-5 三平台 CI 实跑**：首跑 Ubuntu + macOS 打包全绿、两个 Windows job 挂在
+  **WiX 的 1252 代码页**（文件关联的中文描述进不了 MSI）→
+  描述改英文，并新增 `bundle:check` 闸门（秒级拦住，详见上文 M5-5 段）；
+  同轮接上「Markdown 语法参考」与「快捷键一览」两个死菜单项
+  （速查表从注册表生成 / 语法表是一份实测过的数据），
+  顺带修掉 `formatShortcut` 把「放大」显示成 `⌘Equal` 的错（应为 `⌘=`）
+- 词典条数：426 → **486**（M5-5 新增 60 条：速查表数据 + 两个面板的外壳文案）
