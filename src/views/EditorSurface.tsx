@@ -15,6 +15,8 @@ import { runCommand } from "@/editor/commands";
 import { useSettings } from "@/settings/store";
 import { MARKER_DISPLAY_MODES } from "@/settings/schema";
 import { resolveExportItems } from "@/export/items";
+import { setAiEditorBridge } from "@/ai/editor-bridge";
+import { openAiPanel } from "@/ai/panel-store";
 
 interface Props {
   onOpenSettings: () => void;
@@ -72,9 +74,19 @@ export function EditorSurface({ onOpenSettings }: Props) {
       },
     });
     editorRef.current = editor;
+    // 把编辑器注册给 AI：面板在应用级浮层里，拿不到这个 ref。
+    // 注册表里永远只有当前活动的那一个，AI 改的就是你眼前这份文档。
+    setAiEditorBridge({
+      getSource: () => editor.getValue(),
+      getCursor: () => editor.getCursorOffset(),
+      getSelection: () => editor.getSelectionRange(),
+      replaceRange: (from, to, text) => editor.replaceRange(from, to, text),
+      getState: () => editor.getState(),
+    });
     return () => {
       editor.destroy();
       editorRef.current = null;
+      setAiEditorBridge(null);
     };
     // 只在挂载时创建一次；markerDisplay / autoPairMode 的变化由下面的 effect 单独同步
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -206,6 +218,9 @@ export function EditorSurface({ onOpenSettings }: Props) {
           </button>
           <button type="button" className="btn" onClick={create}>
             新建
+          </button>
+          <button type="button" className="btn" onClick={() => openAiPanel("rewrite")}>
+            AI
           </button>
           <button type="button" className="btn" onClick={() => void save()}>
             保存

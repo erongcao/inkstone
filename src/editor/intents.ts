@@ -32,7 +32,13 @@ export type Intent =
    * 带 `formatId` 时是「直接导出这个格式」——
    * 用户在设置里给某个导出项绑了快捷键，按下去就不该再开面板让用户点一次。
    */
-  | { type: "file.export"; formatId?: string };
+  | { type: "file.export"; formatId?: string }
+  /**
+   * 打开 AI 面板。
+   *
+   * 带 `tab` 时直接落到那个分区（命令面板里「AI：润色」这类条目）。
+   */
+  | { type: "ai.open"; tab?: "rewrite" | "summarize" };
 
 type Listener = (intent: Intent) => void;
 

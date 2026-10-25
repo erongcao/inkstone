@@ -12,7 +12,11 @@
  * 可能正在被光标邻接着的输入影响——静默覆盖会让不可撤销的数据损失。
  */
 
-import { EditorSelection, type EditorState } from "@codemirror/state";
+import {
+  EditorSelection,
+  type EditorState,
+  type TransactionSpec,
+} from "@codemirror/state";
 
 /** 一次待确认的写回 */
 export interface PendingWriteback {
@@ -30,30 +34,37 @@ export interface PendingWriteback {
 /**
  * 接受预览结果：把范围替换成模型输出。
  *
- * 刻意**不**走 `EditorState.update` 的 `userEvent` 之类选项，
- * 就是最普通的一次 dispatch —— 这样它和其他编辑一样进撤销栈，
- * 用户按 ⌘Z 就能还原。
+ * 返回的是**事务规格**而不是新状态，由调用方 `view.dispatch(spec)` 落地。
+ *
+ * 为什么不直接返回新状态：那意味着调用方要用 `view.setState(next)`，
+ * 而 `setState` **不触发 updateListener**——`onChange` 不响，
+ * 文档 store 不知道内容变了，脏标记不会亮、自动保存不会存；
+ * 而且它会把所有 view plugin 拆了重建，装饰器状态全丢。
+ *
+ * 走 `dispatch` 才是**普通事务**：进撤销栈（⌘Z 能还原）、
+ * 触发 `onChange`、能被搜索与导出看见。
+ *
+ * 刻意**不**加 `addToHistory.of(false)`——这次编辑必须能被撤销。
  */
-export function acceptWriteback(
-  state: EditorState,
-  pending: PendingWriteback,
-): EditorState {
-  return state.update({
+export function acceptWriteback(pending: PendingWriteback): TransactionSpec {
+  return {
     changes: { from: pending.from, to: pending.to, insert: pending.text },
     // 选区落到插入内容之后，用户可以接着写
     selection: EditorSelection.cursor(pending.from + pending.text.length),
     scrollIntoView: true,
-  }).state;
+  };
 }
 
 /**
  * 放弃预览：文档一个字都不动。
  *
- * 返回原 state 而不是空操作事务，是为了让调用方能直接
- * `if (next !== prev) view.dispatch(...)` 而不必先比对文档。
+ * 返回 `null` 表示「没有要派发的事务」——调用方什么都不该 dispatch。
+ *
+ * 刻意**不**返回一次空事务：空事务也会占掉一个撤销步骤，
+ * 用户按 ⌘Z 会「撤掉」一个他根本没做过的操作。
  */
-export function rejectWriteback(state: EditorState): EditorState {
-  return state;
+export function rejectWriteback(): null {
+  return null;
 }
 
 /**

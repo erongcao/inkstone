@@ -16,6 +16,7 @@ import { TabBar } from "@/views/TabBar";
 import { StatusBar } from "@/views/StatusBar";
 import { SettingsPanel } from "@/views/SettingsPanel";
 import { ExportPanel } from "@/views/ExportPanel";
+import { AiPanel } from "@/views/AiPanel";
 import { CommandPalette } from "@/views/CommandPalette";
 import { LinkPopover } from "@/views/LinkPopover";
 import { RecoveryDialog } from "@/views/RecoveryDialog";
@@ -25,6 +26,8 @@ import { startAutoSaveRuntime } from "@/document/autosave";
 import { exportDocument, type ExportResult } from "@/export/service";
 import { findResolvedExportItem } from "@/export/items";
 import { readSettings } from "@/settings/store";
+import { openAiPanel, useAiPanel } from "@/ai/panel-store";
+import type { SettingsSectionId } from "@/settings/schema";
 import {
   resolveKeepLocal,
   resolveWithDisk,
@@ -43,6 +46,8 @@ export default function App() {
   useThemeRuntime();
 
   const [settingsOpen, setSettingsOpen] = useState(false);
+  /** 设置面板打开时落在哪个分区（AI 面板的「去设置」要直接落到 AI 分区） */
+  const [settingsSection, setSettingsSection] = useState<SettingsSectionId>("appearance");
   const [exportOpen, setExportOpen] = useState(false);
   /** 导出面板的运行状态（面板本身是受控组件） */
   const [exportRun, setExportRun] = useState<{
@@ -59,6 +64,15 @@ export default function App() {
   const recoveryCandidate = useRecoveryCandidate();
   const recovery = settings.general.restoreSession ? recoveryCandidate : null;
   const conflict = useConflict();
+  // AI 面板的状态住在模块级 store 里（打开入口有三个），
+  // 这里只订阅它决定要不要渲染
+  const ai = useAiPanel();
+
+  /** 打开设置面板并落在指定分区 */
+  const openSettings = useCallback((section: SettingsSectionId = "appearance") => {
+    setSettingsSection(section);
+    setSettingsOpen(true);
+  }, []);
 
   // 挂载原生菜单事件桥
   useEffect(() => {
@@ -151,6 +165,9 @@ export default function App() {
             setExportRun({ busy: null, result: null });
           }
           break;
+        case "ai.open":
+          openAiPanel(intent.tab ?? "rewrite");
+          break;
       }
     });
     return off;
@@ -205,7 +222,13 @@ export default function App() {
         <EditorSurface onOpenSettings={() => setSettingsOpen(true)} />
       </main>
       <StatusBar />
-      {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
+      {settingsOpen && (
+        <SettingsPanel
+          initialSection={settingsSection}
+          onClose={() => setSettingsOpen(false)}
+        />
+      )}
+      {ai.open && <AiPanel onOpenSettings={() => openSettings("ai")} />}
       {exportOpen && (
         <ExportPanel
           busy={exportRun.busy}

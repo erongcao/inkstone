@@ -7,7 +7,13 @@
  *   - 对外只暴露文本的读写，不泄露 CM6 内部结构
  */
 
-import { EditorState, Transaction, Compartment, type Extension } from "@codemirror/state";
+import {
+  EditorSelection,
+  EditorState,
+  Transaction,
+  Compartment,
+  type Extension,
+} from "@codemirror/state";
 import { EditorView, keymap, lineNumbers, highlightActiveLine } from "@codemirror/view";
 import {
   defaultKeymap,
@@ -282,6 +288,27 @@ export interface MarkdownEditorHandle {
    * 后者会把撤销栈清掉，用户切回上一页按 ⌘Z 会发现什么都没得撤。
    */
   setState(state: EditorState): void;
+  /**
+   * 当前选区；没有选区时返回 null。
+   *
+   * 「没有选区」和「选区是空的」是两件事：
+   * CM6 里空选区就是光标本身，`from === to`。
+   */
+  getSelectionRange(): { from: number; to: number } | null;
+  /** 当前光标位置（偏移量） */
+  getCursorOffset(): number;
+  /**
+   * 替换一段文本。
+   *
+   * 刻意走 `view.dispatch` 而不是 `view.setState`：
+   * `setState` **不触发 updateListener**，于是 `onChange` 不会响，
+   * 文档 store 不知道内容变了——脏标记不会亮、自动保存不会存。
+   * 而且它会把所有 view plugin 拆了重建，装饰器状态全丢。
+   *
+   * `dispatch` 是一次**普通事务**：进撤销栈（用户按 ⌘Z 能还原）、
+   * 触发 `onChange`、被搜索与导出看见。
+   */
+  replaceRange(from: number, to: number, text: string): void;
 }
 
 export function createMarkdownEditor(
@@ -329,6 +356,21 @@ export function createMarkdownEditor(
     getState: () => view.state,
     createState: (doc: string) => EditorState.create({ doc, extensions }),
     setState: (next: EditorState) => view.setState(next),
+    getSelectionRange: () => {
+      const range = view.state.selection.main;
+      // 空选区（就是光标本身）不算「选中了东西」
+      if (range.empty) return null;
+      return { from: range.from, to: range.to };
+    },
+    getCursorOffset: () => view.state.selection.main.head,
+    replaceRange: (from: number, to: number, text: string) => {
+      view.dispatch({
+        changes: { from, to, insert: text },
+        // 选区落到插入内容之后，用户可以接着写
+        selection: EditorSelection.cursor(from + text.length),
+        scrollIntoView: true,
+      });
+    },
     setDisplayMode: (mode: MarkerDisplayMode) => setDisplayModeOf(view, mode),
     setAutoPairMode: (mode: AutoPairMode) => {
       view.dispatch({ effects: autoPairBox.reconfigure(autoPair(mode)) });

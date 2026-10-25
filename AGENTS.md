@@ -1815,6 +1815,105 @@ TypeScript 能按 `type` 收窄出参数，命令表和 React 两侧都不会写
 那是绕过 React 直接写受控元素的值，React 下次渲染会把它打回去。
 正确做法是给 `<select>` 加 `key`，让 React 重建这个元素。
 
+## M3-2 收尾：AI 面板（2026-10-25）
+
+### ⚠️ `view.setState()` 不触发 updateListener —— 写回必须走 `dispatch`
+
+这是本轮最值钱的教训，差点让整个 AI 功能变成「看起来能用、实际不落盘」。
+
+CM6 的 `EditorView.setState(next)` 干的事是：**拆掉全部 view plugin、重建整个 view**。
+它**不会**触发 `updateListener`。而我们的 `onChange` 是挂在 `updateListener` 上的，
+于是：
+
+- `onChange` 不响 → 文档 store 不知道内容变了 → **脏标记不亮、自动保存不存**
+- 所有 view plugin 被拆了重建 → 装饰器状态全丢
+- 看起来却「一切正常」：编辑器里文本确实变了
+
+所以写回**只能**走 `view.dispatch(spec)`：它是一次**普通事务**，
+进撤销栈（⌘Z 能还原）、触发 `onChange`、能被搜索与导出看见。
+
+由此，`acceptWriteback` 的返回值从「新状态」改成 **`TransactionSpec`**：
+它只负责「算出要改什么」，**落地交给调用方 dispatch**。
+（返回新状态的话，调用方几乎一定会顺手用 `setState` —— 而那正是错的。）
+
+> 同一份代码里，`EditorSurface` 切标签页时用 `setState` 是**对的**：
+> 那里确实要整体换一份状态（换状态是意图，不是编辑）。
+> 区别在于：换状态用 `setState`，**编辑**用 `dispatch`。
+
+### 写回前要核对原文
+
+模型还在流式输出的时候，用户可能已经在改同一段文字了。
+这时按开始时的偏移去替换，会**覆盖掉用户刚写的东西**。
+
+做法：跑动作时记下切片范围与**当时的原文**；接受前比一下，
+对不上就拒绝并说明原因（「原文在等待期间被改过了，请重新跑一次」）。
+
+`PendingWriteback.original` 这个字段就是为它准备的——
+不是用来做前后对比展示的，是用来做**安全检查**的。
+
+### 编辑器的持有权留在 EditorSurface，AI 通过注册表访问
+
+编辑器实例由 `EditorSurface` 创建并持有（多标签页各自保留撤销栈），
+而 AI 面板想做**应用级浮层**。如果两边各持一份，就会出现两条持有路径，
+切标签页时可能指向不同状态——「AI 改的是你看到的那个文档」这条不变量就破了。
+
+所以：`EditorSurface` 把自己注册到 `src/ai/editor-bridge.ts` 的模块级注册表，
+面板通过 `getAiEditorBridge()` 取。注册表里永远只有**当前活动的那一个**。
+
+### thinking 模型有「推理期」，预览会长时间空白
+
+实测本机 Ollama 的 `qwen3.8:27b-mlx`：一次改写请求 202 帧，
+其中 **190 帧是推理帧、只有 10 帧带正文**。推理帧走的是 `delta.reasoning`，
+我们的 `decodeDelta` 只取 `delta.content`，所以它们被正确地丢掉了——
+但代价是**正文出现前有很长一段空白**。
+
+对策：面板在 `output` 为空时显示「模型正在思考「润色」…」，
+有内容后改成「正在生成…」。差别只有一行，但它决定了用户会不会以为卡死了。
+
+### 设置里的参数不接到请求上，就是摆设
+
+`settings.ai.maxOutputTokens` 与 `settings.ai.temperature` 之前**从来没进过请求体**——
+`buildRewriteRequest` 只返回 `{system, messages}`。设置面板上两个控件摆在那儿，
+改了对上游毫无影响。
+
+现在在 `panel-store` 的 `buildRequest` 里统一补上。provider 那边会按能力位
+决定发不发 `temperature`——模型不支持时根本不出现在请求体里（而不是发了让上游 400）。
+
+### 本地端点不该强要密钥
+
+Ollama / LM Studio / vLLM **不需要 API Key**。之前 `openai-compatible` 的
+`auth()` 一律返回 `bearer`，于是 Rust 侧读不到密钥就直接报「未配置该端点的密钥」——
+用户只好填一个占位值，而上游根本不认它。
+
+改法：`billing === "local-free"` 的端点 `auth` 返回 `kind: "none"`。
+密钥是有没有的问题，不是「填不填」的问题。
+
+### 浏览器降级：SSE 解码器要有一份 TS 版
+
+正式应用走 Rust 的 reqwest（D15：绕开 CORS + 密钥不进前端进程）。
+但**浏览器开发模式**没有 Tauri 运行时，`invoke` 用不了。
+
+本机推理服务默认带 CORS 头（实测 Ollama 回 `Access-Control-Allow-Origin`），
+所以浏览器里能直连本机模型——这让「面板 → 模型 → 预览 → 写回」
+整条链路在浏览器里也是通的，验收不再需要真机 + 密钥。
+
+代价是要在前端有一份 SSE 解码器（`src/ai/sse.ts`）。
+**两份实现（Rust / TS）必须按同一份规格写，并且用同一批用例**：
+行尾归一化（`\r\n` / `\n` / `\r`）、按空行切帧、`data:` 行用 `\n` 连起来、
+心跳与 `[DONE]` 丢掉、流结束时冲刷残余。改一边就要看另一边。
+
+浏览器降级**只支持本地端点**：云端端点会被 CORS 挡住，
+而且密钥在系统钥匙串里、前端拿不到明文——所以那边直接报错，不假装能用。
+
+### 按钮文案要说清楚它会动哪一块
+
+一开始写回按钮的文案是「替换选区」。但没有选区时，AI 切的是
+光标所在的那**一段**或那一**节**——写「替换选区」是骗人的，
+用户不敢点。
+
+现在按上下文的种类给不同文案（替换选区 / 替换当前段落 / 替换当前章节 / 替换整篇文档）。
+上下文的种类是 `ResolvedContext` 的一部分，面板直接显示它。
+
 ## 目录
 
 ```
@@ -1823,11 +1922,12 @@ src/editor/     编辑内核（CM6 封装 + live-preview 装饰器插件）
   └ render/     块级渲染层（M2：代码块 / 表格 / 公式 / 图表 共用的机制）
 src/renderer/   渲染层（高亮/公式/图表）
 src/export/     导出管线（M4：注册表 / 变量 / front matter / HTML / PDF）
+src/ai/         AI 能力（provider / 端点预设 / 上下文切片 / 写回契约 / 面板 store / SSE）
 src/settings/   设置模型与存储
 src/theme/      主题注册表与运行时
 src/ipc/        与 Rust 侧接口
 src/document/   文档生命周期（自动保存 / 崩溃恢复 / 外部修改冲突）
-src/dev/        开发期测量台（不进生产包）
+src/dev/        开发期测量台与 AI mock（不进生产包）
 src-tauri/src/  Rust 后端（document / menu / recent / fs / search / watch / pandoc / print）
 tests/corpus/   round-trip 语料库
 scripts/        开发工具脚本（bench-parser / bench-decorations / verify-incremental / dump-lezer-tree / check-licenses）
@@ -1946,3 +2046,18 @@ M3 全部完成（2026-10-23）。M4（导出）进行中（2026-10-25）：
 - **验收（浏览器 UI）**：改名 / 重排 / 移除 / 恢复 / 添加 / 绑快捷键 / 冲突提示
   逐项实测；导出面板最终态确认（改名与顺序生效、RTF 已消失、pandoc:gfm 已加入）
 
+
+**AI 面板已完成（2026-10-25）**。把已有的 2100 行 AI 后端接成了用户能用的功能：
+
+- **面板**（`src/views/AiPanel.tsx` + `src/ai/panel-store.ts`）：
+  改写（润色 / 扩写 / 缩写 / 翻译 / 正式语气）+ 总结（一句话摘要 / 大纲 / 标签 / 要点）；
+  入口三个：工具栏「AI」按钮、命令面板（`ai.open` / `ai.rewrite` / `ai.summarize`）、意图总线
+- **上下文实时显示**：选区 / 当前段落 / 章节「标题」/ 整篇文档，按 mdast 切片（红线 3）
+- **写回前核对原文**：用户改过就拒绝覆盖；接受走**普通事务**（可 ⌘Z 撤销）
+- **浏览器降级**：无 Tauri 运行时时走前端 fetch，**只支持本地端点**；
+  前端有一份 SSE 帧解码器（`src/ai/sse.ts`），与 Rust 那份按同一份规格写
+- **本地端点免密钥**（`billing: local-free` → `auth.kind: none`）
+- **补上了两个摆设**：设置里的 `maxOutputTokens` 与 `temperature` 之前从没进过请求体
+- **验收（真实本机模型）**：Ollama `qwen3.8:27b-mlx` 端到端走通——
+  改写「流式 → 预览（文档不动）→ 替换段落 → ⌘Z 撤销还原」，
+  总结「流式 → 预览 → 追加到文末」

@@ -64,6 +64,12 @@ export const openAICompatible: ChatProvider = {
   },
 
   auth(cfg: ResolvedEndpoint): AuthSpec {
+    // 本机推理服务（Ollama / LM Studio / vLLM）**不需要密钥**。
+    // 硬要用户填一个占位密钥是很别扭的：上游根本不认它，
+    // 用户只会以为自己配错了。
+    if (cfg.billing === "local-free") {
+      return { kind: "none", account: cfg.id };
+    }
     return { kind: "bearer", account: cfg.id };
   },
 };

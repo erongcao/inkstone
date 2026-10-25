@@ -54,19 +54,21 @@ const PENDING: PendingWriteback = {
 describe("接受写回", () => {
   it("替换范围内的文本", () => {
     const state = makeState("这是原文段落。", 0);
-    const next = acceptWriteback(state, {
-      ...PENDING,
-      from: 2,
-      to: 4,
-      original: "原文",
-    });
+    const next = state.update(
+      acceptWriteback({
+        ...PENDING,
+        from: 2,
+        to: 4,
+        original: "原文",
+      }),
+    ).state;
     expect(next.doc.toString()).toBe("这是改写后的内容段落。");
   });
 
   it("是普通事务 → 可撤销、可重做", () => {
     const source = "这是原文段落。";
     const state = makeState(source, 0);
-    const next = acceptWriteback(state, { ...PENDING, from: 2, to: 4 });
+    const next = state.update(acceptWriteback({ ...PENDING, from: 2, to: 4 })).state;
 
     const undone = tryUndo(next);
     expect(undone).not.toBeNull();
@@ -79,28 +81,32 @@ describe("接受写回", () => {
 
   it("选区落到插入内容之后，用户能接着写", () => {
     const state = makeState("这是原文段落。", 0);
-    const next = acceptWriteback(state, { ...PENDING, from: 2, to: 4, text: "ABC" });
+    const next = state.update(acceptWriteback({ ...PENDING, from: 2, to: 4, text: "ABC" })).state;
     expect(next.selection.main.head).toBe(2 + 3);
   });
 
   it("整篇替换也能正确工作（AI 改写了整段）", () => {
     const source = "第一段。\n\n第二段。";
     const state = makeState(source, 0);
-    const next = acceptWriteback(state, {
-      from: 0,
-      to: source.length,
-      text: "全新的一篇。",
-      original: source,
-      label: "重写",
-    });
+    const next = state.update(
+      acceptWriteback({
+        from: 0,
+        to: source.length,
+        text: "全新的一篇。",
+        original: source,
+        label: "重写",
+      }),
+    ).state;
     expect(next.doc.toString()).toBe("全新的一篇。");
     expect(tryUndo(next)!.doc.toString()).toBe(source);
   });
 
   it("连续接受两次，两次都在撤销栈里", () => {
     const state = makeState("aaa bbb ccc", 0);
-    const first = acceptWriteback(state, { ...PENDING, from: 0, to: 3, text: "AAA" });
-    const second = acceptWriteback(first, { ...PENDING, from: 4, to: 7, text: "BBB" });
+    const first = state.update(acceptWriteback({ ...PENDING, from: 0, to: 3, text: "AAA" })).state;
+    // 第二次要基于**上一次的结果**，不是原始状态——
+    // 否则两次变更都是从同一份原文算出来的，后一次会把前一次盖掉
+    const second = first.update(acceptWriteback({ ...PENDING, from: 4, to: 7, text: "BBB" })).state;
     expect(second.doc.toString()).toBe("AAA BBB ccc");
 
     let s = second;
@@ -109,16 +115,27 @@ describe("接受写回", () => {
     s = tryUndo(s)!;
     expect(s.doc.toString()).toBe("aaa bbb ccc");
   });
+
+  it("返回的是事务规格而不是新状态——调用方必须走 dispatch", () => {
+    // 这一条是踩过的坑：`view.setState(next)` 不触发 updateListener，
+    // onChange 不响 → 脏标记不亮、自动保存不存。
+    // 所以 acceptWriteback 只负责「算出要改什么」，落地交给 dispatch。
+    const spec = acceptWriteback({ ...PENDING, from: 2, to: 4 });
+    expect(spec.changes).toEqual({ from: 2, to: 4, insert: "改写后的内容" });
+    // 没有 addToHistory.of(false) —— 这次编辑必须能被撤销
+    expect(spec.annotations).toBeUndefined();
+  });
 });
 
 describe("放弃写回", () => {
   it("文档一个字都不动", () => {
     const source = "不要动我。";
     const state = makeState(source, 0);
-    const next = rejectWriteback(state);
-    expect(next.doc.toString()).toBe(source);
+    // 放弃 = 没有要派发的事务
+    expect(rejectWriteback()).toBeNull();
+    expect(state.doc.toString()).toBe(source);
     // 而且不产生新的撤销步骤——放弃不该占用户的撤销栈
-    expect(tryUndo(next)).toBeNull();
+    expect(tryUndo(state)).toBeNull();
   });
 
   it("在 AI 已经流式输出了内容之后再放弃，文档依然不变", () => {
@@ -128,7 +145,8 @@ describe("放弃写回", () => {
     const pending: PendingWriteback = { ...PENDING, from: 0, to: source.length, original: source };
     // 流式过程只改 pending.text
     pending.text = "模型已经写了很长一段";
-    expect(rejectWriteback(state).doc.toString()).toBe(source);
+    expect(rejectWriteback()).toBeNull();
+    expect(state.doc.toString()).toBe(source);
   });
 });
 

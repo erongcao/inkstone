@@ -1279,3 +1279,152 @@
 .export-warning:last-child {
   margin-bottom: 0;
 }
+
+/* ── AI 面板 ────────────────────────────────────────────────────
+   右侧浮层，不是居中模态：
+   用户要能一边看 AI 的输出、一边看原文，改完立刻能对比。
+   覆盖层本身不吃点击（pointer-events: none），
+   点空白处仍然能操作编辑器——但那不会关闭面板，
+   关闭只有「关闭」按钮这一条路（避免误触丢掉正在跑的结果）。 */
+
+.ai-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 110;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: 64px 24px 24px;
+  pointer-events: none;
+}
+
+.ai-panel {
+  pointer-events: auto;
+  width: min(420px, calc(100vw - 48px));
+  max-height: calc(100vh - 96px);
+  display: flex;
+  flex-direction: column;
+  background-color: var(--ink-bg);
+  border: 1px solid var(--ink-border);
+  border-radius: var(--ink-radius-lg);
+  box-shadow: var(--ink-shadow-md);
+  font-family: var(--ink-ui-family, var(--ink-font-family));
+  overflow: hidden;
+}
+
+.ai-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--ink-border);
+}
+
+.ai-panel__header h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-fg);
+}
+
+.ai-panel__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 14px;
+  background-color: var(--ink-bg-soft);
+  border-bottom: 1px solid var(--ink-border);
+  font-size: 11px;
+  color: var(--ink-fg-faint);
+}
+
+.ai-panel__endpoint {
+  color: var(--ink-fg-muted);
+}
+
+.ai-panel__notice {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--ink-border);
+  background-color: var(--ink-bg-soft);
+}
+
+.ai-panel__notice p {
+  margin: 0 0 8px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink-fg-muted);
+}
+
+.ai-panel__tabs {
+  display: flex;
+  gap: 4px;
+  padding: 8px 14px 0;
+}
+
+.ai-panel__tabs .panel-tab {
+  appearance: none;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ink-fg-muted);
+  font-family: inherit;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: var(--ink-radius-sm);
+  cursor: pointer;
+}
+
+.ai-panel__tabs .panel-tab[aria-selected="true"] {
+  background-color: var(--ink-accent-soft);
+  border-color: var(--ink-accent);
+  color: var(--ink-accent);
+}
+
+.ai-panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--ink-border);
+}
+
+.ai-panel__output {
+  flex: 1;
+  min-height: 120px;
+  padding: 12px 14px;
+  overflow: auto;
+}
+
+.ai-panel__hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--ink-fg-faint);
+}
+
+.ai-panel__result {
+  margin: 0;
+  font-family: var(--ink-mono-family);
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--ink-fg);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.ai-panel__error {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--ink-danger, #cf222e);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.ai-panel__footer {
+  display: flex;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--ink-border);
+  background-color: var(--ink-bg-soft);
+}

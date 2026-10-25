@@ -18,6 +18,7 @@
  */
 
 import type { EndpointConfig } from "./provider";
+import type { AiSettings } from "@/settings/schema";
 
 /** 内置端点预设 */
 export const BUILTIN_ENDPOINTS: EndpointConfig[] = [
@@ -186,6 +187,28 @@ export const BUILTIN_ENDPOINTS: EndpointConfig[] = [
 /** 按 id 找预设 */
 export function builtinEndpoint(id: string): EndpointConfig | undefined {
   return BUILTIN_ENDPOINTS.find((e) => e.id === id);
+}
+
+/**
+ * 从设置里解析出**当前要用的**端点。
+ *
+ * 优先级：用户自建端点（与内置同 id 时自建优先）→ 内置预设。
+ * 模型 id 用设置里的 `defaultModel` 覆盖端点自带的——
+ * 用户换模型是常事，而端点预设里的模型只是默认值。
+ *
+ * 放在这里而不是组件里：设置面板与 AI 面板都要用同一套解析规则，
+ * 两处各写一遍迟早会分叉（面板能连、设置页显示的是另一个模型）。
+ */
+export function resolveEndpointConfig(settings: AiSettings): EndpointConfig | null {
+  const id = settings.defaultEndpointId || BUILTIN_ENDPOINTS[0]?.id || "";
+  if (!id) return null;
+  const custom = settings.endpoints.find((e) => e.id === id);
+  const base = custom ?? builtinEndpoint(id);
+  if (!base) return null;
+  return {
+    ...base,
+    model: settings.defaultModel || base.model,
+  };
 }
 
 /** 计费性质的中文标签 */

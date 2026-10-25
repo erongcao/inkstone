@@ -296,6 +296,41 @@ export function builtinCommands(): InkstoneCommand[] {
       },
     },
 
+    /* ── AI（只在命令面板） ── */
+    {
+      id: "ai.open",
+      label: "AI 助手…",
+      category: "AI",
+      surfaces: ["palette"],
+      keywords: "ai assistant gpt model rewrite summarize run aizhu",
+      run: () => {
+        emitIntent({ type: "ai.open" });
+        return true;
+      },
+    },
+    {
+      id: "ai.rewrite",
+      label: "AI：改写当前选区",
+      category: "AI",
+      surfaces: ["palette"],
+      keywords: "ai rewrite polish gaixie run aizhu",
+      run: () => {
+        emitIntent({ type: "ai.open", tab: "rewrite" });
+        return true;
+      },
+    },
+    {
+      id: "ai.summarize",
+      label: "AI：总结整篇文档",
+      category: "AI",
+      surfaces: ["palette"],
+      keywords: "ai summary summarize zongjie aizhu",
+      run: () => {
+        emitIntent({ type: "ai.open", tab: "summarize" });
+        return true;
+      },
+    },
+
     /* ── 查找 / 替换（只在命令面板） ── */
     // 命令面板里能搜到，是因为**原生菜单只在 Tauri 里存在**：
     // 浏览器开发模式下「编辑 → 查找」是灰的，没有第二个入口就等于没法调试。

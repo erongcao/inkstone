@@ -32,11 +32,18 @@ import { AiSection } from "./AiSettingsSection";
 
 interface Props {
   onClose: () => void;
+  /**
+   * 打开时落在哪个分区。
+   *
+   * AI 面板的「去设置」要直接落到 AI 分区——
+   * 让用户自己再点一次「AI」是很没必要的绕路。
+   */
+  initialSection?: SettingsSectionId;
 }
 
-export function SettingsPanel({ onClose }: Props) {
+export function SettingsPanel({ onClose, initialSection = "appearance" }: Props) {
   const [settings, update] = useSettings();
-  const [section, setSection] = useState<SettingsSectionId>("appearance");
+  const [section, setSection] = useState<SettingsSectionId>(initialSection);
 
   const patch = <K extends keyof Settings>(key: K, value: DeepPartial<Settings[K]>) =>
     update({ [key]: value } as DeepPartial<Settings>);

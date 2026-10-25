@@ -26,3 +26,10 @@ primeHtmlRenderer();
 // 公式块在 KaTeX 就绪前会显示成源码，就绪后自动切换成渲染形态
 // （见 src/editor/render/math-loader.ts 与 live-preview/state.ts 的 refreshRendering）。
 primeMathRenderer();
+
+// 开发期专用：URL 带 ?ai-mock=1 时装上 AI 的 mock runner，
+// 让「流式 → 预览 → 接受」这条链路能在没有真实 API Key 时被端到端验收。
+// 生产构建里 import.meta.env.DEV 为 false，整段会被摇掉。
+if (import.meta.env.DEV) {
+  void import("./dev/ai-mock").then((mod) => mod.installAiMockIfRequested());
+}
