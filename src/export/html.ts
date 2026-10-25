@@ -30,6 +30,7 @@ import { highlightCode, resolveLanguage } from "@/editor/render/code-block";
 import type { OutlineItem } from "@/editor/document-index";
 import type { ColorMode } from "@/settings/schema";
 import { katexStylesheet } from "@/parser/rehype-math";
+import { t } from "@/i18n";
 
 /** HTML 导出的选项 */
 export interface HtmlExportOptions {
@@ -558,7 +559,7 @@ function buildOutline(outline: OutlineItem[]): string {
   if (outline.length === 0) return "";
   const items = outline
     .map((item) => {
-      const text = item.text || "（无标题）";
+      const text = item.text || t("（无标题）");
       // 用锚点 id：章节序号，保证 id 唯一且可跳转
       const anchor = `section-${item.depth}-${item.from}`;
       return `      <li data-depth="${item.depth}"><a href="#${anchor}">${escapeHtml(text)}</a></li>`;
@@ -605,11 +606,11 @@ export function exportToHtml(source: string, options: HtmlExportOptions): string
 
   const outline = options.includeOutline ? buildOutline(options.outline) : "";
   const katexCss = katexStylesheet();
-  const title = escapeHtml(options.title || "未命名");
+  const title = escapeHtml(options.title || t("未命名"));
 
   const stats =
     options.words !== undefined
-      ? `<footer class="inkstone-footer">${options.words} 字 · ${options.chars ?? 0} 字符</footer>`
+      ? `<footer class="inkstone-footer">${t("{words} 字 · {chars} 字符", { words: options.words, chars: options.chars ?? 0 })}</footer>`
       : "";
 
   // 公式的样式表拿不到时**如实说明**，而不是导出一份公式显示错乱的文件。

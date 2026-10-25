@@ -20,6 +20,8 @@
  * 应该改成写到应用数据目录下的 `drafts/`——那是后端的事，接口不变。
  */
 
+import { t } from "@/i18n";
+
 /** 存储键；带版本号是为了以后改结构时能平滑迁移 */
 const DRAFT_KEY = "inkstone.draft.v1";
 
@@ -70,7 +72,7 @@ function storage(): Storage | null {
  */
 export function writeDraft(snapshot: SessionSnapshot): string | null {
   const store = storage();
-  if (!store) return "本机存储不可用";
+  if (!store) return t("本机存储不可用");
   try {
     store.setItem(DRAFT_KEY, JSON.stringify(snapshot));
     return null;

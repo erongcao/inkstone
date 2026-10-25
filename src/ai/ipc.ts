@@ -12,6 +12,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 import { SseDecoder } from "./sse";
 import type { AuthSpec } from "./provider";
+import { t } from "@/i18n";
 
 /** 是否在 Tauri 运行时里 */
 function isTauriRuntime(): boolean {
@@ -141,7 +142,9 @@ async function streamInBrowser(
 ): Promise<() => void> {
   if (request.auth.kind !== "none") {
     events.onError(
-      "浏览器开发模式拿不到系统钥匙串里的密钥，只能连本机推理服务（Ollama / LM Studio / vLLM）。",
+      t(
+        "浏览器开发模式拿不到系统钥匙串里的密钥，只能连本机推理服务（Ollama / LM Studio / vLLM）。",
+      ),
     );
     return () => {};
   }
@@ -169,7 +172,7 @@ async function streamInBrowser(
       return () => {};
     }
     if (!response.body) {
-      events.onError("响应没有可读的流");
+      events.onError(t("响应没有可读的流"));
       return () => {};
     }
 

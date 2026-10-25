@@ -9,6 +9,7 @@
  */
 
 import { SAMPLE_CONTENTS, SAMPLE_ROOT } from "@/ipc/fs";
+import { t } from "@/i18n";
 
 /** 一处命中（与 Rust 侧 `SearchHit` 一一对应） */
 export interface SearchHit {
@@ -88,7 +89,7 @@ const browserBackend: Backend = {
       options.caseSensitive ?? false,
     );
     if (!matcher) {
-      throw new Error("正则表达式无效");
+      throw new Error(t("正则表达式无效"));
     }
     const files = sampleFilesUnder(root);
     const hits: SearchHit[] = [];

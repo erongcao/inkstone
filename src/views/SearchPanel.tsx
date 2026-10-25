@@ -16,6 +16,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { searchFiles, type SearchHit, type SearchResult } from "@/ipc/search";
 import { useTreeRoot } from "@/file-tree/store";
 import { openDocumentAtLine, useDocument } from "@/ipc/document";
+import { t } from "@/i18n";
 
 /** 防抖间隔（毫秒） */
 const DEBOUNCE_MS = 180;
@@ -84,12 +85,12 @@ export function SearchPanel() {
         <input
           className="search-panel__input"
           type="text"
-          placeholder="搜索整个笔记库"
+          placeholder={t("搜索整个笔记库")}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          aria-label="搜索"
+          aria-label={t("搜索")}
         />
-        <label className="search-panel__toggle" title="按正则表达式解释">
+        <label className="search-panel__toggle" title={t("按正则表达式解释")}>
           <input
             type="checkbox"
             checked={useRegex}
@@ -97,7 +98,7 @@ export function SearchPanel() {
           />
           <span>.*</span>
         </label>
-        <label className="search-panel__toggle" title="区分大小写">
+        <label className="search-panel__toggle" title={t("区分大小写")}>
           <input
             type="checkbox"
             checked={caseSensitive}
@@ -108,21 +109,26 @@ export function SearchPanel() {
       </div>
 
       {!hasQuery ? (
-        <p className="panel-placeholder">输入关键词开始搜索。</p>
+        <p className="panel-placeholder">{t("输入关键词开始搜索。")}</p>
       ) : !root ? (
-        <p className="panel-placeholder">先打开一个文件，或在「文件」页选一个笔记库。</p>
+        <p className="panel-placeholder">
+          {t("先打开一个文件，或在「文件」页选一个笔记库。")}
+        </p>
       ) : stale ? (
-        <p className="panel-placeholder">搜索中…</p>
+        <p className="panel-placeholder">{t("搜索中…")}</p>
       ) : outcome?.error ? (
         <p className="panel-placeholder panel-placeholder--error">{outcome.error}</p>
       ) : outcome?.result?.hits.length === 0 ? (
-        <p className="panel-placeholder">没有匹配项。</p>
+        <p className="panel-placeholder">{t("没有匹配项。")}</p>
       ) : outcome?.result ? (
         <>
           <p className="search-panel__summary">
-            {outcome.result.hits.length} 处匹配 · 扫了 {outcome.result.scannedFiles}{" "}
-            个文件 · {outcome.result.elapsedMs} ms
-            {outcome.result.truncated && " · 结果过多已截断"}
+            {t("{hits} 处匹配 · 扫了 {files} 个文件 · {ms} ms", {
+              hits: outcome.result.hits.length,
+              files: outcome.result.scannedFiles,
+              ms: outcome.result.elapsedMs,
+            })}
+            {outcome.result.truncated && t(" · 结果过多已截断")}
           </p>
           <ul className="search-panel__results">
             {outcome.result.hits.map((hit, index) => (

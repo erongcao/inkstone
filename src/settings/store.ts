@@ -85,6 +85,16 @@ function subscribe(listener: () => void): () => void {
   return () => listeners.delete(listener);
 }
 
+/**
+ * 订阅设置变化（给 React 之外的调用点用）。
+ *
+ * `useSettings()` 只在组件里用得上；i18n 这类**跨切面的运行时订阅者**
+ * 需要一个不依赖 React 的入口——语言一变，所有用 `t()` 渲染的界面都要跟着变。
+ */
+export function subscribeSettings(listener: () => void): () => void {
+  return subscribe(listener);
+}
+
 function getSnapshot(): Settings {
   return state;
 }

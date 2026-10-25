@@ -15,6 +15,7 @@
 
 import { useEffect, useMemo, useRef } from "react";
 import { getActiveEditorView } from "@/editor/active-view";
+import { t } from "@/i18n";
 import {
   classifyUrl,
   closeLinkPopover,
@@ -102,15 +103,15 @@ export function LinkPopover() {
     <div className="link-popover" style={style} onKeyDown={onKeyDown}>
       <div className="link-popover__head">
         <span className="link-popover__title">
-          {state.image ? "图片链接" : "链接地址"}
+          {state.image ? t("图片链接") : t("链接地址")}
         </span>
-        <span className="link-popover__hint">回车确认 · Esc 取消</span>
+        <span className="link-popover__hint">{t("回车确认 · Esc 取消")}</span>
       </div>
       <input
         ref={inputRef}
         className="link-popover__input"
         value={state.url}
-        placeholder="https://example.com  或  ./relative/path.png"
+        placeholder={t("https://example.com  或  ./relative/path.png")}
         spellCheck={false}
         autoComplete="off"
         onChange={(event) => setLinkUrl(event.target.value)}
@@ -121,11 +122,15 @@ export function LinkPopover() {
       />
       <div className="link-popover__foot">
         {kind === "url" && (
-          <span className="link-popover__tag link-popover__tag--ok">绝对地址</span>
+          <span className="link-popover__tag link-popover__tag--ok">{t("绝对地址")}</span>
         )}
-        {kind === "path" && <span className="link-popover__tag">相对路径 / 锚点</span>}
+        {kind === "path" && (
+          <span className="link-popover__tag">{t("相对路径 / 锚点")}</span>
+        )}
         {kind === "empty" && (
-          <span className="link-popover__tag link-popover__tag--faint">留空即放弃</span>
+          <span className="link-popover__tag link-popover__tag--faint">
+            {t("留空即放弃")}
+          </span>
         )}
       </div>
     </div>

@@ -45,6 +45,12 @@ jobs:
       - name: 单元测试 / round-trip
         run: pnpm test
 
+      - name: 校验 i18n 用法
+        # 模块常量里调 t() 会在**导入时定型**——
+        # 模块第一次被加载时是什么语言，label 就永远是那个语言。
+        # 换语言之后界面的一部分一直是上一种语言，而这种不一致不会报错。
+        run: pnpm i18n:check
+
       - name: 校验快捷键清单未过期
         # src-tauri/shortcuts.json 是从 src/shortcuts.ts 生成的。
         # 改了注册表却忘了重新生成 → Rust 菜单里的加速键与前端不一致，

@@ -26,6 +26,15 @@
 import { useCallback, useSyncExternalStore } from "react";
 import type { SessionSnapshot } from "@/document/draft-store";
 
+/**
+ * 未命名文档的标题。
+ *
+ * 这里**存中文原文**，不存译文——
+ * 译文在渲染时用 `t()` 查，存下来的话语言一变就停在旧语言了
+ * （文档打开期间改语言，标签页标题不会跟着变）。
+ */
+const UNTITLED = "未命名";
+
 /** 一个标签页 */
 interface Tab {
   id: string;
@@ -175,7 +184,7 @@ function emptySnapshot(): DocumentState {
     path: null,
     content: "",
     dirty: false,
-    title: "未命名",
+    title: UNTITLED,
     saveError: null,
     recoveryError: null,
     externalChange: false,
@@ -205,7 +214,7 @@ function rebuild(): void {
     // 脏标记以**磁盘上的内容**为准，不是「上一次的内容」：
     // 用户敲了字又删回去（内容回到磁盘上的样子）时，那不是未保存的改动
     dirty: tab ? tab.content !== tab.savedContent : false,
-    title: tab?.title ?? "未命名",
+    title: tab?.title ?? UNTITLED,
     saveError,
     recoveryError,
     externalChange: tab?.externalChange ?? false,
@@ -229,7 +238,7 @@ function getTabsSnapshot(): TabInfo[] {
 
 /** 从完整路径取出展示用标题 */
 function titleFromPath(path: string | null): string {
-  if (!path) return "未命名";
+  if (!path) return UNTITLED;
   const name = path.split("/").pop() ?? path;
   return name.replace(/\.(md|markdown|mdown|mkd|txt)$/i, "");
 }
@@ -341,7 +350,7 @@ export async function openDocument(): Promise<void> {
 export function newDocument(): void {
   const tab = createTab({
     path: null,
-    title: "未命名",
+    title: UNTITLED,
     content: "",
     savedContent: "",
   });
@@ -377,7 +386,7 @@ export function closeTab(id: string): void {
   if (tabs.length === 0) {
     const tab = createTab({
       path: null,
-      title: "未命名",
+      title: UNTITLED,
       content: "",
       savedContent: "",
     });
@@ -705,7 +714,7 @@ export function importSession(snapshot: SessionSnapshot): void {
   if (tabs.length === 0) {
     const tab = createTab({
       path: null,
-      title: "未命名",
+      title: UNTITLED,
       content: "",
       savedContent: "",
     });
@@ -722,7 +731,7 @@ export function resetTabs(): void {
   nextTabSeq = 1;
   const tab = createTab({
     path: null,
-    title: "未命名",
+    title: UNTITLED,
     content: "",
     savedContent: "",
   });

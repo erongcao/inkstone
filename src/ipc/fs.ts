@@ -13,6 +13,8 @@
  * 这样浏览器里看到的行为和 Tauri 下一致。
  */
 
+import { t } from "@/i18n";
+
 /** 目录里的一个条目（与 Rust 侧 `DirEntry` 一一对应） */
 export interface DirEntry {
   /** 文件名，不含路径 */
@@ -140,7 +142,7 @@ const browserBackend: Backend = {
     const entries = SAMPLE_DIRS[path];
     if (!entries) {
       // 与后端一致：读不到要给错误，不能返回空数组
-      throw new Error(`读取目录失败 (${path}): 样例库里没有这个目录`);
+      throw new Error(t("读取目录失败 ({path}): 样例库里没有这个目录", { path }));
     }
     return entries;
   },
@@ -184,7 +186,11 @@ const tauriBackend: Backend = {
   },
   async pickFolder() {
     const { open } = await import("@tauri-apps/plugin-dialog");
-    const picked = await open({ directory: true, multiple: false, title: "选择笔记库" });
+    const picked = await open({
+      directory: true,
+      multiple: false,
+      title: t("选择笔记库"),
+    });
     return typeof picked === "string" ? picked : null;
   },
 };

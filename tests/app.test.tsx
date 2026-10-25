@@ -254,7 +254,7 @@ describe("应用交互", () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole("button", { name: "设置" }));
-    fireEvent.click(screen.getByRole("button", { name: "编辑" }));
+    fireEvent.click(screen.getByRole("button", { name: "编辑器" }));
     const autoPair = screen.getByLabelText("自动配对") as HTMLSelectElement;
     fireEvent.change(autoPair, { target: { value: "off" } });
 

@@ -36,6 +36,7 @@ import { formatShortcut } from "@/shortcuts";
 import { detectPandoc, type PandocInfo } from "@/ipc/export";
 import type { ExportResult } from "@/export/service";
 import { readSettings } from "@/settings/store";
+import { t } from "@/i18n";
 
 interface Props {
   onClose: () => void;
@@ -72,19 +73,24 @@ export function ExportPanel({ onClose, busy, result, onRun }: Props) {
   const pandocItems = items.filter((item) => item.format.kind === "pandoc");
 
   return (
-    <div className="export-overlay" role="dialog" aria-modal="true" aria-label="导出">
+    <div
+      className="export-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-label={t("导出")}
+    >
       <div className="export-panel">
         <header className="export-header">
-          <h2>导出</h2>
+          <h2>{t("导出")}</h2>
           <button type="button" className="btn" onClick={onClose}>
-            关闭
+            {t("关闭")}
           </button>
         </header>
 
         <div className="export-body">
           {nativeItems.length > 0 && (
             <>
-              <h3 className="export-group-title">直接导出</h3>
+              <h3 className="export-group-title">{t("直接导出")}</h3>
               <div className="export-list">
                 {nativeItems.map((item) => (
                   <ExportRow
@@ -102,7 +108,7 @@ export function ExportPanel({ onClose, busy, result, onRun }: Props) {
           {pandocItems.length > 0 && (
             <>
               <h3 className="export-group-title">
-                通过 pandoc 导出
+                {t("通过 pandoc 导出")}
                 {pandoc && !pandoc.available && (
                   <span className="export-group-hint">{pandoc.reason}</span>
                 )}
@@ -132,7 +138,7 @@ export function ExportPanel({ onClose, busy, result, onRun }: Props) {
 
           {result?.warnings && result.warnings.length > 0 && (
             <div className="export-warnings">
-              <h4 className="export-warnings-title">导出完成，但有警告</h4>
+              <h4 className="export-warnings-title">{t("导出完成，但有警告")}</h4>
               {result.warnings.map((warning, index) => (
                 <p key={index} className="export-warning">
                   {warning}
@@ -163,13 +169,13 @@ function ExportRow({ item, disabled, busy, onRun }: RowProps) {
       onClick={() => onRun(format.id)}
       data-export-id={format.id}
     >
-      <span className="export-item-label">{item.label}</span>
-      <span className="export-item-desc">{format.description}</span>
+      <span className="export-item-label">{t(item.label)}</span>
+      <span className="export-item-desc">{t(format.description)}</span>
       <span className="export-item-ext">{format.extension}</span>
       {item.shortcut && (
         <span className="export-item-shortcut">{formatShortcut(item.shortcut)}</span>
       )}
-      {busy && <span className="export-item-busy">导出中…</span>}
+      {busy && <span className="export-item-busy">{t("导出中…")}</span>}
     </button>
   );
 }

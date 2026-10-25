@@ -32,6 +32,7 @@ import {
   type AiPanelState,
 } from "@/ai/panel-store";
 import { useSettings } from "@/settings/store";
+import { t } from "@/i18n";
 
 interface Props {
   /** 跳到设置面板的 AI 分区 */
@@ -50,15 +51,15 @@ const SUMMARIZE_ACTIONS = Object.keys(SUMMARIZE_LABELS) as SummarizeAction[];
 function replaceLabel(kind: AiPanelState["contextKind"]): string {
   switch (kind) {
     case "selection":
-      return "替换选区";
+      return t("替换选区");
     case "paragraph":
-      return "替换当前段落";
+      return t("替换当前段落");
     case "section":
-      return "替换当前章节";
+      return t("替换当前章节");
     case "document":
-      return "替换整篇文档";
+      return t("替换整篇文档");
     default:
-      return "替换";
+      return t("替换");
   }
 }
 
@@ -77,29 +78,36 @@ export function AiPanel({ onOpenSettings }: Props) {
       : SUMMARIZE_ACTIONS.map((action) => ({ action, label: SUMMARIZE_LABELS[action] }));
 
   return (
-    <div className="ai-overlay" role="dialog" aria-modal="false" aria-label="AI 助手">
+    <div
+      className="ai-overlay"
+      role="dialog"
+      aria-modal="false"
+      aria-label={t("AI 助手")}
+    >
       <div className="ai-panel">
         <header className="ai-panel__header">
-          <h2>AI 助手</h2>
+          <h2>{t("AI 助手")}</h2>
           <button type="button" className="btn" onClick={closeAiPanel}>
-            关闭
+            {t("关闭")}
           </button>
         </header>
 
         <div className="ai-panel__meta">
           <span className="ai-panel__endpoint" title={endpoint?.baseUrl}>
-            {endpoint ? `${endpoint.label} · ${endpoint.model}` : "未配置端点"}
+            {endpoint ? `${t(endpoint.label)} · ${endpoint.model}` : t("未配置端点")}
           </span>
           {panel.contextLabel && (
-            <span className="ai-panel__context">上下文：{panel.contextLabel}</span>
+            <span className="ai-panel__context">
+              {t("上下文：{context}", { context: panel.contextLabel })}
+            </span>
           )}
         </div>
 
         {!enabled && (
           <div className="ai-panel__notice">
-            <p>AI 还没有启用。先到「设置 → AI」打开开关、配好端点与密钥。</p>
+            <p>{t("AI 还没有启用。先到「设置 → AI」打开开关、配好端点与密钥。")}</p>
             <button type="button" className="btn" onClick={onOpenSettings}>
-              去设置
+              {t("去设置")}
             </button>
           </div>
         )}
@@ -111,7 +119,7 @@ export function AiPanel({ onOpenSettings }: Props) {
             aria-selected={panel.tab === "rewrite"}
             onClick={() => setAiTab("rewrite")}
           >
-            改写
+            {t("改写")}
           </button>
           <button
             type="button"
@@ -119,7 +127,7 @@ export function AiPanel({ onOpenSettings }: Props) {
             aria-selected={panel.tab === "summarize"}
             onClick={() => setAiTab("summarize")}
           >
-            总结
+            {t("总结")}
           </button>
         </div>
 
@@ -141,16 +149,16 @@ export function AiPanel({ onOpenSettings }: Props) {
           {panel.status === "idle" && !panel.output && (
             <p className="ai-panel__hint">
               {panel.tab === "rewrite"
-                ? "选中一段文字，或把光标放在段落里，然后点一个动作。"
-                : "对整篇文档生成摘要、大纲或标签。"}
+                ? t("选中一段文字，或把光标放在段落里，然后点一个动作。")
+                : t("对整篇文档生成摘要、大纲或标签。")}
             </p>
           )}
 
           {busy && (
             <p className="ai-panel__hint">
               {panel.output
-                ? `正在生成「${panel.actionLabel}」…`
-                : `模型正在思考「${panel.actionLabel}」…`}
+                ? t("正在生成「{action}」…", { action: panel.actionLabel })
+                : t("模型正在思考「{action}」…", { action: panel.actionLabel })}
             </p>
           )}
 
@@ -169,24 +177,24 @@ export function AiPanel({ onOpenSettings }: Props) {
               <button type="button" className="btn btn--primary" onClick={acceptAiResult}>
                 {panel.mode === "rewrite"
                   ? replaceLabel(panel.contextKind)
-                  : "追加到文末"}
+                  : t("追加到文末")}
               </button>
               <button
                 type="button"
                 className="btn"
                 onClick={() => void navigator.clipboard?.writeText(panel.output)}
               >
-                复制
+                {t("复制")}
               </button>
             </>
           )}
           {busy && (
             <button type="button" className="btn" onClick={cancelAiRun}>
-              停止
+              {t("停止")}
             </button>
           )}
           <button type="button" className="btn" onClick={rejectAiResult}>
-            放弃
+            {t("放弃")}
           </button>
         </footer>
       </div>

@@ -50,7 +50,7 @@ export const MARKER_DISPLAY_MODES: { value: MarkerDisplayMode; label: string }[]
 export type AutoPairMode = "off" | "basic" | "markdown";
 
 export const AUTO_PAIR_MODES: { value: AutoPairMode; label: string }[] = [
-  { value: "off", label: "关闭" },
+  { value: "off", label: "不配对" },
   { value: "basic", label: "括号与引号" },
   { value: "markdown", label: "Markdown 符号（含括号引号）" },
 ];
@@ -405,7 +405,7 @@ export const DEFAULT_SETTINGS: Settings = {
 /** 设置的分组元信息，设置面板据此自动渲染 */
 export const SETTINGS_SECTIONS = [
   { id: "appearance", label: "外观" },
-  { id: "editor", label: "编辑" },
+  { id: "editor", label: "编辑器" },
   { id: "markdown", label: "Markdown" },
   { id: "export", label: "导出" },
   { id: "general", label: "通用" },

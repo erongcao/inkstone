@@ -23,6 +23,7 @@
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\"",
     "licenses:check": "node scripts/check-licenses.mjs",
+    "i18n:check": "tsx scripts/check-i18n-scope.ts src",
     "gen:emoji": "tsx scripts/gen-emoji.ts",
     "gen:shortcuts": "tsx scripts/gen-shortcuts.ts"
   },

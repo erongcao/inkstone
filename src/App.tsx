@@ -27,6 +27,8 @@ import { exportDocument, type ExportResult } from "@/export/service";
 import { findResolvedExportItem } from "@/export/items";
 import { readSettings } from "@/settings/store";
 import { openAiPanel, useAiPanel } from "@/ai/panel-store";
+import { useLocale } from "@/i18n";
+import { syncNativeLocale } from "@/i18n/native";
 import type { SettingsSectionId } from "@/settings/schema";
 import {
   resolveKeepLocal,
@@ -44,6 +46,19 @@ import {
 export default function App() {
   // 应用主题副作用（data-theme / data-mode / 版式变量 / 自定义 CSS）
   useThemeRuntime();
+
+  // 订阅语言变化。
+  //
+  // 界面文案是在**渲染时**查字典的（`t()`），所以语言一变，
+  // 必须有人重渲染整棵树——否则界面会停留在旧语言。
+  // 这里订阅一次就够了：App 重渲染 → 所有子组件重渲染 → `t()` 重新查表。
+  const locale = useLocale();
+
+  // 原生菜单画在系统控件上，前端那套 `t()` 管不到它——
+  // 语言变了要通知 Rust 一次，让它重建菜单。
+  useEffect(() => {
+    void syncNativeLocale(locale);
+  }, [locale]);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   /** 设置面板打开时落在哪个分区（AI 面板的「去设置」要直接落到 AI 分区） */

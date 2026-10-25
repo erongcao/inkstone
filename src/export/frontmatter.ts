@@ -30,6 +30,7 @@
 
 import { parse as parseYaml } from "yaml";
 import type { MarkdownAst } from "@/parser/markdown";
+import { t } from "@/i18n";
 
 /** front matter 里的原始 YAML 文本 */
 export interface FrontMatter {
@@ -84,7 +85,7 @@ export function readFrontMatter(tree: MarkdownAst): FrontMatter {
         present: true,
         raw,
         fields: {},
-        error: "front matter 不是键值映射，已忽略",
+        error: t("front matter 不是键值映射，已忽略"),
       };
     }
     return {
@@ -98,7 +99,9 @@ export function readFrontMatter(tree: MarkdownAst): FrontMatter {
       present: true,
       raw,
       fields: {},
-      error: `front matter 解析失败: ${error instanceof Error ? error.message : String(error)}`,
+      error: t("front matter 解析失败: {error}", {
+        error: error instanceof Error ? error.message : String(error),
+      }),
     };
   }
 }

@@ -23,6 +23,7 @@ import {
 import { anthropic } from "./providers/anthropic";
 import { gemini } from "./providers/gemini";
 import { openAICompatible } from "./providers/openai-compatible";
+import { t } from "@/i18n";
 
 /** 协议 → 实现 */
 const PROVIDERS: Record<string, ChatProvider> = {
@@ -33,7 +34,7 @@ const PROVIDERS: Record<string, ChatProvider> = {
 
 export function providerFor(protocol: string): ChatProvider {
   const found = PROVIDERS[protocol];
-  if (!found) throw new Error(`未知的协议: ${protocol}`);
+  if (!found) throw new Error(t("未知的协议: {protocol}", { protocol }));
   return found;
 }
 

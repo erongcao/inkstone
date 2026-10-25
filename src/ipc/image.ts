@@ -7,6 +7,8 @@
  * 而不是插一句指向不存在文件的 Markdown 进去（那会污染文档、红线 1）。
  */
 
+import { t } from "@/i18n";
+
 const isTauri = (): boolean =>
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
@@ -62,7 +64,7 @@ export async function saveImage(
   bytes: ArrayBuffer,
 ): Promise<string> {
   if (!isTauri()) {
-    throw new Error("浏览器里无法写入图片文件，请先保存文档再插入图片");
+    throw new Error(t("浏览器里无法写入图片文件，请先保存文档再插入图片"));
   }
   const { invoke } = await import("@tauri-apps/api/core");
   return await invoke<string>("save_image", {
@@ -92,7 +94,7 @@ export async function resolveImageSrc(
     return trimmed;
   }
   if (!isTauri()) {
-    throw new Error("浏览器里无法读取本地图片文件");
+    throw new Error(t("浏览器里无法读取本地图片文件"));
   }
   const { invoke } = await import("@tauri-apps/api/core");
   return await invoke<string>("read_image_data_url", { docPath, src: trimmed });

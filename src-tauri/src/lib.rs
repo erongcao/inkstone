@@ -2,6 +2,7 @@ mod ai;
 mod asset;
 mod document;
 mod fs;
+mod i18n;
 mod menu;
 mod pandoc;
 mod print;
@@ -10,10 +11,20 @@ mod search;
 mod shortcuts;
 mod watch;
 
-use tauri::{Emitter, Manager, RunEvent};
+use tauri::{AppHandle, Emitter, Manager, RunEvent};
 
 /// 前端监听的事件名：从 Finder / 命令行打开文件时通知前端
 const OPEN_FILE_EVENT: &str = "document://open";
+
+/// 设置界面语言，并重建原生菜单
+///
+/// 原生菜单画在 AppKit / GTK / Win32 上，前端那套 `t()` 管不到它，
+/// 所以语言变了要由前端通知 Rust 一次（见 `src/i18n/index.ts`）。
+#[tauri::command]
+fn set_locale(app: AppHandle, locale: String) -> Result<(), String> {
+    i18n::set_locale(&locale);
+    menu::rebuild(&app).map_err(|err| err.to_string())
+}
 
 /// 应用入口
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -32,6 +43,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            set_locale,
             document::open_document,
             document::save_document,
             document::save_document_as,

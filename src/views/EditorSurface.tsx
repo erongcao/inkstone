@@ -17,6 +17,7 @@ import { MARKER_DISPLAY_MODES } from "@/settings/schema";
 import { resolveExportItems } from "@/export/items";
 import { setAiEditorBridge } from "@/ai/editor-bridge";
 import { openAiPanel } from "@/ai/panel-store";
+import { t } from "@/i18n";
 
 interface Props {
   onOpenSettings: () => void;
@@ -193,14 +194,22 @@ export function EditorSurface({ onOpenSettings }: Props) {
     updateSettings({ editor: { markerDisplay: next.value } });
   };
 
-  const modeLabel =
-    MARKER_DISPLAY_MODES.find((m) => m.value === markerDisplay)?.label ?? markerDisplay;
+  /*
+   * 模式名要**先翻译再插值**。
+   *
+   * `MARKER_DISPLAY_MODES[i].label` 是中文原文（它就是翻译表的 key），
+   * 直接插进 t() 的参数里，英文界面下这个 title 就会夹一段中文——
+   * 按钮正文翻译了、悬停提示没翻译，最难发现的那种漏。
+   */
+  const modeLabel = t(
+    MARKER_DISPLAY_MODES.find((m) => m.value === markerDisplay)?.label ?? markerDisplay,
+  );
 
   return (
     <div className="editor-surface">
       <header className="editor-toolbar">
         <span className="editor-toolbar__path">
-          {doc.title}
+          {doc.path === null ? t("未命名") : doc.title}
           {doc.dirty ? " •" : ""}
         </span>
         <div className="editor-toolbar__actions">
@@ -208,25 +217,25 @@ export function EditorSurface({ onOpenSettings }: Props) {
             type="button"
             className="btn"
             onClick={cycleDisplayMode}
-            title={`显示策略：${modeLabel}（点击切换）`}
+            title={t("显示策略：{mode}（点击切换）", { mode: modeLabel })}
           >
             {markerDisplay === "live"
-              ? "实时预览"
+              ? t("实时预览")
               : markerDisplay === "dimmed"
-                ? "弱化显示"
-                : "源码模式"}
+                ? t("弱化显示")
+                : t("源码模式")}
           </button>
           <button type="button" className="btn" onClick={create}>
-            新建
+            {t("新建")}
           </button>
           <button type="button" className="btn" onClick={() => openAiPanel("rewrite")}>
             AI
           </button>
           <button type="button" className="btn" onClick={() => void save()}>
-            保存
+            {t("保存")}
           </button>
           <button type="button" className="btn" onClick={onOpenSettings}>
-            设置
+            {t("设置")}
           </button>
         </div>
       </header>

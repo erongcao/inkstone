@@ -43,6 +43,7 @@ import { getDocumentContent, getDocumentState } from "@/ipc/document";
 import { readSettings } from "@/settings/store";
 import { buildIndexFromTree } from "@/editor/document-index";
 import { ensureMathRenderer } from "@/editor/render/math-loader";
+import { t } from "@/i18n";
 
 /** 导出结果 */
 export interface ExportResult {
@@ -111,7 +112,7 @@ export function deriveTitle(
     const name = basenameOf(filePath).replace(/\.(md|markdown|mdown|mkd|txt)$/i, "");
     if (name) return name;
   }
-  return "未命名";
+  return t("未命名");
 }
 
 /**
@@ -242,16 +243,16 @@ export async function exportDocument(formatId: string): Promise<ExportResult> {
     return {
       ok: false,
       path: null,
-      message: "未知导出格式",
-      error: `未知的导出格式: ${formatId}`,
+      message: t("未知导出格式"),
+      error: t("未知的导出格式: {format}", { format: formatId }),
     };
   }
   if (!item.visible) {
     return {
       ok: false,
       path: null,
-      message: "该导出项已被移除",
-      error: `导出项 ${formatId} 已被用户移除`,
+      message: t("该导出项已被移除"),
+      error: t("导出项 {format} 已被用户移除", { format: formatId }),
     };
   }
   const format = item.format;
@@ -264,7 +265,10 @@ export async function exportDocument(formatId: string): Promise<ExportResult> {
       return {
         ok: false,
         path: null,
-        message: `无法导出 ${format.label}：${pandoc.reason}`,
+        message: t("无法导出 {format}：{reason}", {
+          format: t(format.label),
+          reason: pandoc.reason,
+        }),
         error: pandoc.reason,
       };
     }
@@ -278,7 +282,7 @@ export async function exportDocument(formatId: string): Promise<ExportResult> {
   //   - 用户取消了对话框：那就该停下，什么都不产出
   const browserFallback = isBrowserFallback();
   if (!path && !browserFallback) {
-    return { ok: false, path: null, message: "已取消导出", error: null };
+    return { ok: false, path: null, message: t("已取消导出"), error: null };
   }
   // 浏览器降级时用建议文件名当「路径」——
   // writeTextFile 只取它的最后一段作为下载文件名
@@ -341,7 +345,7 @@ export async function exportDocument(formatId: string): Promise<ExportResult> {
     return {
       ok: false,
       path: null,
-      message: `导出失败：${message}`,
+      message: t("导出失败：{error}", { error: message }),
       error: message,
     };
   }
@@ -357,7 +361,9 @@ export async function exportDocument(formatId: string): Promise<ExportResult> {
   return {
     ok: true,
     path: targetPath,
-    message: browserFallback ? `已导出 ${targetPath}` : `已导出到 ${targetPath}`,
+    message: browserFallback
+      ? t("已导出 {path}", { path: targetPath })
+      : t("已导出到 {path}", { path: targetPath }),
     error: null,
     warnings,
   };

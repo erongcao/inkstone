@@ -18,6 +18,7 @@ import {
   type FileTreeState,
 } from "@/file-tree/store";
 import { openDocumentAt, useDocument } from "@/ipc/document";
+import { t } from "@/i18n";
 
 /**
  * 路径太长时从**前面**截断，保留尾部。
@@ -56,7 +57,7 @@ export function FileTreePanel() {
     <div className="file-tree">
       <div className="file-tree__bar">
         <span className="file-tree__root" title={root ?? undefined}>
-          {root === null ? "未选择文件夹" : shortenPath(root)}
+          {root === null ? t("未选择文件夹") : shortenPath(root)}
         </span>
         <div className="file-tree__actions">
           <button
@@ -64,23 +65,23 @@ export function FileTreePanel() {
             className="btn btn--ghost"
             onClick={() => void refreshTree()}
           >
-            刷新
+            {t("刷新")}
           </button>
           <button type="button" className="btn btn--ghost" onClick={() => void choose()}>
-            打开
+            {t("打开")}
           </button>
         </div>
       </div>
 
       {root === null ? (
         <p className="panel-placeholder">
-          还没有选择文件夹。
+          {t("还没有选择文件夹。")}
           <br />
-          打开一个文件夹，或直接打开一个 .md 文件。
+          {t("打开一个文件夹，或直接打开一个 .md 文件。")}
         </p>
       ) : rootNode?.error ? (
         <p className="panel-placeholder panel-placeholder--error">
-          打不开这个文件夹
+          {t("打不开这个文件夹")}
           <br />
           <span className="file-tree__error">{rootNode.error}</span>
         </p>
@@ -107,7 +108,7 @@ function TreeLevel({
   const children = node?.children;
   if (!node || children === null) {
     // 没加载过：这一层不该出现（能走到这里说明正在读）
-    if (node?.loading) return <p className="panel-placeholder">正在读取…</p>;
+    if (node?.loading) return <p className="panel-placeholder">{t("正在读取…")}</p>;
     return null;
   }
   if (children.length === 0) return null;
@@ -178,7 +179,7 @@ function TreeRow({
             className="btn btn--ghost"
             onClick={() => toggleNode(entry.path)}
           >
-            重试
+            {t("重试")}
           </button>
         </div>
       )}

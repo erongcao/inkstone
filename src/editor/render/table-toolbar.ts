@@ -22,6 +22,8 @@
  * 标签上给用户看的是「第 2 行」这种人类说法，由 `rowLabel` 负责翻译。
  */
 
+import { t } from "@/i18n";
+
 /** 工具栏动作。值直接进 `data-table-action`。 */
 export const TABLE_ACTIONS = [
   "row-add",
@@ -78,18 +80,18 @@ export function createTableToolbar(): HTMLElement {
   pos.className = "cm-md-table-bar__pos";
   bar.appendChild(pos);
 
-  const rowGroup = group(bar, "＋行/－行");
-  const colGroup = group(bar, "＋列/－列");
-  const alignGroup = group(bar, "对齐");
+  const rowGroup = group(bar, t("＋行/－行"));
+  const colGroup = group(bar, t("＋列/－列"));
+  const alignGroup = group(bar, t("对齐"));
 
   for (const { action, label, title } of BUTTONS) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "cm-md-table-bar__btn";
     button.dataset.tableAction = action;
-    button.textContent = label;
-    button.title = title;
-    button.setAttribute("aria-label", title);
+    button.textContent = t(label);
+    button.title = t(title);
+    button.setAttribute("aria-label", t(title));
 
     if (action.startsWith("row-")) rowGroup.appendChild(button);
     else if (action.startsWith("col-")) colGroup.appendChild(button);
@@ -120,8 +122,9 @@ export function markCell(cell: HTMLElement, row: number, col: number): void {
  * 几何行号里 0 是表头、1 是分隔行（用户根本看不见），所以从 2 开始才叫「第 1 行」。
  */
 export function rowLabel(geometryRow: number, columns: number): string {
-  const where = geometryRow === 0 ? "表头" : `第 ${geometryRow - 1} 行`;
-  return `${where} · 第 ${columns} 列`;
+  const where =
+    geometryRow === 0 ? t("表头") : t("第 {row} 行", { row: geometryRow - 1 });
+  return t("{where} · 第 {columns} 列", { where, columns });
 }
 
 /** 把 hover 状态写回工具栏（纯 DOM，不触发重渲染） */

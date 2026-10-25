@@ -33,6 +33,7 @@ import { loadVaultFiles, matchVaultFiles, type VaultFile } from "@/file-tree/qui
 import { useTreeRoot } from "@/file-tree/store";
 import { listRecentFiles } from "@/ipc/recent";
 import { openDocumentAt } from "@/ipc/document";
+import { t } from "@/i18n";
 
 /** 一行命令（含它的高亮位置与分类） */
 interface Row {
@@ -258,14 +259,14 @@ export function CommandPalette() {
         className="palette"
         role="dialog"
         aria-modal="true"
-        aria-label={mode === "file" ? "快速打开" : "命令面板"}
+        aria-label={mode === "file" ? t("快速打开") : t("命令面板")}
         onMouseDown={(event) => event.stopPropagation()}
       >
         <input
           ref={inputRef}
           className="palette__input"
           value={query}
-          placeholder={mode === "file" ? "按文件名快速打开…" : "搜索命令…"}
+          placeholder={mode === "file" ? t("按文件名快速打开…") : t("搜索命令…")}
           spellCheck={false}
           autoComplete="off"
           onChange={(event) => setPaletteQuery(event.target.value)}
@@ -276,7 +277,7 @@ export function CommandPalette() {
             <>
               {fileMatches.length === 0 && (
                 <div className="palette__empty">
-                  {treeRoot ? "没有匹配的文件" : "先选一个笔记库（或打开一个文件）"}
+                  {treeRoot ? t("没有匹配的文件") : t("先选一个笔记库（或打开一个文件）")}
                 </div>
               )}
               {fileMatches.map((hit, index) => (
@@ -298,10 +299,12 @@ export function CommandPalette() {
             </>
           ) : (
             <>
-              {flat.length === 0 && <div className="palette__empty">没有匹配的命令</div>}
+              {flat.length === 0 && (
+                <div className="palette__empty">{t("没有匹配的命令")}</div>
+              )}
               {commandGroups.map((group) => (
                 <div key={group.category} className="palette__group">
-                  <div className="palette__group-title">{group.category}</div>
+                  <div className="palette__group-title">{t(group.category)}</div>
                   {group.rows.map((row) => {
                     cursor++;
                     const index = cursor;
@@ -316,7 +319,10 @@ export function CommandPalette() {
                         onClick={() => activate(index)}
                       >
                         <span className="palette__label">
-                          <Highlighted text={row.command.label} matched={row.matched} />
+                          <Highlighted
+                            text={t(row.command.label)}
+                            matched={row.matched}
+                          />
                         </span>
                         {row.command.keywords && (
                           <span className="palette__hint">

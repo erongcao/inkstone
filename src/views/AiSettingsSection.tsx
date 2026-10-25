@@ -17,6 +17,7 @@ import { aiSecretStatus, aiSetSecret, aiDeleteSecret } from "@/ai/ipc";
 import type { SecretStatus } from "@/ai/ipc";
 import { resolveEndpoint, type EndpointConfig } from "@/ai/provider";
 import type { AiEndpointSetting, Settings } from "@/settings/schema";
+import { t } from "@/i18n";
 
 type PatchFn = <K extends keyof Settings>(key: K, value: Partial<Settings[K]>) => void;
 
@@ -68,9 +69,9 @@ export function AiSection({ settings, patch }: Props) {
       await aiSetSecret(selectedId, secretInput);
       setSecretInput("");
       await refreshStatus();
-      setNotice("密钥已保存到系统钥匙串");
+      setNotice(t("密钥已保存到系统钥匙串"));
     } catch (error) {
-      setNotice(`保存失败：${String(error)}`);
+      setNotice(t("保存失败：{error}", { error: String(error) }));
     }
   }, [selectedId, secretInput, refreshStatus]);
 
@@ -79,9 +80,9 @@ export function AiSection({ settings, patch }: Props) {
     try {
       await aiDeleteSecret(selectedId);
       await refreshStatus();
-      setNotice("密钥已删除");
+      setNotice(t("密钥已删除"));
     } catch (error) {
-      setNotice(`删除失败：${String(error)}`);
+      setNotice(t("删除失败：{error}", { error: String(error) }));
     }
   }, [selectedId, refreshStatus]);
 
@@ -93,7 +94,7 @@ export function AiSection({ settings, patch }: Props) {
       <h3>AI</h3>
 
       <label className="field field--inline">
-        <span>启用 AI</span>
+        <span>{t("启用 AI")}</span>
         <input
           type="checkbox"
           checked={ai.enabled}
@@ -102,20 +103,20 @@ export function AiSection({ settings, patch }: Props) {
       </label>
 
       <label className="field">
-        <span>默认端点</span>
+        <span>{t("默认端点")}</span>
         <select
           value={selectedId}
           onChange={(ev) => patch("ai", { defaultEndpointId: ev.target.value })}
         >
-          <optgroup label="内置预设">
+          <optgroup label={t("内置预设")}>
             {BUILTIN_ENDPOINTS.map((e) => (
               <option key={e.id} value={e.id}>
-                {e.label}
+                {t(e.label)}
               </option>
             ))}
           </optgroup>
           {ai.endpoints.length > 0 && (
-            <optgroup label="自建">
+            <optgroup label={t("自建")}>
               {ai.endpoints.map((e) => (
                 <option key={e.id} value={e.id}>
                   {e.label}
@@ -129,22 +130,22 @@ export function AiSection({ settings, patch }: Props) {
       {active && (
         <>
           <dl className="ai-endpoint-info">
-            <dt>协议</dt>
+            <dt>{t("协议")}</dt>
             <dd>{active.protocol}</dd>
-            <dt>端点</dt>
+            <dt>{t("端点")}</dt>
             <dd className="ai-endpoint-url">{resolveEndpoint(active).baseUrl}</dd>
-            <dt>计费</dt>
+            <dt>{t("计费")}</dt>
             <dd>{BILLING_LABELS[active.billing]}</dd>
-            <dt>并发上限</dt>
-            <dd>{active.maxConcurrent > 0 ? active.maxConcurrent : "不限"}</dd>
+            <dt>{t("并发上限")}</dt>
+            <dd>{active.maxConcurrent > 0 ? active.maxConcurrent : t("不限")}</dd>
           </dl>
 
-          {note && <p className="ai-endpoint-note">{note}</p>}
+          {note && <p className="ai-endpoint-note">{t(note)}</p>}
         </>
       )}
 
       <label className="field">
-        <span>模型 ID</span>
+        <span>{t("模型 ID")}</span>
         <input
           type="text"
           value={ai.defaultModel || active?.model || ""}
@@ -155,28 +156,28 @@ export function AiSection({ settings, patch }: Props) {
 
       {/* 密钥：输入框永远不回显已保存的值 */}
       <label className="field">
-        <span>API Key（存入系统钥匙串）</span>
+        <span>{t("API Key（存入系统钥匙串）")}</span>
         <input
           type="password"
           value={secretInput}
-          placeholder={status?.configured ? "已配置（输入新值可覆盖）" : "未配置"}
+          placeholder={status?.configured ? t("已配置（输入新值可覆盖）") : t("未配置")}
           autoComplete="off"
           onChange={(ev) => setSecretInput(ev.target.value)}
         />
       </label>
       <div className="field field--actions">
         <button type="button" className="btn" onClick={() => void onSaveSecret()}>
-          保存密钥
+          {t("保存密钥")}
         </button>
         <button type="button" className="btn" onClick={() => void onDeleteSecret()}>
-          删除密钥
+          {t("删除密钥")}
         </button>
       </div>
 
       {status?.degraded && (
         <p className="ai-warning" role="alert">
-          ⚠️ 当前系统的钥匙串不可用（Linux 需要 gnome-keyring / libsecret），
-          密钥已降级保存为本地文件。桌面应用通常能使用系统钥匙串。
+          {t("⚠️ 当前系统的钥匙串不可用（Linux 需要 gnome-keyring / libsecret），")}
+          {t("密钥已降级保存为本地文件。桌面应用通常能使用系统钥匙串。")}
         </p>
       )}
 
@@ -184,7 +185,7 @@ export function AiSection({ settings, patch }: Props) {
 
       {/* 能力位联动：不让用户填出上游会拒绝的参数 */}
       <label className="field field--inline">
-        <span>温度（temperature）</span>
+        <span>{t("温度（temperature）")}</span>
         <input
           type="number"
           min={0}
@@ -197,12 +198,12 @@ export function AiSection({ settings, patch }: Props) {
       </label>
       {resolved && !resolved.resolvedCapabilities.temperature && (
         <p className="ai-endpoint-note">
-          该端点的模型不接受 temperature 参数，已禁用此设置。
+          {t("该端点的模型不接受 temperature 参数，已禁用此设置。")}
         </p>
       )}
 
       <label className="field field--inline">
-        <span>最大输出 token</span>
+        <span>{t("最大输出 token")}</span>
         <input
           type="number"
           min={256}

@@ -18,12 +18,18 @@
 //! Tauri 的 `.parse().ok()` 把错误吞掉，菜单项直接没有快捷键。
 //!
 //! 现在：**本文件里一个加速键字符串都没有**，只有一个动作 id。
+//!
+//! ## 文案也不写在这里
+//!
+//! 菜单文字由 `i18n::label(id)` 取——原生菜单画在 AppKit / GTK / Win32 上，
+//! 前端那套 `t()` 管不到它。语言变了要重建菜单（见 `rebuild`）。
 
 use tauri::menu::{
     AboutMetadata, CheckMenuItemBuilder, MenuBuilder, MenuItemBuilder, SubmenuBuilder,
 };
 use tauri::{AppHandle, Emitter};
 
+use crate::i18n;
 use crate::shortcuts;
 
 /// 菜单动作 → 前端事件名
@@ -34,6 +40,31 @@ use crate::shortcuts;
 ///
 /// 安装应用菜单，并把菜单点击事件转发给前端
 pub fn install(app: &AppHandle) -> tauri::Result<()> {
+    let menu = build(app)?;
+    menu.set_as_app_menu()?;
+
+    // 菜单点击 → 转发给前端
+    app.on_menu_event(|app, event| {
+        let id = event.id().0.clone();
+        if let Err(err) = app.emit(&id, ()) {
+            eprintln!("转发菜单事件失败 ({id}): {err}");
+        }
+    });
+
+    Ok(())
+}
+
+/// 按当前语言重建菜单
+///
+/// 语言变了要重建：菜单项的文案是在**建菜单那一刻**定下的。
+pub fn rebuild(app: &AppHandle) -> tauri::Result<()> {
+    let menu = build(app)?;
+    app.set_menu(menu)?;
+    Ok(())
+}
+
+/// 建出整棵菜单
+fn build(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
     let app_menu = build_app_menu(app)?;
     let file_menu = build_file_menu(app)?;
     let edit_menu = build_edit_menu(app)?;
@@ -54,28 +85,15 @@ pub fn install(app: &AppHandle) -> tauri::Result<()> {
 
     // macOS 上必须调用 set_as_app_menu 才会显示为系统应用菜单
     menu.set_as_app_menu()?;
-
-    // 菜单点击 → 转发给前端
-    app.on_menu_event(|app, event| {
-        let id = event.id().0.clone();
-        if let Err(err) = app.emit(&id, ()) {
-            eprintln!("转发菜单事件失败 ({id}): {err}");
-        }
-    });
-
-    Ok(())
+    Ok(menu)
 }
 
 /// 创建一个会向前端发事件的菜单项
 ///
-/// 加速键从 `shortcuts::accelerator(id)` 取——**不在这里写死**。
-/// 清单里没有的菜单项（比如「Markdown 语法参考」）就没有加速键。
-fn action(
-    app: &AppHandle,
-    id: &str,
-    text: &str,
-) -> tauri::Result<tauri::menu::MenuItem<tauri::Wry>> {
-    let mut builder = MenuItemBuilder::with_id(id, text);
+/// 文案从 `i18n::label(id)` 取，加速键从 `shortcuts::accelerator(id)` 取——
+/// **都不在这里写死**。
+fn action(app: &AppHandle, id: &str) -> tauri::Result<tauri::menu::MenuItem<tauri::Wry>> {
+    let mut builder = MenuItemBuilder::with_id(id, i18n::label(id));
     if let Some(accelerator) = shortcuts::accelerator(id) {
         builder = builder.accelerator(accelerator);
     } else if !shortcuts::is_known_action(id) {
@@ -88,7 +106,7 @@ fn action(
 }
 
 fn build_app_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Submenu<tauri::Wry>> {
-    let settings = action(app, "preferences", "偏好设置…")?;
+    let settings = action(app, "preferences")?;
 
     SubmenuBuilder::new(app, "Inkstone")
         .about_with_text(
@@ -113,13 +131,13 @@ fn build_app_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Submenu<tauri::
 }
 
 fn build_file_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Submenu<tauri::Wry>> {
-    let new_doc = action(app, "new-document", "新建文档")?;
-    let open = action(app, "open-document", "打开…")?;
-    let save = action(app, "save-document", "保存")?;
-    let save_as = action(app, "save-document-as", "另存为…")?;
-    let export_doc = action(app, "export-document", "导出…")?;
+    let new_doc = action(app, "new-document")?;
+    let open = action(app, "open-document")?;
+    let save = action(app, "save-document")?;
+    let save_as = action(app, "save-document-as")?;
+    let export_doc = action(app, "export-document")?;
 
-    SubmenuBuilder::new(app, "文件")
+    SubmenuBuilder::new(app, i18n::menu_title("file"))
         .item(&new_doc)
         .item(&open)
         .separator()
@@ -133,13 +151,13 @@ fn build_file_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Submenu<tauri:
 }
 
 fn build_edit_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Submenu<tauri::Wry>> {
-    let find = action(app, "find", "查找…")?;
-    let replace = action(app, "replace", "替换…")?;
-    let copy_as_md = action(app, "copy-as-markdown", "复制为 Markdown 源码")?;
-    let copy_as_html = action(app, "copy-as-html", "复制为 HTML")?;
-    let paste_as_plain_text = action(app, "paste-as-plain-text", "粘贴为纯文本")?;
+    let find = action(app, "find")?;
+    let replace = action(app, "replace")?;
+    let copy_as_md = action(app, "copy-as-markdown")?;
+    let copy_as_html = action(app, "copy-as-html")?;
+    let paste_as_plain_text = action(app, "paste-as-plain-text")?;
 
-    SubmenuBuilder::new(app, "编辑")
+    SubmenuBuilder::new(app, i18n::menu_title("edit"))
         .undo()
         .redo()
         .separator()
@@ -158,20 +176,21 @@ fn build_edit_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Submenu<tauri:
 }
 
 fn build_view_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Submenu<tauri::Wry>> {
-    let sidebar = action(app, "toggle-sidebar", "显示/隐藏侧边栏")?;
-    let source_mode = action(app, "toggle-source-mode", "源码模式")?;
-    let focus_mode = action(app, "toggle-focus-mode", "专注模式")?;
-    let typewriter = action(app, "toggle-typewriter-mode", "打字机模式")?;
-    let zoom_in = action(app, "zoom-in", "放大")?;
-    let zoom_out = action(app, "zoom-out", "缩小")?;
-    let zoom_reset = action(app, "zoom-reset", "实际大小")?;
+    let sidebar = action(app, "toggle-sidebar")?;
+    let source_mode = action(app, "toggle-source-mode")?;
+    let focus_mode = action(app, "toggle-focus-mode")?;
+    let typewriter = action(app, "toggle-typewriter-mode")?;
+    let zoom_in = action(app, "zoom-in")?;
+    let zoom_out = action(app, "zoom-out")?;
+    let zoom_reset = action(app, "zoom-reset")?;
 
     // 复选框菜单项：状态与前端设置双向同步（M2 起接通）
-    let sidebar_check = CheckMenuItemBuilder::with_id("check-sidebar", "显示侧边栏")
-        .checked(true)
-        .build(app)?;
+    let sidebar_check =
+        CheckMenuItemBuilder::with_id("check-sidebar", i18n::label("check-sidebar"))
+            .checked(true)
+            .build(app)?;
 
-    SubmenuBuilder::new(app, "视图")
+    SubmenuBuilder::new(app, i18n::menu_title("view"))
         .item(&sidebar)
         .item(&sidebar_check)
         .separator()
@@ -188,7 +207,7 @@ fn build_view_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Submenu<tauri:
 }
 
 fn build_window_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Submenu<tauri::Wry>> {
-    SubmenuBuilder::new(app, "窗口")
+    SubmenuBuilder::new(app, i18n::menu_title("window"))
         .minimize()
         .maximize()
         .separator()
@@ -199,11 +218,11 @@ fn build_window_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Submenu<taur
 }
 
 fn build_help_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Submenu<tauri::Wry>> {
-    let markdown_ref = action(app, "markdown-reference", "Markdown 语法参考")?;
-    let shortcuts = action(app, "shortcuts", "快捷键一览")?;
-    let homepage = action(app, "open-homepage", "项目主页")?;
+    let markdown_ref = action(app, "markdown-reference")?;
+    let shortcuts = action(app, "shortcuts")?;
+    let homepage = action(app, "open-homepage")?;
 
-    SubmenuBuilder::new(app, "帮助")
+    SubmenuBuilder::new(app, i18n::menu_title("help"))
         .item(&markdown_ref)
         .item(&shortcuts)
         .separator()

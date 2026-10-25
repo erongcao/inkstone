@@ -13,6 +13,7 @@
  */
 
 import type { ExportFormat } from "@/export/registry";
+import { t } from "@/i18n";
 
 /** pandoc 探测结果（与 Rust 侧 `PandocInfo` 对应） */
 export interface PandocInfo {
@@ -87,7 +88,7 @@ export async function pickExportPath(
   // HTML / PDF 走通用的「另存为」
   const { save } = await import("@tauri-apps/plugin-dialog");
   const picked = await save({
-    title: "导出",
+    title: t("导出"),
     defaultPath: `${suggestedName}${format.extension}`,
     filters: [{ name: format.label, extensions: [format.extension.replace(".", "")] }],
   });
@@ -121,7 +122,7 @@ export async function detectPandoc(): Promise<PandocInfo> {
       available: false,
       version: "",
       path: "",
-      reason: "浏览器降级模式无法调用 pandoc",
+      reason: t("浏览器降级模式无法调用 pandoc"),
     };
   }
   const { invoke } = await import("@tauri-apps/api/core");
@@ -155,7 +156,7 @@ export async function convertWithPandoc(
   resourceDir: string,
 ): Promise<PandocOutput> {
   if (!isTauri()) {
-    throw new Error("浏览器降级模式无法调用 pandoc，请在桌面应用里导出");
+    throw new Error(t("浏览器降级模式无法调用 pandoc，请在桌面应用里导出"));
   }
   const { invoke } = await import("@tauri-apps/api/core");
   return await invoke<PandocOutput>("convert_with_pandoc", {

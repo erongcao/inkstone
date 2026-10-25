@@ -35,6 +35,7 @@ import {
   subscribeDocument,
 } from "@/ipc/document";
 import { onDocumentChanged, unwatchDocument, watchDocument } from "@/ipc/watch";
+import { t } from "@/i18n";
 
 /** 一场待处理的冲突 */
 export interface Conflict {
@@ -105,7 +106,7 @@ export async function handleExternalChange(path: string): Promise<void> {
   if (!state.dirty) {
     // 本地没有未保存改动 → 跟着磁盘走
     reloadFromDisk(diskContent);
-    setNotice("文件已在外部更新，已重新载入");
+    setNotice(t("文件已在外部更新，已重新载入"));
     return;
   }
 
@@ -124,7 +125,7 @@ export function resolveWithDisk(): void {
   setConflict(null);
   if (!current) return;
   reloadFromDisk(current.diskContent);
-  setNotice("已改用磁盘上的版本");
+  setNotice(t("已改用磁盘上的版本"));
 }
 
 /**
@@ -136,7 +137,7 @@ export function resolveWithDisk(): void {
  */
 export function resolveKeepLocal(): void {
   setConflict(null);
-  setNotice("已保留你的版本；外部改动尚未合入，自动保存保持暂停", 8000);
+  setNotice(t("已保留你的版本；外部改动尚未合入，自动保存保持暂停"), 8000);
 }
 
 /** 解除外部改动标记（用户明确保存之后由 document 层调用） */

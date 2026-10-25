@@ -39,6 +39,7 @@ import type { ChatRequest, EndpointConfig } from "./provider";
 import { acceptWriteback, type PendingWriteback } from "./writeback";
 import { readSettings } from "@/settings/store";
 import type { AiSettings } from "@/settings/schema";
+import { t } from "@/i18n";
 
 /** 面板的两个分区 */
 export type AiTab = "rewrite" | "summarize";
@@ -126,17 +127,19 @@ function isSummarizeAction(action: string): action is SummarizeAction {
 
 /** 上下文范围的中文说明 */
 export function describeContext(ctx: ContextSlice): string {
-  const chars = `（${ctx.text.length} 字）`;
+  const chars = t("（{n} 字）", { n: ctx.text.length });
   switch (ctx.kind) {
     case "selection":
-      return `选区${chars}`;
+      return t("选区{chars}", { chars });
     case "paragraph":
-      return `当前段落${chars}`;
+      return t("当前段落{chars}", { chars });
     case "section":
-      return ctx.title ? `章节「${ctx.title}」${chars}` : `当前章节${chars}`;
+      return ctx.title
+        ? t("章节「{title}」{chars}", { title: ctx.title, chars })
+        : t("当前章节{chars}", { chars });
     case "document":
     default:
-      return `整篇文档${chars}`;
+      return t("整篇文档{chars}", { chars });
   }
 }
 
@@ -295,26 +298,29 @@ export async function runAiAction(
 
   const settings = readSettings();
   if (!settings.ai.enabled) {
-    setState({ status: "error", error: "AI 未启用。请先到「设置 → AI」打开开关。" });
+    setState({ status: "error", error: t("AI 未启用。请先到「设置 → AI」打开开关。") });
     return;
   }
 
   const endpoint = resolveEndpointConfig(settings.ai);
   if (!endpoint) {
-    setState({ status: "error", error: "没有可用的端点。请到「设置 → AI」选一个端点。" });
+    setState({
+      status: "error",
+      error: t("没有可用的端点。请到「设置 → AI」选一个端点。"),
+    });
     return;
   }
 
   const editor = getAiEditorBridge();
   if (!editor) {
-    setState({ status: "error", error: "编辑器还没准备好。" });
+    setState({ status: "error", error: t("编辑器还没准备好。") });
     return;
   }
 
   const probe = isSummarizeAction(action) ? "summarize" : "rewrite";
   const ctx = resolveCurrentContext(probe);
   if (!ctx) {
-    setState({ status: "error", error: "没有可用的上下文（文档是空的）。" });
+    setState({ status: "error", error: t("没有可用的上下文（文档是空的）。") });
     return;
   }
 
@@ -322,7 +328,7 @@ export async function runAiAction(
 
   setState({
     status: "running",
-    actionLabel: label,
+    actionLabel: t(label),
     mode,
     output: "",
     error: null,
@@ -345,7 +351,7 @@ export async function runAiAction(
         cancelCurrent = null;
         const cleaned = cleanModelOutput(streamed);
         if (!cleaned) {
-          setState({ status: "error", error: "模型没有返回任何内容。" });
+          setState({ status: "error", error: t("模型没有返回任何内容。") });
           return;
         }
         setState({
@@ -398,7 +404,7 @@ export function acceptAiResult(): void {
   if (actual !== pending.original) {
     setState({
       status: "error",
-      error: "原文在等待期间被改过了，直接替换会覆盖你刚写的内容。请重新跑一次。",
+      error: t("原文在等待期间被改过了，直接替换会覆盖你刚写的内容。请重新跑一次。"),
     });
     return;
   }

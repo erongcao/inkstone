@@ -29,6 +29,7 @@ import {
 import { formatShortcut } from "@/shortcuts";
 import type { ExportItemSetting, ExportVariableSetting } from "@/settings/schema";
 import { AiSection } from "./AiSettingsSection";
+import { t } from "@/i18n";
 
 interface Props {
   onClose: () => void;
@@ -49,12 +50,17 @@ export function SettingsPanel({ onClose, initialSection = "appearance" }: Props)
     update({ [key]: value } as DeepPartial<Settings>);
 
   return (
-    <div className="settings-overlay" role="dialog" aria-modal="true" aria-label="设置">
+    <div
+      className="settings-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-label={t("设置")}
+    >
       <div className="settings-panel">
         <header className="settings-header">
-          <h2>设置</h2>
+          <h2>{t("设置")}</h2>
           <button type="button" className="btn" onClick={onClose}>
-            关闭
+            {t("关闭")}
           </button>
         </header>
 
@@ -68,17 +74,17 @@ export function SettingsPanel({ onClose, initialSection = "appearance" }: Props)
                 aria-selected={section === item.id}
                 onClick={() => setSection(item.id)}
               >
-                {item.label}
+                {t(item.label)}
               </button>
             ))}
             <button
               type="button"
               className="settings-reset"
               onClick={() => {
-                if (window.confirm("确定要恢复所有设置为默认值吗？")) resetSettings();
+                if (window.confirm(t("确定要恢复所有设置为默认值吗？"))) resetSettings();
               }}
             >
-              恢复默认值
+              {t("恢复默认值")}
             </button>
           </nav>
 
@@ -111,37 +117,37 @@ function AppearanceSection({ settings, patch }: { settings: Settings; patch: Pat
   const a = settings.appearance;
   return (
     <section className="settings-group">
-      <h3>主题</h3>
+      <h3>{t("主题")}</h3>
       <label className="field">
-        <span>主题</span>
+        <span>{t("主题")}</span>
         <select
           value={a.theme}
           onChange={(e) => patch("appearance", { theme: e.target.value })}
         >
           {BUILTIN_THEMES.map((theme) => (
             <option key={theme.id} value={theme.id}>
-              {theme.name}
+              {t(theme.name)}
             </option>
           ))}
         </select>
       </label>
 
       <label className="field">
-        <span>明暗模式</span>
+        <span>{t("明暗模式")}</span>
         <select
           value={a.colorMode}
           onChange={(e) =>
             patch("appearance", { colorMode: e.target.value as typeof a.colorMode })
           }
         >
-          <option value="auto">跟随系统</option>
-          <option value="light">亮色</option>
-          <option value="dark">暗色</option>
+          <option value="auto">{t("跟随系统")}</option>
+          <option value="light">{t("亮色")}</option>
+          <option value="dark">{t("暗色")}</option>
         </select>
       </label>
 
       <label className="field field--inline">
-        <span>跟随系统外观</span>
+        <span>{t("跟随系统外观")}</span>
         <input
           type="checkbox"
           checked={a.followSystemAppearance}
@@ -151,9 +157,9 @@ function AppearanceSection({ settings, patch }: { settings: Settings; patch: Pat
         />
       </label>
 
-      <h3>排版</h3>
+      <h3>{t("排版")}</h3>
       <label className="field">
-        <span>正文字体</span>
+        <span>{t("正文字体")}</span>
         <input
           type="text"
           value={a.fontFamily}
@@ -161,7 +167,7 @@ function AppearanceSection({ settings, patch }: { settings: Settings; patch: Pat
         />
       </label>
       <label className="field">
-        <span>等宽字体</span>
+        <span>{t("等宽字体")}</span>
         <input
           type="text"
           value={a.monoFontFamily}
@@ -169,7 +175,7 @@ function AppearanceSection({ settings, patch }: { settings: Settings; patch: Pat
         />
       </label>
       <label className="field">
-        <span>字号</span>
+        <span>{t("字号")}</span>
         <select
           value={a.fontSize}
           onChange={(e) => patch("appearance", { fontSize: Number(e.target.value) })}
@@ -182,7 +188,7 @@ function AppearanceSection({ settings, patch }: { settings: Settings; patch: Pat
         </select>
       </label>
       <label className="field">
-        <span>行高</span>
+        <span>{t("行高")}</span>
         <input
           type="range"
           min={1.2}
@@ -194,7 +200,7 @@ function AppearanceSection({ settings, patch }: { settings: Settings; patch: Pat
         <em>{a.lineHeight.toFixed(1)}</em>
       </label>
       <label className="field">
-        <span>写作区宽度</span>
+        <span>{t("写作区宽度")}</span>
         <select
           value={a.contentWidth}
           onChange={(e) => patch("appearance", { contentWidth: Number(e.target.value) })}
@@ -207,7 +213,7 @@ function AppearanceSection({ settings, patch }: { settings: Settings; patch: Pat
         </select>
       </label>
       <label className="field">
-        <span>页面背景</span>
+        <span>{t("页面背景")}</span>
         <input
           type="color"
           value={a.backgroundColor || "#ffffff"}
@@ -218,13 +224,13 @@ function AppearanceSection({ settings, patch }: { settings: Settings; patch: Pat
           className="btn"
           onClick={() => patch("appearance", { backgroundColor: "" })}
         >
-          恢复默认
+          {t("恢复默认")}
         </button>
       </label>
 
-      <h3>自定义 CSS</h3>
+      <h3>{t("自定义 CSS")}</h3>
       <label className="field field--column">
-        <span>附加样式（注入到文档根节点）</span>
+        <span>{t("附加样式（注入到文档根节点）")}</span>
         <textarea
           className="settings-css"
           rows={8}
@@ -245,21 +251,21 @@ function EditorSection({ settings, patch }: { settings: Settings; patch: PatchFn
     key: Exclude<keyof typeof e, "markerDisplay" | "autoPairMode">;
     label: string;
   }[] = [
-    { key: "smartPunctuation", label: "智能标点" },
-    { key: "strictMode", label: "严格模式（严格 CommonMark）" },
-    { key: "indentFirstLine", label: "缩进首行" },
-    { key: "indentParagraph", label: "段落续行缩进" },
-    { key: "spellCheck", label: "拼写检查" },
-    { key: "focusMode", label: "焦点模式" },
-    { key: "typewriterMode", label: "打字机模式" },
-    { key: "alwaysShowWordCount", label: "始终显示字数统计" },
+    { key: "smartPunctuation", label: t("智能标点") },
+    { key: "strictMode", label: t("严格模式（严格 CommonMark）") },
+    { key: "indentFirstLine", label: t("缩进首行") },
+    { key: "indentParagraph", label: t("段落续行缩进") },
+    { key: "spellCheck", label: t("拼写检查") },
+    { key: "focusMode", label: t("焦点模式") },
+    { key: "typewriterMode", label: t("打字机模式") },
+    { key: "alwaysShowWordCount", label: t("始终显示字数统计") },
   ];
   return (
     <section className="settings-group">
-      <h3>编辑</h3>
+      <h3>{t("编辑")}</h3>
 
       <label className="field">
-        <span>标记符显示</span>
+        <span>{t("标记符显示")}</span>
         <select
           value={e.markerDisplay}
           onChange={(ev) =>
@@ -268,14 +274,14 @@ function EditorSection({ settings, patch }: { settings: Settings; patch: PatchFn
         >
           {MARKER_DISPLAY_MODES.map((mode) => (
             <option key={mode.value} value={mode.value}>
-              {mode.label}
+              {t(mode.label)}
             </option>
           ))}
         </select>
       </label>
 
       <label className="field">
-        <span>自动配对</span>
+        <span>{t("自动配对")}</span>
         <select
           value={e.autoPairMode}
           onChange={(ev) =>
@@ -284,7 +290,7 @@ function EditorSection({ settings, patch }: { settings: Settings; patch: PatchFn
         >
           {AUTO_PAIR_MODES.map((mode) => (
             <option key={mode.value} value={mode.value}>
-              {mode.label}
+              {t(mode.label)}
             </option>
           ))}
         </select>
@@ -307,23 +313,23 @@ function EditorSection({ settings, patch }: { settings: Settings; patch: PatchFn
 function MarkdownSection({ settings, patch }: { settings: Settings; patch: PatchFn }) {
   const m = settings.markdown;
   const toggles: { key: keyof typeof m; label: string; hint?: string }[] = [
-    { key: "inlineMath", label: "行内数学 $…$" },
+    { key: "inlineMath", label: t("行内数学 $…$") },
     {
       key: "inlineMathSingleDollar",
-      label: "单 $ 也当行内公式",
-      hint: "关掉后「价格 $5 到 $10 元」不再被误判成公式；$$x^2$$ 在行内仍可用",
+      label: t("单 $ 也当行内公式"),
+      hint: t("关掉后「价格 $5 到 $10 元」不再被误判成公式；$$x^2$$ 在行内仍可用"),
     },
-    { key: "blockMath", label: "数学块 $$…$$" },
-    { key: "autoNumberEquations", label: "公式自动编号" },
-    { key: "mhchem", label: "化学扩展 mhchem" },
-    { key: "mermaid", label: "Mermaid 图表" },
+    { key: "blockMath", label: t("数学块 $$…$$") },
+    { key: "autoNumberEquations", label: t("公式自动编号") },
+    { key: "mhchem", label: t("化学扩展 mhchem") },
+    { key: "mermaid", label: t("Mermaid 图表") },
     { key: "githubAlerts", label: "GitHub Alerts" },
-    { key: "footnotes", label: "脚注" },
-    { key: "highlight", label: "行内高亮 ==…==" },
-    { key: "subscriptSuperscript", label: "下标 / 上标" },
+    { key: "footnotes", label: t("脚注") },
+    { key: "highlight", label: t("行内高亮 ==…==") },
+    { key: "subscriptSuperscript", label: t("下标 / 上标") },
     { key: "frontMatter", label: "YAML front matter" },
-    { key: "tables", label: "表格" },
-    { key: "taskLists", label: "任务列表" },
+    { key: "tables", label: t("表格") },
+    { key: "taskLists", label: t("任务列表") },
   ];
   return (
     <section className="settings-group">
@@ -346,9 +352,9 @@ function ExportSection({ settings, patch }: { settings: Settings; patch: PatchFn
   const x = settings.export;
   return (
     <section className="settings-group">
-      <h3>导出</h3>
+      <h3>{t("导出")}</h3>
       <label className="field field--inline">
-        <span>导出后打开所在文件夹</span>
+        <span>{t("导出后打开所在文件夹")}</span>
         <input
           type="checkbox"
           checked={x.openFolderAfterExport}
@@ -356,7 +362,7 @@ function ExportSection({ settings, patch }: { settings: Settings; patch: PatchFn
         />
       </label>
       <label className="field field--inline">
-        <span>导出后打开文件</span>
+        <span>{t("导出后打开文件")}</span>
         <input
           type="checkbox"
           checked={x.openFileAfterExport}
@@ -364,7 +370,7 @@ function ExportSection({ settings, patch }: { settings: Settings; patch: PatchFn
         />
       </label>
       <label className="field">
-        <span>PDF 纸张</span>
+        <span>{t("PDF 纸张")}</span>
         <select
           value={x.pdfPaperSize}
           onChange={(e) =>
@@ -378,7 +384,7 @@ function ExportSection({ settings, patch }: { settings: Settings; patch: PatchFn
         </select>
       </label>
       <label className="field field--inline">
-        <span>HTML 导出包含大纲</span>
+        <span>{t("HTML 导出包含大纲")}</span>
         <input
           type="checkbox"
           checked={x.htmlIncludeOutline}
@@ -386,7 +392,7 @@ function ExportSection({ settings, patch }: { settings: Settings; patch: PatchFn
         />
       </label>
       <label className="field field--inline">
-        <span>读取 YAML front matter 覆盖导出设置（不安全）</span>
+        <span>{t("读取 YAML front matter 覆盖导出设置（不安全）")}</span>
         <input
           type="checkbox"
           checked={x.readExportSettingsFromFrontMatter}
@@ -397,7 +403,7 @@ function ExportSection({ settings, patch }: { settings: Settings; patch: PatchFn
       </label>
 
       <label className="field">
-        <span>导出文件名模板</span>
+        <span>{t("导出文件名模板")}</span>
         <input
           type="text"
           placeholder="${title}-${today}"
@@ -406,12 +412,12 @@ function ExportSection({ settings, patch }: { settings: Settings; patch: PatchFn
         />
       </label>
       <p className="settings-hint">
-        留空则用文档标题。支持 {"${title}"} {"${author}"} {"${date}"} {"${today}"}{" "}
-        {"${now}"} {"${filename}"} {"${words}"} 等变量。
+        {t("留空则用文档标题。支持")} {"${title}"} {"${author}"} {"${date}"} {"${today}"}{" "}
+        {"${now}"} {"${filename}"} {"${words}"} {t("等变量。")}
       </p>
 
       <label className="field">
-        <span>HTML 追加内容（&lt;head&gt;）</span>
+        <span>{t("HTML 追加内容（&lt;head&gt;）")}</span>
         <textarea
           className="settings-css"
           rows={3}
@@ -422,11 +428,11 @@ function ExportSection({ settings, patch }: { settings: Settings; patch: PatchFn
       </label>
 
       <label className="field">
-        <span>HTML 追加内容（&lt;body&gt; 末尾）</span>
+        <span>{t("HTML 追加内容（&lt;body&gt; 末尾）")}</span>
         <textarea
           className="settings-css"
           rows={3}
-          placeholder="<footer>页脚</footer>"
+          placeholder={t("<footer>页脚</footer>")}
           value={x.htmlExtraBody}
           onChange={(e) => patch("export", { htmlExtraBody: e.target.value })}
         />
@@ -542,7 +548,7 @@ function ExportItemsSection({ settings, patch }: { settings: Settings; patch: Pa
 
     const parsed = parseShortcut(text);
     if (!parsed) {
-      setErrors((current) => ({ ...current, [id]: "看不懂这个快捷键" }));
+      setErrors((current) => ({ ...current, [id]: t("看不懂这个快捷键") }));
       return;
     }
 
@@ -564,10 +570,10 @@ function ExportItemsSection({ settings, patch }: { settings: Settings; patch: Pa
 
   return (
     <>
-      <h3>导出项</h3>
+      <h3>{t("导出项")}</h3>
       <p className="settings-hint">
-        可以改名字、调整顺序、绑定快捷键，或移除不用的格式。快捷键写成{" "}
-        <code>Mod-Shift-1</code> 或 <code>⌘⇧1</code> 这样的形式都行。
+        {t("可以改名字、调整顺序、绑定快捷键，或移除不用的格式。快捷键写成")}{" "}
+        <code>Mod-Shift-1</code> {t("或")} <code>⌘⇧1</code> {t("这样的形式都行。")}
       </p>
 
       <div className="export-item-list">
@@ -585,8 +591,8 @@ function ExportItemsSection({ settings, patch }: { settings: Settings; patch: Pa
                   className="btn btn--icon"
                   disabled={index === 0}
                   onClick={() => move(id, -1)}
-                  aria-label="上移"
-                  title="上移"
+                  aria-label={t("上移")}
+                  title={t("上移")}
                 >
                   ↑
                 </button>
@@ -595,8 +601,8 @@ function ExportItemsSection({ settings, patch }: { settings: Settings; patch: Pa
                   className="btn btn--icon"
                   disabled={index === active.length - 1}
                   onClick={() => move(id, 1)}
-                  aria-label="下移"
-                  title="下移"
+                  aria-label={t("下移")}
+                  title={t("下移")}
                 >
                   ↓
                 </button>
@@ -605,7 +611,7 @@ function ExportItemsSection({ settings, patch }: { settings: Settings; patch: Pa
               <input
                 type="text"
                 className="export-item-name"
-                aria-label="名称"
+                aria-label={t("名称")}
                 placeholder={item.format.label}
                 value={item.label === item.format.label ? "" : item.label}
                 onChange={(event) => rename(id, event.target.value)}
@@ -615,18 +621,18 @@ function ExportItemsSection({ settings, patch }: { settings: Settings; patch: Pa
                 type="button"
                 className="btn"
                 onClick={() => remove(id)}
-                title="从导出面板里移除（可以在下面恢复）"
+                title={t("从导出面板里移除（可以在下面恢复）")}
               >
-                移除
+                {t("移除")}
               </button>
 
               <div className="export-item-shortcut">
-                <span className="export-item-shortcut-label">快捷键</span>
+                <span className="export-item-shortcut-label">{t("快捷键")}</span>
                 <input
                   type="text"
                   className="export-item-shortcut-input"
-                  aria-label="快捷键"
-                  placeholder="未绑定"
+                  aria-label={t("快捷键")}
+                  placeholder={t("未绑定")}
                   value={shortcutText}
                   onChange={(event) =>
                     setDrafts((current) => ({ ...current, [id]: event.target.value }))
@@ -647,7 +653,7 @@ function ExportItemsSection({ settings, patch }: { settings: Settings; patch: Pa
 
       {extras.length > 0 && (
         <label className="field">
-          <span>添加导出项</span>
+          <span>{t("添加导出项")}</span>
           {/* key 随可添加项的数量变化：加完一个就重挂载，下拉复位，
               用户可以连续加好几个。
               （不要用 `event.target.value = ""` 直接改 DOM——
@@ -657,10 +663,10 @@ function ExportItemsSection({ settings, patch }: { settings: Settings; patch: Pa
             defaultValue=""
             onChange={(event) => add(event.target.value)}
           >
-            <option value="">从 pandoc 的更多格式里添加…</option>
+            <option value="">{t("从 pandoc 的更多格式里添加…")}</option>
             {extras.map((format) => (
               <option key={format.id} value={format.id}>
-                {format.label}（{format.extension}）
+                {t(format.label)}（{format.extension}）
               </option>
             ))}
           </select>
@@ -669,16 +675,16 @@ function ExportItemsSection({ settings, patch }: { settings: Settings; patch: Pa
 
       {removed.length > 0 && (
         <details className="export-item-removed">
-          <summary>已移除的格式（{removed.length}）</summary>
+          <summary>{t("已移除的格式（{count}）", { count: removed.length })}</summary>
           {removed.map((item) => (
             <div key={item.format.id} className="export-item-removed-row">
-              <span>{item.format.label}</span>
+              <span>{t(item.format.label)}</span>
               <button
                 type="button"
                 className="btn"
                 onClick={() => restore(item.format.id)}
               >
-                恢复
+                {t("恢复")}
               </button>
             </div>
           ))}
@@ -687,7 +693,7 @@ function ExportItemsSection({ settings, patch }: { settings: Settings; patch: Pa
 
       <div className="export-item-actions">
         <button type="button" className="btn" onClick={() => write([])}>
-          恢复默认导出项
+          {t("恢复默认导出项")}
         </button>
       </div>
     </>
@@ -716,17 +722,18 @@ function ExportVariablesSection({
 
   return (
     <>
-      <h3>自定义导出变量</h3>
+      <h3>{t("自定义导出变量")}</h3>
       {variables.length === 0 && (
         <p className="settings-hint">
-          还没有自定义变量。添加后可以在文件名模板与 HTML 追加内容里用 {"${名字}"} 引用。
+          {t("还没有自定义变量。添加后可以在文件名模板与 HTML 追加内容里用")} {"${名字}"}{" "}
+          {t("引用。")}
         </p>
       )}
       {variables.map((variable, index) => (
         <div key={index} className="settings-row">
           <input
             type="text"
-            placeholder="变量名"
+            placeholder={t("变量名")}
             value={variable.name}
             onChange={(e) => {
               const next = [...variables];
@@ -747,14 +754,14 @@ function ExportVariablesSection({
           >
             {Object.entries(BUILTIN_VARIABLE_LABELS).map(([value, label]) => (
               <option key={value} value={value}>
-                {label}
+                {t(label)}
               </option>
             ))}
           </select>
           {variable.source === "custom" && (
             <input
               type="text"
-              placeholder="固定文本"
+              placeholder={t("固定文本")}
               value={variable.value ?? ""}
               onChange={(e) => {
                 const next = [...variables];
@@ -768,7 +775,7 @@ function ExportVariablesSection({
             className="btn"
             onClick={() => update(variables.filter((_, i) => i !== index))}
           >
-            删除
+            {t("删除")}
           </button>
         </div>
       ))}
@@ -777,7 +784,7 @@ function ExportVariablesSection({
         className="btn"
         onClick={() => update([...variables, { name: "", source: "custom", value: "" }])}
       >
-        添加变量
+        {t("添加变量")}
       </button>
     </>
   );
@@ -787,22 +794,22 @@ function GeneralSection({ settings, patch }: { settings: Settings; patch: PatchF
   const g = settings.general;
   return (
     <section className="settings-group">
-      <h3>通用</h3>
+      <h3>{t("通用")}</h3>
       <label className="field">
-        <span>界面语言</span>
+        <span>{t("界面语言")}</span>
         <select
           value={g.language}
           onChange={(e) =>
             patch("general", { language: e.target.value as typeof g.language })
           }
         >
-          <option value="zh-CN">简体中文</option>
-          <option value="zh-TW">繁體中文</option>
+          <option value="zh-CN">{t("简体中文")}</option>
+          <option value="zh-TW">{t("繁體中文")}</option>
           <option value="en">English</option>
         </select>
       </label>
       <label className="field field--inline">
-        <span>自动保存</span>
+        <span>{t("自动保存")}</span>
         <input
           type="checkbox"
           checked={g.autoSave}
@@ -810,7 +817,7 @@ function GeneralSection({ settings, patch }: { settings: Settings; patch: PatchF
         />
       </label>
       <label className="field">
-        <span>自动保存间隔（毫秒）</span>
+        <span>{t("自动保存间隔（毫秒）")}</span>
         <input
           type="number"
           min={500}
@@ -820,7 +827,7 @@ function GeneralSection({ settings, patch }: { settings: Settings; patch: PatchF
         />
       </label>
       <label className="field field--inline">
-        <span>启动时恢复上次会话</span>
+        <span>{t("启动时恢复上次会话")}</span>
         <input
           type="checkbox"
           checked={g.restoreSession}
@@ -828,7 +835,7 @@ function GeneralSection({ settings, patch }: { settings: Settings; patch: PatchF
         />
       </label>
       <label className="field field--inline">
-        <span>发送匿名使用统计</span>
+        <span>{t("发送匿名使用统计")}</span>
         <input
           type="checkbox"
           checked={g.sendAnonymousStats}

@@ -10,6 +10,7 @@
  */
 
 import { WidgetType } from "@codemirror/view";
+import { t } from "@/i18n";
 
 /** 引用处的上标数字，点它跳到定义 */
 export class FootnoteRefWidget extends WidgetType {
@@ -27,7 +28,7 @@ export class FootnoteRefWidget extends WidgetType {
     const span = document.createElement("span");
     span.className = "cm-md-footnote-ref";
     span.textContent = String(this.number);
-    span.title = "跳到脚注定义";
+    span.title = t("跳到脚注定义");
     span.dataset.footnoteJump = String(this.target);
     return span;
   }
@@ -56,7 +57,7 @@ export class FootnoteDefWidget extends WidgetType {
     const span = document.createElement("span");
     span.className = "cm-md-footnote-badge";
     span.textContent = `${this.number}.`;
-    span.title = "跳回第一个引用";
+    span.title = t("跳回第一个引用");
     // 没有任何引用的定义不会被渲染成 widget，但保底不留空属性
     if (this.target >= 0) span.dataset.footnoteJump = String(this.target);
     return span;

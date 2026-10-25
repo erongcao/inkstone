@@ -21,6 +21,7 @@
 import { WidgetType } from "@codemirror/view";
 import { currentDocumentPath } from "@/ipc/document";
 import { resolveImageSrc } from "@/ipc/image";
+import { t } from "@/i18n";
 
 /** 已解析的图片地址 */
 const resolved = new Map<string, string>();
@@ -103,7 +104,7 @@ export function renderImage(
   // 占位：先给一个带骨架样式的框，图片到位后替换
   const placeholder = document.createElement("span");
   placeholder.className = "cm-md-image__placeholder";
-  placeholder.textContent = alt || "图片";
+  placeholder.textContent = alt || t("图片");
   Object.assign(placeholder.style, SKELETON);
   dom.appendChild(placeholder);
 
@@ -118,7 +119,7 @@ export function renderImage(
     .catch(() => {
       if (placeholder.parentNode !== dom) return;
       placeholder.classList.add("cm-md-image__placeholder--failed");
-      placeholder.textContent = alt || src || "图片加载失败";
+      placeholder.textContent = alt || src || t("图片加载失败");
       dom.title = src;
     });
 

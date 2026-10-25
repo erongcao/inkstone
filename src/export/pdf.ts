@@ -40,6 +40,7 @@ import type { ExportContext } from "./service";
 import type { ExportResult } from "./service";
 import { readSettings } from "@/settings/store";
 import { isBrowserFallback } from "@/ipc/export";
+import { t } from "@/i18n";
 
 /**
  * 生成打印用的 HTML。
@@ -117,7 +118,7 @@ export async function printToPdf(
   // 浏览器里没有 WebView 打印面板，如实报错
   // 静默失败会让用户以为 PDF 导出了，打开一看什么都没有
   if (isBrowserFallback()) {
-    const message = "浏览器降级模式无法导出 PDF，请在桌面应用里导出";
+    const message = t("浏览器降级模式无法导出 PDF，请在桌面应用里导出");
     return { ok: false, path: null, message, error: message };
   }
 
@@ -129,7 +130,7 @@ export async function printToPdf(
     return {
       ok: true,
       path,
-      message: "已打开打印面板，请选择「存储为 PDF」",
+      message: t("已打开打印面板，请选择「存储为 PDF」"),
       error: null,
     };
   } catch (error) {
@@ -137,7 +138,7 @@ export async function printToPdf(
     return {
       ok: false,
       path: null,
-      message: `PDF 导出失败：${message}`,
+      message: t("PDF 导出失败：{error}", { error: message }),
       error: message,
     };
   }

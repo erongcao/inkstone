@@ -41,6 +41,7 @@ import {
 } from "./registry";
 import { MENU_CHROME, SHORTCUTS } from "@/shortcuts";
 import type { ExportItemSetting } from "@/settings/schema";
+import { t } from "@/i18n";
 
 /** 解析后的导出项：一定能用 */
 export interface ResolvedExportItem {
@@ -306,10 +307,10 @@ export function shortcutConflict(
 ): string | null {
   if (!shortcut) return null;
   for (const key of taken) {
-    if (key === shortcut) return "已被其他导出项占用";
+    if (key === shortcut) return t("已被其他导出项占用");
   }
   const reserved = RESERVED_SHORTCUTS.find((item) => item.key === shortcut);
-  if (reserved) return `已被「${reserved.label}」占用`;
+  if (reserved) return t("已被「{label}」占用", { label: t(reserved.label) });
   return null;
 }
 

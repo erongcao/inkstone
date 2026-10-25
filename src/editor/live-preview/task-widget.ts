@@ -12,6 +12,7 @@
 
 import { WidgetType } from "@codemirror/view";
 import type { TaskItem } from "../render/task-list";
+import { t } from "@/i18n";
 
 export class TaskCheckboxWidget extends WidgetType {
   constructor(readonly item: TaskItem) {
@@ -23,7 +24,7 @@ export class TaskCheckboxWidget extends WidgetType {
     span.className = `cm-md-task${this.item.checked ? " cm-md-task--checked" : ""}`;
     span.setAttribute("role", "checkbox");
     span.setAttribute("aria-checked", String(this.item.checked));
-    span.setAttribute("aria-label", this.item.checked ? "取消勾选" : "勾选");
+    span.setAttribute("aria-label", this.item.checked ? t("取消勾选") : t("勾选"));
     span.textContent = this.item.checked ? "☑" : "☐";
     span.dataset.taskAt = String(this.item.from);
     return span;

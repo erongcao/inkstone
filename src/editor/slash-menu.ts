@@ -27,6 +27,7 @@ import type {
 } from "@codemirror/autocomplete";
 import { commandsFor, matchCommands, runCommand, type InkstoneCommand } from "./commands";
 import { getActiveEditorView } from "./active-view";
+import { t } from "@/i18n";
 
 /** 触发前缀 */
 const TRIGGER = "/";
@@ -89,8 +90,8 @@ function toOptions(
   hits: readonly { command: InkstoneCommand; score: number; matched: number[] }[],
 ): Completion[] {
   return hits.map((hit) => ({
-    label: hit.command.label,
-    detail: hit.command.category,
+    label: t(hit.command.label),
+    detail: t(hit.command.category),
     type: SLASH_OPTION_TYPE,
     apply: (view) => {
       runCommand(hit.command.id, view);
