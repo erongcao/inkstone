@@ -893,6 +893,29 @@
 }
 
 /*
+ * 检查更新对话框里的发布说明
+ *
+ * 发布说明是 Markdown 原文，这里按纯文本显示：
+ * 不引入 Markdown 渲染器（那是一整套依赖），
+ * 而且发布说明来自 GitHub——**当纯文本显示更安全**，
+ * 不会被当成 HTML 执行。
+ */
+.update-notes {
+  max-height: 220px;
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  overflow: auto;
+  background-color: var(--ink-bg-inset);
+  border-radius: var(--ink-radius);
+  font-family: var(--ink-mono-family, monospace);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink-fg-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/*
  * 标签栏
  * ═══════════════════════════════════════════════════════════ */
 

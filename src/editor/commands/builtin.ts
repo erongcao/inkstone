@@ -297,6 +297,19 @@ export function builtinCommands(): InkstoneCommand[] {
       },
     },
 
+    /* ── 应用（只在命令面板） ── */
+    {
+      id: "app.check-update",
+      label: "检查更新…",
+      category: "应用",
+      surfaces: ["palette"],
+      keywords: "update upgrade gengxin check",
+      run: () => {
+        emitIntent({ type: "app.check-update" });
+        return true;
+      },
+    },
+
     /* ── AI（只在命令面板） ── */
     {
       id: "ai.open",

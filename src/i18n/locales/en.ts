@@ -138,6 +138,8 @@ export const en: Record<string, string> = {
   "原文在等待期间被改过了，直接替换会覆盖你刚写的内容。请重新跑一次。":
     "The text changed while waiting; replacing now would overwrite what you just wrote. Please run it again.",
   去设置: "Open settings",
+  "发现新版本 {latest}（当前 {current}）":
+    "Version {latest} is available (you're on {current}).",
   发现未保存的改动: "Found unsaved changes",
   发送匿名使用统计: "Send anonymous usage statistics",
   取消: "Cancel",
@@ -170,6 +172,7 @@ export const en: Record<string, string> = {
   "复制为 Markdown 源码": "Copy as Markdown source",
   外观: "Appearance",
   大纲: "Outline",
+  好: "OK",
   始终显示字数统计: "Always show the word count",
   字号: "Font size",
   字数: "Word count",
@@ -214,11 +217,13 @@ export const en: Record<string, string> = {
   "已配置（输入新值可覆盖）": "Configured (type a new value to replace it)",
   并发上限: "Concurrency limit",
   幻灯片: "Slide deck",
+  应用: "App",
   引用: "Quote",
   "引用。": "reference.",
   弱化显示: "Dimmed",
   "弱化显示（Ulysses 式，标记可见）": "Dimmed (Ulysses style, markers visible)",
   "弱化显示（标记可见）": "Dimmed (markers visible)",
+  "当前已是最新版本（{version}）": "You're on the latest version ({version}).",
   当前时间: "Current time",
   "当前段落{chars}": "Current paragraph{chars}",
   "当前章节{chars}": "Current section{chars}",
@@ -242,6 +247,7 @@ export const en: Record<string, string> = {
   "打开…": "Open…",
   "打开一个文件夹，或直接打开一个 .md 文件。":
     "Open a folder, or open a .md file directly.",
+  打开下载页: "Open download page",
   打开的文档: "Open documents",
   扩写: "Expand",
   括号与引号: "Brackets and quotes",
@@ -322,13 +328,18 @@ export const en: Record<string, string> = {
     "Local inference, no quota consumed. Run ollama serve first.",
   本机存储不可用: "Local storage unavailable",
   查找: "Find",
+  查看发布页: "View releases",
   标记符显示: "Marker display",
   格式: "Format",
+  检查更新: "Check for Updates",
+  "检查更新…": "Check for Updates…",
+  "检查更新失败：{error}": "Couldn't check for updates: {error}",
   "模型 ID": "Model ID",
   "模型正在思考「{action}」…": "The model is thinking about “{action}”…",
   "模型没有返回任何内容。": "The model returned nothing.",
   正则表达式无效: "Invalid regular expression",
   "正在分析文档结构…": "Analyzing the document structure…",
+  "正在检查…": "Checking…",
   "正在生成「{action}」…": "Generating “{action}”…",
   "正在读取…": "Reading…",
   正文字体: "Body font",
@@ -371,6 +382,7 @@ export const en: Record<string, string> = {
   "确定要恢复所有设置为默认值吗？": "Reset all settings to their defaults?",
   确认: "OK",
   移除: "Remove",
+  稍后: "Later",
   "章节「{title}」{chars}": "Section “{title}”{chars}",
   端点: "Endpoint",
   "第 {row} 行": "Row {row}",
@@ -423,6 +435,7 @@ export const en: Record<string, string> = {
   该导出项已被移除: "This export item was removed",
   "该端点的模型不接受 temperature 参数，已禁用此设置。":
     "This endpoint's model doesn't accept the temperature parameter, so the setting is disabled.",
+  "请检查网络连接后重试。": "Check your network connection and try again.",
   "读取 YAML front matter 覆盖导出设置（不安全）":
     "Read YAML front matter to override export settings (unsafe)",
   "读取目录失败 ({path}): 样例库里没有这个目录":
@@ -432,6 +445,8 @@ export const en: Record<string, string> = {
   跳到脚注定义: "Jump to the footnote definition",
   跳回第一个引用: "Jump back to the first reference",
   "输入关键词开始搜索。": "Type a keyword to start searching.",
+  "还没有正式发布的版本。当前是 {version}":
+    "There's no published release yet. You're on {version}.",
   "还没有自定义变量。添加后可以在文件名模板与 HTML 追加内容里用":
     "No custom variables yet. Once added, you can use",
   "还没有选择文件夹。": "No folder selected yet.",

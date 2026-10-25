@@ -38,7 +38,14 @@ export type Intent =
    *
    * 带 `tab` 时直接落到那个分区（命令面板里「AI：润色」这类条目）。
    */
-  | { type: "ai.open"; tab?: "rewrite" | "summarize" };
+  | { type: "ai.open"; tab?: "rewrite" | "summarize" }
+  /**
+   * 检查更新。
+   *
+   * 原生菜单的「检查更新…」与命令面板里的是**同一个动作**——
+   * 两条入口，一条执行路径（都在 App 里落到 `runUpdateCheck`）。
+   */
+  | { type: "app.check-update" };
 
 type Listener = (intent: Intent) => void;
 

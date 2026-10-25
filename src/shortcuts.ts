@@ -332,6 +332,7 @@ export const MENU_ACTION_IDS = [
   "markdown-reference",
   "shortcuts",
   "open-homepage",
+  "check-update",
   // 「显示侧边栏」复选项：Rust 侧建了，前端目前还没接状态同步，
   // 但 id 必须登记——否则 Rust 侧的「菜单 id 都在清单里」测试会红。
   "check-sidebar",

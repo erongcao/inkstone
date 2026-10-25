@@ -221,11 +221,13 @@ fn build_help_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Submenu<tauri:
     let markdown_ref = action(app, "markdown-reference")?;
     let shortcuts = action(app, "shortcuts")?;
     let homepage = action(app, "open-homepage")?;
+    let check_update = action(app, "check-update")?;
 
     SubmenuBuilder::new(app, i18n::menu_title("help"))
         .item(&markdown_ref)
         .item(&shortcuts)
         .separator()
+        .item(&check_update)
         .item(&homepage)
         .build()
 }

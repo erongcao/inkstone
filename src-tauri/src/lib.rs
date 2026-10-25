@@ -4,21 +4,16 @@ mod document;
 mod fs;
 mod i18n;
 mod menu;
+mod openfile;
 mod pandoc;
 mod print;
 mod recent;
 mod search;
 mod shortcuts;
+mod update;
 mod watch;
 
-use tauri::{AppHandle, Emitter, Manager};
-// `RunEvent` 只在 macOS / iOS / Android 上用得到（见下），
-// 其它平台上它是未用 import —— clippy 的 `-D warnings` 会当错误报出来。
-#[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
-use tauri::RunEvent;
-
-/// 前端监听的事件名：从 Finder / 命令行打开文件时通知前端
-const OPEN_FILE_EVENT: &str = "document://open";
+use tauri::AppHandle;
 
 /// 设置界面语言，并重建原生菜单
 ///
@@ -74,42 +69,14 @@ pub fn run() {
             ai::secrets::ai_delete_secret,
             ai::http::ai_stream_chat,
             ai::http::ai_cancel_stream,
+            update::latest_release,
         ])
         .build(tauri::generate_context!())
         .expect("构建 Inkstone 失败");
 
     app.run(|app, event| {
-        /*
-         * `RunEvent::Opened` 只在 macOS / iOS / Android 上**存在**
-         * （tauri-2.12.4 `src/app.rs:261` 的 cfg 门控）。
-         *
-         * 不加同样的 cfg 的话，Linux / Windows 上这段代码**根本编译不过**——
-         * 而且本地 macOS 永远发现不了，只有 CI 在 Linux 上编译时才炸。
-         * （M5-5 三平台 CI 第一次实跑就撞上了这个。）
-         */
-        #[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
-        if let RunEvent::Opened { urls } = event {
-            // macOS：从 Finder 双击打开，或用 `open -a Inkstone file.md` 启动
-            for url in urls {
-                if url.scheme() == "file" {
-                    let path = url.to_file_path().ok();
-                    if let Some(path) = path {
-                        if let Err(err) = recent::record(app, &path) {
-                            eprintln!("记录最近文件失败: {err}");
-                        }
-                        if let Err(err) =
-                            app.emit(OPEN_FILE_EVENT, path.to_string_lossy().to_string())
-                        {
-                            eprintln!("转发打开文件事件失败: {err}");
-                        }
-                    }
-                }
-            }
-            // 唤醒窗口，避免应用在后台启动时用户看不到任何反馈
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.unminimize();
-                let _ = window.set_focus();
-            }
-        }
+        // 「用本应用打开某个文件」只有 macOS / iOS / Android 会上报，
+        // 平台差异全在 openfile 模块里（见那里的说明）。
+        openfile::handle(app, &event);
     });
 }

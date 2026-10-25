@@ -104,6 +104,7 @@ mod tests {
         "markdown-reference",
         "shortcuts",
         "open-homepage",
+        "check-update",
         "check-sidebar",
     ];
 

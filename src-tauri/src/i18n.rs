@@ -126,6 +126,12 @@ const MENU_LABELS: &[(&str, &str, &str, &str)] = &[
         "Keyboard Shortcuts",
     ),
     ("open-homepage", "项目主页", "專案首頁", "Project Homepage"),
+    (
+        "check-update",
+        "检查更新…",
+        "檢查更新…",
+        "Check for Updates…",
+    ),
     ("check-sidebar", "显示侧边栏", "顯示側邊欄", "Show Sidebar"),
 ];
 

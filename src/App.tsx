@@ -21,6 +21,7 @@ import { CommandPalette } from "@/views/CommandPalette";
 import { LinkPopover } from "@/views/LinkPopover";
 import { RecoveryDialog } from "@/views/RecoveryDialog";
 import { ConflictDialog } from "@/views/ConflictDialog";
+import { UpdateDialog } from "@/views/UpdateDialog";
 import { onIntent } from "@/editor/intents";
 import { startAutoSaveRuntime } from "@/document/autosave";
 import { exportDocument, type ExportResult } from "@/export/service";
@@ -28,6 +29,7 @@ import { findResolvedExportItem } from "@/export/items";
 import { readSettings } from "@/settings/store";
 import { openAiPanel, useAiPanel } from "@/ai/panel-store";
 import { useLocale } from "@/i18n";
+import { checkForUpdate, openUrl, type UpdateCheck } from "@/ipc/update";
 import { syncNativeLocale } from "@/i18n/native";
 import type { SettingsSectionId } from "@/settings/schema";
 import {
@@ -72,6 +74,12 @@ export default function App() {
     result: ExportResult | null;
   }>({ busy: null, result: null });
   const [sidebarVisible, setSidebarVisible] = useState(true);
+  /** 检查更新对话框的状态（结果与失败原因都在这里） */
+  const [updateCheck, setUpdateCheck] = useState<{
+    open: boolean;
+    result: UpdateCheck | null;
+    error: string | null;
+  }>({ open: false, result: null, error: null });
   const { open, save, saveAs, create } = useDocument();
   const [settings, update] = useSettings();
   // 待恢复的会话是**派生**出来的：候选在模块加载时就定好了，
@@ -104,6 +112,30 @@ export default function App() {
 
   // 文件监听：检测当前文档在外部被修改
   useEffect(() => startWatchRuntime(), []);
+
+  /**
+   * 检查有没有新版本。
+   *
+   * 「查」与「显示」分两步：先打开对话框显示「正在检查…」，
+   * 拿到结果再填进去——否则网络慢的时候点了菜单**什么反应都没有**，
+   * 用户会以为菜单坏了。
+   *
+   * 失败也要说清楚原因，并给一个「重试」——
+   * 静默失败是最坏的体验。
+   */
+  const runUpdateCheck = useCallback(async () => {
+    setUpdateCheck({ open: true, result: null, error: null });
+    try {
+      const result = await checkForUpdate();
+      setUpdateCheck({ open: true, result, error: null });
+    } catch (err) {
+      setUpdateCheck({
+        open: true,
+        result: null,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }, []);
 
   /**
    * 执行一次导出。
@@ -180,6 +212,10 @@ export default function App() {
             setExportRun({ busy: null, result: null });
           }
           break;
+        case "app.check-update":
+          // 原生菜单与命令面板是同一个动作，都落到这一处
+          void runUpdateCheck();
+          break;
         case "ai.open":
           openAiPanel(intent.tab ?? "rewrite");
           break;
@@ -191,6 +227,7 @@ export default function App() {
     save,
     update,
     runExport,
+    runUpdateCheck,
     settings.editor.focusMode,
     settings.editor.typewriterMode,
   ]);
@@ -215,6 +252,12 @@ export default function App() {
       onMenuAction("toggle-typewriter-mode", () =>
         update({ editor: { typewriterMode: !settings.editor.typewriterMode } }),
       ),
+      onMenuAction("check-update", () => void runUpdateCheck()),
+      // 「项目主页」之前是**注册了但没人处理**的菜单项——点了没反应。
+      onMenuAction(
+        "open-homepage",
+        () => void openUrl("https://github.com/erongcao/inkstone"),
+      ),
     ];
     return () => {
       for (const off of offs) off();
@@ -227,6 +270,7 @@ export default function App() {
     update,
     settings.editor.focusMode,
     settings.editor.typewriterMode,
+    runUpdateCheck,
   ]);
 
   return (
@@ -257,6 +301,15 @@ export default function App() {
           candidate={recovery}
           onRestore={() => applyRecovery(recovery)}
           onDiscard={() => discardRecovery()}
+        />
+      )}
+      {updateCheck.open && (
+        <UpdateDialog
+          result={updateCheck.result}
+          error={updateCheck.error}
+          onOpen={(url) => void openUrl(url)}
+          onClose={() => setUpdateCheck((state) => ({ ...state, open: false }))}
+          onRetry={() => void runUpdateCheck()}
         />
       )}
       <CommandPalette />

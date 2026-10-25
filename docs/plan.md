@@ -719,7 +719,7 @@ CM6 的 `EditorView.inputHandler` 扩展点实现，设置项 `editor.autoPairMo
 ### M5 · 跨平台（目标：4 周）
 - [ ] Windows x64 + ARM64 构建与打包
 - [ ] Linux `.deb` / `.rpm` / AppImage / Wayland 兼容
-- [ ] 自动更新
+- [x] 自动更新（最简形态：检查更新 → 打开下载页）
 - [x] i18n（简中 / 繁中 / 英文）
 - [x] 快捷键映射层（macOS ⌘ ↔ Win/Linux Ctrl 统一抽象）
 - **验收**：三平台 CI 全绿，各平台产出一个可安装包
@@ -789,6 +789,25 @@ CM6 的 `EditorView.inputHandler` 扩展点实现，设置项 `editor.autoPairMo
   （Outline / Files / Search、Live preview / New / AI / Save / Settings、字数统计、设置各分区、主题名）；
   切到繁體中文后同样整体变繁体（這份文檔還沒有標題 / 未命名 / 即時預覽 / 新建 / 儲存 / 設定 /
   0 詞 · 0 字元 / 外觀 / 編輯器 / 匯出 / 通用 / 恢復預設值 / 界面語言 / 自動儲存）
+
+#### M5-4 检查更新（最简形态）（2026-10-25）
+- ✅ **只做到「打开下载页」**：自动下载 / 自动安装 / 差分更新需要发布签名密钥、
+  增量包、跨平台安装器替换逻辑——而这个项目连第一个正式版本都还没发，
+  现在做那些等于给一个还不存在的发布流程写适配层
+- ✅ Rust 侧只做一次 HTTP GET（`src-tauri/src/update.rs`），
+  只取 `tag_name` / `html_url` / `body`
+- ✅ **版本比较放在 TS 那边**（`src/ipc/update.ts` 的 `compareVersions`），
+  能被 vitest 直接测到——「1.10.0 比 1.9.0 新」字符串比较会反过来，
+  正是要靠测试钉住的地方
+- ✅ 两条入口一条执行路径：原生菜单「帮助 → 检查更新…」+
+  命令面板「应用 → 检查更新…」→ 都落到 `runUpdateCheck()`
+- ✅ 浏览器里也能用（没有 Tauri 运行时就直接 fetch GitHub 公开 API），
+  所以这个对话框在浏览器里能真跑起来验收
+- ✅ 顺带修好一个**死菜单项**：「项目主页」注册了却没人处理，点了没反应
+  （M5-2 的检查只管「id 在不在清单里」，管不到「有没有人真的处理」）
+- ✅ 测试 13 条（版本比较 7 + 对话框 6）；Rust 4 条（release 字段解析）
+- ✅ 验收（浏览器 UI）：命令面板 → 应用 → 检查更新… →
+  「还没有正式发布的版本。当前是 0.1.0」（仓库目前只有 draft release）
 
 ### 长期（P2+，不排期）
 GitHub Alerts / 脚注 / RTL / 插件系统 / 主题市场 / 图片图床 / EPUB 精修 / RevealJS 幻灯片 / 多人协作

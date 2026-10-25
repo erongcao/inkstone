@@ -21,6 +21,7 @@
     "markdown-reference",
     "shortcuts",
     "open-homepage",
+    "check-update",
     "check-sidebar"
   ],
   "accelerators": {
