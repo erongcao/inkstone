@@ -1459,6 +1459,168 @@ pandoc 是 GPL-2.0，但**以独立进程调用、不链接**，与 Typora 的�
 而状态要等 React 跑完 effect 才换。所以偏移先记在 store 里（`pendingScroll`），
 由编辑器换完状态之后取走执行。
 
+## M4：导出（2026-10-25）
+
+### 三条路径，不是三条 if-else
+
+导出项注册表（`src/export/registry.ts`）是**格式的唯一清单**，分三种 `kind`：
+
+| kind | 谁产出 | 为什么这样分 |
+|---|---|---|
+| `html` | 前端自己 | 要内嵌主题 CSS、代码高亮、可选大纲 |
+| `pandoc` | pandoc 进程 | 二进制格式（docx/epub/odt）没法在前端造 |
+| `pdf` | WebView 打印 | 本机无 LaTeX/wkhtmltopdf（实测全无） |
+
+分类不是为了「以后好扩展」，而是**三者的失败模式完全不同**：
+pandoc 没装是「不可用」，PDF 是「弹系统面板」，HTML 是「写文件」。
+UI 必须区别对待，不能一律显示成「导出失败」。
+
+### pandoc：独立进程调用，不是链接
+
+pandoc 是 GPL-2.0 的 Haskell 程序，本项目是 MIT——**不能链接或内嵌**，
+那会让整个应用变成 GPL 作品。以独立进程调用则合法（调用方不被传染）。
+`scripts/check-licenses.mjs` 的 `EXCEPTIONS` 里已有对应条目。
+
+### pandoc 的二进制不经 JS 边界
+
+docx / epub / odt 是 zip 容器。走「Rust → base64 → JS → base64 → Rust」
+的话，1 MB 的 docx 会在 IPC 上产生约 2.7 MB 的字符串——纯浪费。
+
+所以命令分两段：前端弹「另存为」拿到路径 → 把 **Markdown 文本**（+ 目标路径）
+传给 Rust → Rust 启动 pandoc，**Markdown 从 stdin 灌进去**，pandoc **直接写目标文件**。
+二进制一个字节都不穿过 JS 边界。
+
+### pandoc 的 Markdown 扩展要显式对齐
+
+pandoc 默认的 `markdown` 读写器**不含** `$...$` 行内公式（那是 `tex_math_dollars` 扩展）。
+本项目的解析层（remark-math）默认开启单 `$`，所以要显式加上：
+
+```
+--from=markdown+tex_math_dollars+yaml_metadata_block
+```
+
+这正是「解析规则唯一」（红线 3）在跨工具场景下的样子——
+同一份内容在编辑器与 pandoc 里必须解析成同样的结构。
+
+### pandoc 的警告必须带回给用户
+
+实测：pandoc 转 docx/odt/epub 时遇到块级公式会警告
+「Could not convert TeX math … rendering as TeX」——
+也就是说 **Word 里的公式会变成一段 TeX 源码**。
+
+用户打开文件才发现公式不对，却完全不知道原因；而这个信息 pandoc 已经告诉我们了。
+所以 `convert_with_pandoc` 返回 `{ warnings }`，UI 如实显示，且**有警告时不自动关面板**。
+
+### 导出侧的代码高亮要单独做
+
+编辑器里的代码高亮走 CodeMirror 装饰器（`src/editor/render/code-block.ts`），
+而 `markdownToHtml` 走 remark-rehype，**不做**高亮——导出的 HTML 里代码块是纯文本。
+
+导出侧用 `highlightCodeBlocks()` 补上。它复用编辑器**同一套** highlight.js
+（`highlightCode` / `resolveLanguage`），所以两边颜色一致。
+
+**坑：HTML 实体要解码两轮。**
+`remark-rehype` 把代码放进 hast 的 text 节点，序列化时 `&` 会被转义成 `&amp;`，
+于是 `<div>` 变成 `&amp;#x3C;div&amp;gt;`。只解一轮拿到的是 `&#x3C;`（还是实体），
+highlight.js 会把它当普通字符，输出 `&amp;#x3C;`——页面上显示成一层实体套一层。
+必须解到**原文**为止（先命名实体、再数字实体）。
+
+### 导出的 HTML 缺 KaTeX CSS = 公式显示成两份
+
+KaTeX 输出的 HTML 里同时有视觉版（`.katex-html`）与给读屏软件用的
+MathML 副本（`.katex-mathml`）。靠 `.katex-mathml { position: absolute }` 把后者藏起来。
+
+少了这条规则，导出的文件里每条公式都显示成「KaTeX 渲染结果 + 一串裸 LaTeX」两份——
+读者完全无法使用。
+
+而 KaTeX 的 CSS 是跟着 `math-render` chunk **动态注入**的（不是 `?raw` 静态导入）。
+所以导出前必须 `await ensureMathRenderer()`，保证那张样式表已经在 DOM 里。
+
+**vitest 里 `?raw` 对 CSS 不生效**（vitest 对 CSS 资源的处理返回空模块）。
+于是 `katexStylesheet()` 的两条取法在测试里都落空 → 导出的公式错乱 → **测试却通过**。
+修法：`tests/setup.ts` 里把 KaTeX 的 CSS 注入 DOM，让测试环境与真机行为一致。
+（`document.styleSheets` 那条兜底路径在 jsdom 里完全可用，已实测。）
+
+### 变量系统只在「导出产物」上替换
+
+变量形如 `${title}`、`${today}`，用在文件名模板与 HTML 的 head/body 追加内容里。
+
+**绝不替换文档正文**——正文是单一真相源（红线 1）。
+替换只发生在离开文档之后的字符串上。
+
+未定义的变量**原样保留**（不静默清空）：静默清空会让用户以为变量生效了却查不出哪里错。
+
+### 日期用本地时区，不用 `toISOString()`
+
+`toISOString()` 是 **UTC**。本地时间晚上 8 点会显示成第二天，差一整天。
+「今天」在晚上变成明天，是那种很难被报出来的 bug。
+
+### front matter 覆盖导出设置：只开放安全的那几项
+
+`readExportSettingsFromFrontMatter` 默认**关闭**。开启后也只认白名单里的键：
+
+- `export.html.includeOutline`、`export.pdf.paperSize`
+- `fileNameTemplate`、`variables`
+
+**不开放** `openFolderAfterExport` / `openFileAfterExport`：
+那是「导出完自动打开文件/文件夹」——如果一份来路不明的 .md 能让导出动作
+自动打开任意路径，那是个安全洞。
+
+**front matter 只能影响「产出什么」，不能影响「产出之后做什么」。**
+
+未知键一律忽略（front matter 常塞着别的工具的配置：Obsidian 的 tags、Hugo 的 draft）。
+校验失败（`paperSize: A3`）也只忽略该字段，不让整个导出失败——
+用户不该因为 front matter 里一个笔误就导不出东西。
+
+### YAML 解析用 `yaml` 包，不自己写
+
+`remark-frontmatter` 只把 front matter 当成**原始文本块**放进 mdast（实测节点是
+`{ type: "yaml", value: "title: …" }`），不做任何解析。
+
+自己写 YAML 解析器是无底洞（锚点、别名、多行标量、流式映射、类型推断……），
+而 front matter 里的内容是**用户写的**，必须由**完整的**解析器保证「写什么都能读出来」。
+半个解析器遇上稍复杂的文件就静默丢字段——那比报错更糟。
+
+`yaml` 包是 ISC 许可，在 `scripts/check-licenses.mjs` 的白名单里。
+
+### 文件名清理只有一份实现
+
+文件名可能来自两处（文档标题、文件名模板），两处都要过同一道清理。
+所以清理函数住在 `registry.ts`（低层依赖），`service.ts` 反过来 import 它。
+
+清理规则：只保留最后一段（路径分隔符切开）、去控制字符、
+Windows 禁止的 `< > : " | ? *` 换 `_`、去前导的点（`.hidden` 是隐藏文件）。
+
+**逐字符处理而不用正则**：正则里的 `\u0000-\u001f` 会触发 eslint 的 `no-control-regex`；
+字符码判断没这个问题，顺带 `for...of` 按码点迭代不会把 emoji 拆成两半。
+
+### 浏览器降级：区分「取消」与「没有对话框」
+
+浏览器里没有保存对话框。`pickExportPath` 返回 `null` 有两种含义：
+
+- 浏览器降级模式 → 该走下载路径把内容产出出来
+- 用户取消了对话框 → 该停下，什么都不产出
+
+混为一谈的话，浏览器里点导出什么都不会发生，而提示还写着「已取消导出」——
+那是在**撒谎**。所以导出流程用 `isBrowserFallback()` 区分两者。
+
+（早先的 bug：`pickExportPath` 在降级模式下触发了一次**空内容**下载，
+而 `writeTextFile` 又下载一次——两个文件，第一个是空的。）
+
+### PDF 走系统打印面板
+
+本机没有 LaTeX / wkhtmltopdf / weasyprint / typst / libreoffice（实测全无）。
+macOS 的 WKWebView 提供 `printOperation:`，弹出的打印面板里有「PDF → 存储为 PDF」。
+
+流程：生成打印专用 HTML（带 `@page { size: A4 }`）→ 写临时文件 →
+开临时 WebView 窗口加载它 → 页面加载完后调 `print()`。
+
+- **用临时文件而不是 data: URL**：data URL 有长度限制（WKWebView 约 2 MB），
+  带内联 CSS 的文档很容易超过
+- **窗口要显示**：打印面板是系统级的，用户仍需看到「要打印的是什么」
+- **`@page` 的 size 由设置里的 `pdfPaperSize` 决定**——纸张尺寸是用户选的，不能猜
+- **打印版要重设宽度**：屏幕上用的是 46rem 居中窄栏，打印要占满纸张宽度
+
 ## 目录
 
 ```
@@ -1466,13 +1628,13 @@ src/parser/     Markdown 解析层（唯一语义来源，remark/mdast）
 src/editor/     编辑内核（CM6 封装 + live-preview 装饰器插件）
   └ render/     块级渲染层（M2：代码块 / 表格 / 公式 / 图表 共用的机制）
 src/renderer/   渲染层（高亮/公式/图表）
-src/export/     导出管线
+src/export/     导出管线（M4：注册表 / 变量 / front matter / HTML / PDF）
 src/settings/   设置模型与存储
 src/theme/      主题注册表与运行时
 src/ipc/        与 Rust 侧接口
 src/document/   文档生命周期（自动保存 / 崩溃恢复 / 外部修改冲突）
 src/dev/        开发期测量台（不进生产包）
-src-tauri/src/  Rust 后端（document / menu / recent / fs / search / watch）
+src-tauri/src/  Rust 后端（document / menu / recent / fs / search / watch / pandoc / print）
 tests/corpus/   round-trip 语料库
 scripts/        开发工具脚本（bench-parser / bench-decorations / verify-incremental / dump-lezer-tree / check-licenses）
 perf.html       Live Preview 性能测量台（vite dev 下访问 /perf.html）
@@ -1544,5 +1706,26 @@ M3 进行中（文件管理）：
   每页独立的撤销历史（换整个 EditorState）、独立的脏标记；
   崩溃恢复存整个会话
 
-M3 全部完成（2026-10-23）。M4（导出）尚未开始。
+M3 全部完成（2026-10-23）。M4（导出）进行中（2026-10-25）：
+
+- **导出项注册表**（`src/export/registry.ts`）：HTML / PDF / pandoc 七种格式，
+  按 `kind` 分三条路径（前端产出 / pandoc 进程 / WebView 打印），
+  三者失败模式不同，UI 分别对待
+- **pandoc 桥**（`src-tauri/src/pandoc.rs`）：独立进程调用（GPL 不传染），
+  二进制不经 JS 边界（Markdown 从 stdin 进、pandoc 直接写目标文件）；
+  显式对齐 `tex_math_dollars` 扩展；pandoc 的警告如实带回给用户
+  （实测：转 Word 时块级公式会降级成 TeX 源码）
+- **HTML 导出**（`src/export/html.ts`）：单文件自包含网页，内嵌主题 CSS +
+  代码高亮（复用编辑器同一套 highlight.js）+ KaTeX 公式 + 可选大纲 +
+  可追加 head/body
+- **导出变量系统**：`${title}` `${author}` `${today}` 等，只在**导出产物**上替换，
+  绝不碰文档正文；未定义的变量原样保留
+- **YAML front matter 覆盖导出设置**：默认关闭；开启后只开放安全的那几项，
+  不开放「导出后自动打开文件/文件夹」（安全边界）
+- **PDF 导出**：本机无 LaTeX/wkhtmltopdf（实测全无）→ 走 macOS 系统打印面板
+  （临时 WebView 窗口 + `print()` + `@page { size }`）
+- **导出面板 UI**：⌘E / 原生菜单「文件 → 导出…」/ 命令面板三入口；
+  pandoc 未安装时那一组显示为不可用并说明原因（不藏起来，也不点了才报错）
+- **验收**：同一份文档导出 HTML 与 DOCX，内容语义一致——已用真实 pandoc 实证
+  （标题/粗体/斜体/代码/公式/表格全部保真）
 

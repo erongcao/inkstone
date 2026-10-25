@@ -5,6 +5,8 @@
  */
 
 import { beforeEach, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 
 // 注意：这里**不需要**再为高亮库做实例对齐。
 // 旧的 Prism 实现里，语言组件是副作用式注册到全局 `Prism` 上的，
@@ -70,6 +72,38 @@ if (!Range.prototype.getClientRects) {
 }
 if (!Range.prototype.getBoundingClientRect) {
   Range.prototype.getBoundingClientRect = emptyRect as unknown as Range["getBoundingClientRect"];
+}
+
+/**
+ * 注入 KaTeX 的样式表。
+ *
+ * ## 为什么需要这一步
+ *
+ * `src/parser/rehype-math.ts` 的 `katexStylesheet()` 有两条取法：
+ *   1. `?raw` import —— **vitest 里不生效**（vitest 对 CSS 资源的处理会返回空模块，
+ *      不像 Vite 那样把文件内容当字符串打进来）
+ *   2. 运行时从 `document.styleSheets` 找含 `.katex` 的样式表
+ *
+ * 第 2 条在 dev 与生产里都有效（KaTeX 的 CSS 是跟着 `math-render` chunk 注入的），
+ * 但测试环境里没有任何 CSS 被注入，所以两条都拿不到 → 拿到的样式表是空串。
+ *
+ * 这不是「测试环境的小毛病」：导出的 HTML 里少了 KaTeX 的样式表，
+ * `.katex-mathml { position: absolute }` 这条规则就没了——
+ * 那是用来把「给读屏软件用的 MathML 副本」藏起来的规则。
+ * 少了它，导出的文件里每条公式都会显示成「KaTeX 渲染结果 + 一串裸 LaTeX」两份。
+ *
+ * 所以这里把 KaTeX 的 CSS 注入 DOM，让测试环境与真机行为一致，
+ * 测试才能真正挡住「导出公式错乱」这个 bug。
+ */
+try {
+  const katexCssPath = createRequire(import.meta.url).resolve("katex/dist/katex.min.css");
+  const katexStyle = document.createElement("style");
+  katexStyle.id = "inkstone-test-katex-css";
+  katexStyle.textContent = readFileSync(katexCssPath, "utf-8");
+  document.head.appendChild(katexStyle);
+} catch {
+  // 拿不到就让 katexStylesheet() 走它自己的兜底——
+  // 相关的用例会因此失败，那正是我们想看到的（不能静默通过）
 }
 
 // 每个测试前清掉设置，避免用例之间互相污染

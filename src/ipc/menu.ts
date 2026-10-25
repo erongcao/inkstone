@@ -10,6 +10,7 @@ export type MenuAction =
   | "open-document"
   | "save-document"
   | "save-document-as"
+  | "export-document"
   | "preferences"
   | "find"
   | "replace"
@@ -62,6 +63,7 @@ export async function initMenuBridge(): Promise<void> {
     "open-document",
     "save-document",
     "save-document-as",
+    "export-document",
     "preferences",
     "find",
     "replace",

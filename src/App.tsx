@@ -15,6 +15,7 @@ import { EditorSurface } from "@/views/EditorSurface";
 import { TabBar } from "@/views/TabBar";
 import { StatusBar } from "@/views/StatusBar";
 import { SettingsPanel } from "@/views/SettingsPanel";
+import { ExportPanel } from "@/views/ExportPanel";
 import { CommandPalette } from "@/views/CommandPalette";
 import { LinkPopover } from "@/views/LinkPopover";
 import { RecoveryDialog } from "@/views/RecoveryDialog";
@@ -39,6 +40,7 @@ export default function App() {
   useThemeRuntime();
 
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const [sidebarVisible, setSidebarVisible] = useState(true);
   const { open, save, saveAs, create } = useDocument();
   const [settings, update] = useSettings();
@@ -104,6 +106,9 @@ export default function App() {
         case "file.save":
           void save();
           break;
+        case "file.export":
+          setExportOpen(true);
+          break;
       }
     });
     return off;
@@ -117,6 +122,7 @@ export default function App() {
       onMenuAction("save-document", () => void save()),
       onMenuAction("save-document-as", () => void saveAs()),
       onMenuAction("preferences", () => setSettingsOpen(true)),
+      onMenuAction("export-document", () => setExportOpen(true)),
       onMenuAction("toggle-sidebar", () => setSidebarVisible((v) => !v)),
       onMenuAction("toggle-focus-mode", () =>
         update({ editor: { focusMode: !settings.editor.focusMode } }),
@@ -147,6 +153,7 @@ export default function App() {
       </main>
       <StatusBar />
       {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
+      {exportOpen && <ExportPanel onClose={() => setExportOpen(false)} />}
       {recovery && (
         <RecoveryDialog
           candidate={recovery}

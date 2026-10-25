@@ -153,6 +153,58 @@ export interface ExportSettings {
   htmlIncludeOutline: boolean;
   /** 是否读取 YAML front matter 覆盖导出设置（安全相关，默认关闭） */
   readExportSettingsFromFrontMatter: boolean;
+  /**
+   * 导出文件名模板。
+   *
+   * 支持 `${变量名}` 语法（见 `src/export/variables.ts`）。
+   * 空串 = 用文档标题。模板里**不允许路径分隔符**——
+   * 「导出到哪里」由保存对话框决定，模板只管叫什么名字。
+   */
+  fileNameTemplate: string;
+  /**
+   * 追加进 HTML 导出的 `<head>` 的原始 HTML。
+   *
+   * 用途是加 `<meta>`、`<link>`（外链字体）、`<script>` 之类。
+   * 注意：这段内容会**原样**进入导出文件，它由用户自己写。
+   */
+  htmlExtraHead: string;
+  /** 追加进 HTML 导出的 `<body>` 末尾的原始 HTML */
+  htmlExtraBody: string;
+  /**
+   * 用户自定义的导出变量。
+   *
+   * 数组而非对象：顺序要稳定（面板里是列表），
+   * 而且同名变量可以按顺序覆盖（后者优先）。
+   */
+  variables: ExportVariableSetting[];
+}
+
+/**
+ * 一个用户自定义的导出变量。
+ *
+ * 这里的形状与 `src/export/variables.ts` 的 `ExportVariable` 一致，
+ * 但放在 schema 里是因为它要**持久化**——设置文件是 JSON，
+ * 只能存纯数据。
+ */
+export interface ExportVariableSetting {
+  /** 引用时用的名字（不含 `${}`） */
+  name: string;
+  /** 取值来源 */
+  source:
+    | "title"
+    | "author"
+    | "date"
+    | "filename"
+    | "filenameNoExt"
+    | "path"
+    | "directory"
+    | "today"
+    | "now"
+    | "words"
+    | "chars"
+    | "custom";
+  /** `source === "custom"` 时的文本 */
+  value?: string;
 }
 
 export interface GeneralSettings {
@@ -287,6 +339,10 @@ export const DEFAULT_SETTINGS: Settings = {
     pdfPaperSize: "A4",
     htmlIncludeOutline: true,
     readExportSettingsFromFrontMatter: false,
+    fileNameTemplate: "",
+    htmlExtraHead: "",
+    htmlExtraBody: "",
+    variables: [],
   },
   general: {
     language: "zh-CN",

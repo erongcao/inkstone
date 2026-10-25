@@ -110,6 +110,16 @@ async fn read_text_file(path: &PathBuf) -> Result<String, String> {
         .unwrap_or(content))
 }
 
+/// 把导出的文本写到磁盘。
+///
+/// 只服务 HTML 导出（文本）。二进制格式（docx / epub / odt）由 pandoc 自己写文件，
+/// 不经过这里——那是为了避免二进制在 IPC 上被展开成 base64 文本，
+/// 详见 `pandoc.rs` 的开头说明。
+#[tauri::command]
+pub async fn write_export_file(path: String, content: String) -> Result<(), String> {
+    write_text_file(Path::new(&path), &content).await
+}
+
 /// 原子写入：先写同目录临时文件，再 rename 覆盖
 async fn write_text_file(path: &Path, content: &str) -> Result<(), String> {
     let dir = path

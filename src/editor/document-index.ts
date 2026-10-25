@@ -16,6 +16,7 @@
 
 import { useSyncExternalStore } from "react";
 import type { Node, Parent } from "mdast";
+import type { MarkdownAst } from "@/parser/markdown";
 import { parseMarkdownSync, primeMarkdownParser } from "@/parser/markdown-loader";
 import { countWords } from "./stats";
 
@@ -89,7 +90,19 @@ function collectBodyText(node: Node, parts: string[]): void {
 export function buildIndex(source: string): DocumentIndex | null {
   const tree = parseMarkdownSync(source);
   if (!tree) return null;
+  return buildIndexFromTree(tree);
+}
 
+/**
+ * 从**已解析**的 mdast 树建立索引。
+ *
+ * 与 `buildIndex` 的区别：后者走 `parseMarkdownSync`——解析器没加载完时返回 null。
+ * 而导出是一次性动作（用户点一下），不该因为「remark 的懒加载 chunk 还没到」
+ * 就把词数算成 0。所以导出侧用**静态导入**的 `parseMarkdown` 先解析，再调这里。
+ *
+ * 拆成两个函数是为了不重复实现「标题收集 + 正文字数统计」那二十行。
+ */
+export function buildIndexFromTree(tree: MarkdownAst): DocumentIndex {
   const outline: OutlineItem[] = [];
   for (const child of tree.children) {
     if (child.type !== "heading" || !child.position) continue;

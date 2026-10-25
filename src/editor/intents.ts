@@ -19,7 +19,8 @@ export type Intent =
   | "view.toggle-focus-mode"
   | "view.toggle-typewriter-mode"
   | "file.new"
-  | "file.save";
+  | "file.save"
+  | "file.export";
 
 type Listener = (intent: Intent) => void;
 

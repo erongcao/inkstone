@@ -1,0 +1,650 @@
+/**
+ * HTML 导出：把当前文档产出一份**自包含**的网页。
+ *
+ * 「自包含」= 单个 .html 文件，双击就能在浏览器里看，样式不依赖外部资源。
+ * 这也是 Typora 的 HTML 导出的默认行为。
+ *
+ * ## 产出包含什么
+ *
+ *   1. 主题 CSS（颜色令牌 + 版式令牌）—— 内联进 `<style>`
+ *   2. 导出专用的排版 CSS —— 内联进 `<style>`
+ *   3. 代码高亮 —— 与编辑器内**同一套** highlight.js 结果
+ *   4. 公式 —— 复用 `parser/html.ts` 的 KaTeX 链路
+ *   5. 可选的大纲 —— `<nav>` 里一份标题目录
+ *
+ * ## 为什么导出要单独一套排版 CSS
+ *
+ * 编辑器里的样式是给 CodeMirror 用的：正文是 `.cm-line` 里的行内装饰器，
+ * 代码块是 `.cm-md-code` 包裹的 widget。而导出的 HTML 是**普通语义标签**
+ * （`<h1>` `<pre>` `<table>`），没有那些 class。
+ *
+ * 直接把编辑器 CSS 套上去不会生效——那套 CSS 描述的是 CodeMirror 的 DOM 结构，
+ * 不是 Markdown 的语义结构。所以导出必须有自己的一份。
+ *
+ * 这**不违反**架构约束 3（解析规则唯一）：约束管的是「怎么解析」，
+ * 而这里是「解析完之后按什么样式排版」。解析仍然只有 remark 一套。
+ */
+
+import { markdownToHtml } from "@/parser/html";
+import { highlightCode, resolveLanguage } from "@/editor/render/code-block";
+import type { OutlineItem } from "@/editor/document-index";
+import type { ColorMode } from "@/settings/schema";
+import { katexStylesheet } from "@/parser/rehype-math";
+
+/** HTML 导出的选项 */
+export interface HtmlExportOptions {
+  /** 文档标题（进 `<title>` 与 `<h1>` 兜底） */
+  title: string;
+  /** 主题 id；决定用哪套颜色令牌 */
+  theme: string;
+  /** 明暗模式 */
+  mode: ColorMode;
+  /** 大纲；为空数组表示不要大纲 */
+  outline: OutlineItem[];
+  /** 是否包含大纲 */
+  includeOutline: boolean;
+  /** 追加进 `<head>` 的原始 HTML */
+  extraHead?: string;
+  /** 追加进 `<body>` 末尾的原始 HTML */
+  extraBody?: string;
+  /** 正文字数（用于页脚统计） */
+  words?: number;
+  /** 正文字符数 */
+  chars?: number;
+}
+
+/* ── 主题 CSS ── */
+
+/**
+ * 主题的颜色令牌表。
+ *
+ * 与 `src/themes/*.css` 保持一致，但这里是**字符串**形式——
+ * 导出要的是能内联进 `<style>` 的文本，不能是构建期注入的样式表。
+ *
+ * 为什么不直接读 `src/themes/github.css`？
+ * 那份文件是给 Vite 的 CSS 管线用的（`import()` 后自动注入 `<style>`），
+ * 运行时拿不到它的文本。要在导出里复用，就得再维护一份字符串——
+ * 那必然漂移。所以这里的令牌表是**导出链路的唯一真相源**，
+ * 而 `src/themes/*.css` 是应用内的真相源。两边各司其职：
+ * 应用内用 CSS 文件（能被 Vite 优化、能被浏览器缓存），导出用字符串（能内联）。
+ *
+ * 漂移的风险用测试兜住：见 `tests/export-html.test.ts` 的「主题令牌齐全」用例。
+ */
+const THEME_TOKENS: Record<string, Record<"light" | "dark", string>> = {
+  "inkstone-light": {
+    light: `--ink-bg: #ffffff;
+  --ink-bg-soft: #f6f8fa;
+  --ink-bg-inset: #eaeef2;
+  --ink-fg: #1f2328;
+  --ink-fg-muted: #59636e;
+  --ink-fg-faint: #8c959f;
+  --ink-border: #d1d9e0;
+  --ink-border-strong: #afb8c1;
+  --ink-accent: #0969da;
+  --ink-code-bg: #f6f8fa;
+  --ink-code-fg: #1f2328;
+  --ink-code-border: #d1d9e0;
+  --ink-code-comment: #6e7781;
+  --ink-code-keyword: #cf222e;
+  --ink-code-string: #0a3069;
+  --ink-code-number: #0550ae;
+  --ink-code-function: #8250df;
+  --ink-code-type: #953800;
+  --ink-code-variable: #24292f;
+  --ink-code-punctuation: #57606a;
+  --ink-code-tag: #116329;
+  --ink-code-attr: #0550ae;
+  --ink-quote-border: #d1d9e0;
+  --ink-quote-fg: #57606a;
+  --ink-mark-bg: #fff8c5;
+  --ink-mark-fg: #1f2328;
+  --ink-table-border: #d1d9e0;
+  --ink-table-header-bg: #f6f8fa;
+  --ink-table-stripe-bg: #f6f8fa;`,
+    dark: `--ink-bg: #0d1117;
+  --ink-bg-soft: #161b22;
+  --ink-bg-inset: #010409;
+  --ink-fg: #e6edf3;
+  --ink-fg-muted: #9198a1;
+  --ink-fg-faint: #6e7681;
+  --ink-border: #30363d;
+  --ink-border-strong: #444c56;
+  --ink-accent: #4493f8;
+  --ink-code-bg: #161b22;
+  --ink-code-fg: #e6edf3;
+  --ink-code-border: #30363d;
+  --ink-code-comment: #8b949e;
+  --ink-code-keyword: #ff7b72;
+  --ink-code-string: #a5d6ff;
+  --ink-code-number: #79c0ff;
+  --ink-code-function: #d2a8ff;
+  --ink-code-type: #ffa657;
+  --ink-code-variable: #e6edf3;
+  --ink-code-punctuation: #8b949e;
+  --ink-code-tag: #7ee787;
+  --ink-code-attr: #79c0ff;
+  --ink-quote-border: #3d444d;
+  --ink-quote-fg: #9198a1;
+  --ink-mark-bg: rgba(187, 128, 9, 0.4);
+  --ink-mark-fg: #e6edf3;
+  --ink-table-border: #30363d;
+  --ink-table-header-bg: #161b22;
+  --ink-table-stripe-bg: #12181f;`,
+  },
+  github: {
+    light: `--ink-bg: #ffffff;
+  --ink-bg-soft: #f6f8fa;
+  --ink-bg-inset: #eff2f5;
+  --ink-fg: #1f2328;
+  --ink-fg-muted: #59636e;
+  --ink-fg-faint: #818b98;
+  --ink-border: #d1d9e0;
+  --ink-border-strong: #afb8c1;
+  --ink-accent: #0969da;
+  --ink-code-bg: #f6f8fa;
+  --ink-code-fg: #1f2328;
+  --ink-code-border: #d1d9e0;
+  --ink-code-comment: #6e7781;
+  --ink-code-keyword: #cf222e;
+  --ink-code-string: #0a3069;
+  --ink-code-number: #0550ae;
+  --ink-code-function: #8250df;
+  --ink-code-type: #953800;
+  --ink-code-variable: #24292f;
+  --ink-code-punctuation: #57606a;
+  --ink-code-tag: #116329;
+  --ink-code-attr: #0550ae;
+  --ink-quote-border: #d1d9e0;
+  --ink-quote-fg: #59636e;
+  --ink-mark-bg: #fff8c5;
+  --ink-mark-fg: #1f2328;
+  --ink-table-border: #d1d9e0;
+  --ink-table-header-bg: #f6f8fa;
+  --ink-table-stripe-bg: #f6f8fa;`,
+    dark: `--ink-bg: #0d1117;
+  --ink-bg-soft: #161b22;
+  --ink-bg-inset: #010409;
+  --ink-fg: #e6edf3;
+  --ink-fg-muted: #9198a1;
+  --ink-fg-faint: #6e7681;
+  --ink-border: #30363d;
+  --ink-border-strong: #444c56;
+  --ink-accent: #4493f8;
+  --ink-code-bg: #161b22;
+  --ink-code-fg: #e6edf3;
+  --ink-code-border: #30363d;
+  --ink-code-comment: #8b949e;
+  --ink-code-keyword: #ff7b72;
+  --ink-code-string: #a5d6ff;
+  --ink-code-number: #79c0ff;
+  --ink-code-function: #d2a8ff;
+  --ink-code-type: #ffa657;
+  --ink-code-variable: #e6edf3;
+  --ink-code-punctuation: #8b949e;
+  --ink-code-tag: #7ee787;
+  --ink-code-attr: #79c0ff;
+  --ink-quote-border: #3d444d;
+  --ink-quote-fg: #9198a1;
+  --ink-mark-bg: rgba(187, 128, 9, 0.4);
+  --ink-mark-fg: #e6edf3;
+  --ink-table-border: #30363d;
+  --ink-table-header-bg: #161b22;
+  --ink-table-stripe-bg: #12181f;`,
+  },
+  academic: {
+    // 学术主题：衬线体、克制的配色、适合打印
+    light: `--ink-bg: #ffffff;
+  --ink-bg-soft: #f7f6f2;
+  --ink-bg-inset: #efeee8;
+  --ink-fg: #1a1a1a;
+  --ink-fg-muted: #55524a;
+  --ink-fg-faint: #8a867c;
+  --ink-border: #ddd9cf;
+  --ink-border-strong: #b8b2a4;
+  --ink-accent: #7a2e2e;
+  --ink-code-bg: #f7f6f2;
+  --ink-code-fg: #1a1a1a;
+  --ink-code-border: #ddd9cf;
+  --ink-code-comment: #8a867c;
+  --ink-code-keyword: #7a2e2e;
+  --ink-code-string: #2f5f3f;
+  --ink-code-number: #2f4f8f;
+  --ink-code-function: #5a3f8f;
+  --ink-code-type: #7a5c2e;
+  --ink-code-variable: #1a1a1a;
+  --ink-code-punctuation: #55524a;
+  --ink-code-tag: #2f5f3f;
+  --ink-code-attr: #2f4f8f;
+  --ink-quote-border: #ddd9cf;
+  --ink-quote-fg: #55524a;
+  --ink-mark-bg: #f5ecc8;
+  --ink-mark-fg: #1a1a1a;
+  --ink-table-border: #ddd9cf;
+  --ink-table-header-bg: #f7f6f2;
+  --ink-table-stripe-bg: #faf9f6;`,
+    dark: `--ink-bg: #1a1a18;
+  --ink-bg-soft: #232320;
+  --ink-bg-inset: #111110;
+  --ink-fg: #e8e6df;
+  --ink-fg-muted: #a8a49a;
+  --ink-fg-faint: #7a766c;
+  --ink-border: #3a3833;
+  --ink-border-strong: #4e4b44;
+  --ink-accent: #d4a0a0;
+  --ink-code-bg: #232320;
+  --ink-code-fg: #e8e6df;
+  --ink-code-border: #3a3833;
+  --ink-code-comment: #7a766c;
+  --ink-code-keyword: #d4a0a0;
+  --ink-code-string: #9ec49a;
+  --ink-code-number: #9ab8e0;
+  --ink-code-function: #bda8e0;
+  --ink-code-type: #d4bb90;
+  --ink-code-variable: #e8e6df;
+  --ink-code-punctuation: #a8a49a;
+  --ink-code-tag: #9ec49a;
+  --ink-code-attr: #9ab8e0;
+  --ink-quote-border: #3a3833;
+  --ink-quote-fg: #a8a49a;
+  --ink-mark-bg: rgba(180, 140, 60, 0.3);
+  --ink-mark-fg: #e8e6df;
+  --ink-table-border: #3a3833;
+  --ink-table-header-bg: #232320;
+  --ink-table-stripe-bg: #1f1f1c;`,
+  },
+};
+
+/**
+ * 导出专用的排版 CSS。
+ *
+ * 描述的是**标准语义标签**的样式（`h1` / `p` / `pre` / `table`…），
+ * 与编辑器里给 CodeMirror 装饰器写的那套是两回事。
+ *
+ * 代码高亮的 class 映射（`.hljs-keyword` 等）与 `src/editor/live-preview.css`
+ * 里的那份保持一致——同一套 highlight.js 输出，在两处用同一套配色。
+ */
+const EXPORT_STYLES = `
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--ink-bg);
+  color: var(--ink-fg);
+  font-family: var(--ink-font-family);
+  font-size: var(--ink-font-size);
+  line-height: var(--ink-line-height);
+  -webkit-font-smoothing: antialiased;
+}
+
+.inkstone-doc {
+  max-width: var(--ink-content-width);
+  margin: 0 auto;
+  padding: 3rem 1.5rem 6rem;
+  background: var(--ink-bg);
+}
+
+.inkstone-doc h1,
+.inkstone-doc h2,
+.inkstone-doc h3,
+.inkstone-doc h4,
+.inkstone-doc h5,
+.inkstone-doc h6 {
+  margin: 1.8em 0 0.6em;
+  font-weight: 700;
+  line-height: 1.3;
+  scroll-margin-top: 1rem;
+}
+.inkstone-doc h1 { font-size: 2em; padding-bottom: 0.3em; border-bottom: 1px solid var(--ink-border); }
+.inkstone-doc h2 { font-size: 1.5em; padding-bottom: 0.3em; border-bottom: 1px solid var(--ink-border); }
+.inkstone-doc h3 { font-size: 1.25em; }
+.inkstone-doc h4 { font-size: 1em; }
+.inkstone-doc h5 { font-size: 0.875em; }
+.inkstone-doc h6 { font-size: 0.85em; color: var(--ink-fg-muted); }
+
+.inkstone-doc p { margin: 0 0 1em; }
+
+.inkstone-doc a { color: var(--ink-accent); text-decoration: none; }
+.inkstone-doc a:hover { text-decoration: underline; }
+
+.inkstone-doc ul,
+.inkstone-doc ol { margin: 0 0 1em; padding-left: 2em; }
+.inkstone-doc li { margin: 0.25em 0; }
+.inkstone-doc li > ul,
+.inkstone-doc li > ol { margin: 0.25em 0; }
+
+.inkstone-doc blockquote {
+  margin: 0 0 1em;
+  padding: 0.2em 1em;
+  color: var(--ink-quote-fg);
+  border-left: 4px solid var(--ink-quote-border);
+}
+
+.inkstone-doc code {
+  font-family: var(--ink-mono-family);
+  font-size: 0.875em;
+  padding: 0.15em 0.35em;
+  border-radius: 4px;
+  background: var(--ink-code-bg);
+  color: var(--ink-code-fg);
+  border: 1px solid var(--ink-code-border);
+}
+
+.inkstone-doc pre {
+  margin: 0 0 1em;
+  padding: 1em;
+  overflow-x: auto;
+  background: var(--ink-code-bg);
+  border: 1px solid var(--ink-code-border);
+  border-radius: 6px;
+}
+
+.inkstone-doc pre code {
+  display: block;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink-code-fg);
+  font-size: 0.875em;
+  line-height: 1.55;
+}
+
+.inkstone-doc table {
+  border-collapse: collapse;
+  margin: 0 0 1em;
+  width: 100%;
+  display: block;
+  overflow-x: auto;
+}
+.inkstone-doc th,
+.inkstone-doc td {
+  border: 1px solid var(--ink-table-border);
+  padding: 0.5em 0.75em;
+  text-align: left;
+}
+.inkstone-doc th { background: var(--ink-table-header-bg); font-weight: 600; }
+.inkstone-doc tbody tr:nth-child(2n) { background: var(--ink-table-stripe-bg); }
+
+.inkstone-doc img { max-width: 100%; height: auto; }
+
+.inkstone-doc hr {
+  height: 1px;
+  margin: 2em 0;
+  border: none;
+  background: var(--ink-border);
+}
+
+.inkstone-doc mark {
+  background: var(--ink-mark-bg);
+  color: var(--ink-mark-fg);
+  padding: 0 0.15em;
+  border-radius: 3px;
+}
+
+.inkstone-doc .task-list-item { list-style: none; }
+.inkstone-doc .task-list-item input { margin-right: 0.5em; }
+
+.inkstone-doc .footnotes { margin-top: 3em; padding-top: 1em; border-top: 1px solid var(--ink-border); font-size: 0.9em; }
+.inkstone-doc .footnotes h2 { font-size: 1.1em; border: none; margin-top: 0; }
+
+/* 大纲 */
+.inkstone-outline {
+  max-width: var(--ink-content-width);
+  margin: 0 auto;
+  padding: 2rem 1.5rem 0;
+}
+.inkstone-outline h2 {
+  margin: 0 0 0.8em;
+  font-size: 1.1em;
+  color: var(--ink-fg-muted);
+  font-weight: 600;
+}
+.inkstone-outline ol { list-style: none; margin: 0; padding: 0; }
+.inkstone-outline li { margin: 0.3em 0; }
+.inkstone-outline a { color: var(--ink-fg-muted); text-decoration: none; }
+.inkstone-outline a:hover { color: var(--ink-accent); text-decoration: underline; }
+.inkstone-outline li[data-depth="2"] { padding-left: 1.2em; }
+.inkstone-outline li[data-depth="3"] { padding-left: 2.4em; }
+.inkstone-outline li[data-depth="4"] { padding-left: 3.6em; }
+.inkstone-outline li[data-depth="5"] { padding-left: 4.8em; }
+.inkstone-outline li[data-depth="6"] { padding-left: 6em; }
+
+.inkstone-footer {
+  max-width: var(--ink-content-width);
+  margin: 0 auto;
+  padding: 1.5rem;
+  border-top: 1px solid var(--ink-border);
+  color: var(--ink-fg-faint);
+  font-size: 0.85em;
+}
+
+/* ── 代码高亮（与编辑器内同一套 highlight.js class） ── */
+.hljs-comment, .hljs-quote { color: var(--ink-code-comment); font-style: italic; }
+.hljs-punctuation, .hljs-operator { color: var(--ink-code-punctuation); }
+.hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-section, .hljs-doctag, .hljs-name { color: var(--ink-code-keyword); }
+.hljs-string, .hljs-attribute, .hljs-symbol, .hljs-bullet, .hljs-subst, .hljs-regexp { color: var(--ink-code-string); }
+.hljs-number, .hljs-meta, .hljs-params { color: var(--ink-code-number); }
+.hljs-title, .hljs-title.function_ { color: var(--ink-code-function); }
+.hljs-title.class_, .hljs-class, .hljs-type, .hljs-built_in, .hljs-builtin-name { color: var(--ink-code-type); }
+.hljs-tag { color: var(--ink-code-tag); }
+.hljs-attr, .hljs-variable, .hljs-template-variable, .hljs-property { color: var(--ink-code-attr); }
+.hljs-deletion { color: #82071e; }
+.hljs-addition { color: #116329; }
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: 600; }
+.hljs-link { color: var(--ink-accent); text-decoration: underline; }
+
+/* ── 打印 ── */
+@media print {
+  body { background: #fff; color: #000; }
+  .inkstone-outline { display: none; }
+  .inkstone-doc { max-width: none; padding: 0; }
+  .inkstone-doc pre { white-space: pre-wrap; word-break: break-word; }
+}
+`;
+
+/** 导出用的版式令牌（与 `src/styles/tokens.css` 的默认值一致） */
+const LAYOUT_TOKENS = `
+:root {
+  --ink-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  --ink-mono-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --ink-font-size: 16px;
+  --ink-line-height: 1.6;
+  --ink-content-width: 46rem;
+}
+`;
+
+/** 组装主题 + 版式 + 排版三段 CSS */
+function buildStyles(options: HtmlExportOptions): string {
+  const theme = THEME_TOKENS[options.theme] ?? THEME_TOKENS["inkstone-light"];
+  const mode: "light" | "dark" = options.mode === "dark" ? "dark" : "light";
+  return `${LAYOUT_TOKENS}\n:root {\n${theme[mode]}\n}\n${EXPORT_STYLES}`;
+}
+
+/* ── 代码高亮 ── */
+
+/**
+ * 把 HTML 里的代码块换成高亮后的版本。
+ *
+ * 为什么不走 remark 插件：`markdownToHtml` 产出的 HTML 里，代码块是
+ * `<pre><code class="language-xxx">转义后的文本</code></pre>`。
+ * 要高亮，得先把 HTML 里的实体反转义回原文、跑 highlight.js、再转义回去——
+ * 这条链路要处理 HTML 实体，很脆。
+ *
+ * 更稳的做法：**在 mdast 阶段做**。`markdown.ts` 的解析层已经知道每个代码块的
+ * 语言和原文，在那里替换成高亮 HTML，再交给 remark-rehype 序列化成
+ * `<pre><code class="hljs language-xxx">…</code></pre>`。
+ *
+ * 但 `markdownToHtml` 是通用入口（剪贴板复制也用它），改动它会波及那条路径。
+ * 所以这里走**独立的导出管线**：自己 parse → 自己转 hast → 自己 stringify。
+ * 解析规则仍然只有 remark 一套（红线 3 满足），只是输出端多了一步高亮。
+ */
+
+/** HTML 转义（高亮输出的反向操作：把原文转成可安全嵌入的文本） */
+function escapeHtml(text: string): string {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/**
+ * 解码 HTML 实体，还原成原文。
+ *
+ * ## 为什么要解码**两轮**
+ *
+ * `remark-rehype` 把代码块的文本放进 hast 的 `text` 节点，
+ * 序列化时做 HTML 转义。于是 `<div>` 变成 `&#x3C;div&gt;`。
+ * 但这个 `&` 本身又被转义了一次（text 节点里的 `&` → `&amp;`），
+ * 所以实际序列化出来的是 `&amp;#x3C;div&amp;gt;`。
+ *
+ * 只解码一轮得到的是 `&#x3C;div&gt;`——仍然是实体，不是原文。
+ * 而 highlight.js 收到实体文本时会把它当普通字符，
+ * 输出 `&amp;#x3C;`——页面上就显示成 `&#x3C;div&gt;`，一层实体套一层。
+ *
+ * 所以要解码到**原文**为止：先解 `&amp;` 等命名实体，再解 `&#x3C;` 这类数字实体。
+ * 两轮之后拿到的才是真正的 `<div>`，交给 highlight.js 由它做**唯一一次**转义。
+ */
+function decodeEntities(text: string): string {
+  // 第一轮：命名实体（&amp; &lt; &gt; &quot; &#39;）
+  let decoded = text
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&");
+
+  // 第二轮：数字实体（&#x3C; / &#60;）
+  decoded = decoded.replace(/&#x([0-9a-fA-F]+);/g, (_m, hex: string) =>
+    String.fromCodePoint(Number.parseInt(hex, 16)),
+  );
+  decoded = decoded.replace(/&#(\d+);/g, (_m, dec: string) =>
+    String.fromCodePoint(Number.parseInt(dec, 10)),
+  );
+
+  return decoded;
+}
+
+/**
+ * 在 HTML 字符串里找到代码块并高亮。
+ *
+ * 用受限的正则而不是 DOM 解析：导出产物是我们自己刚生成的，结构已知
+ * （`<pre><code class="language-xxx">…</code></pre>`），
+ * 不需要通用 HTML 解析器的健壮性；而 DOM 解析在浏览器降级（vitest/jsdom）下
+ * 会引入额外依赖。
+ *
+ * 匹配用**非贪婪**且要求 class 以 `language-` 开头——避免误伤普通 `<code>`。
+ */
+export function highlightCodeBlocks(html: string): string {
+  const pattern = /<pre><code class="language-([^"]*)">([\s\S]*?)<\/code><\/pre>/g;
+
+  return html.replace(pattern, (_match, language: string, escaped: string) => {
+    // 反转义回原文（两轮，见 decodeEntities 的说明）
+    const source = decodeEntities(escaped);
+
+    const canonical = resolveLanguage(language);
+    // highlight.js 的输出**已经**转义过了，直接拼进 HTML 即可——
+    // 再转义一次就变成双重转义，页面上会显示成 &amp;lt; 这种东西
+    const highlighted = highlightCode(source, canonical);
+    const className = canonical
+      ? `hljs language-${canonical}`
+      : "hljs language-plaintext";
+    return `<pre><code class="${className}">${highlighted}</code></pre>`;
+  });
+}
+
+/* ── 大纲 ── */
+
+/** 生成大纲 HTML */
+function buildOutline(outline: OutlineItem[]): string {
+  if (outline.length === 0) return "";
+  const items = outline
+    .map((item) => {
+      const text = item.text || "（无标题）";
+      // 用锚点 id：章节序号，保证 id 唯一且可跳转
+      const anchor = `section-${item.depth}-${item.from}`;
+      return `      <li data-depth="${item.depth}"><a href="#${anchor}">${escapeHtml(text)}</a></li>`;
+    })
+    .join("\n");
+  return `  <nav class="inkstone-outline" aria-label="大纲">
+    <h2>大纲</h2>
+    <ol>
+${items}
+    </ol>
+  </nav>`;
+}
+
+/**
+ * 给标题加锚点 id，好让大纲能跳转。
+ *
+ * 只处理 h1–h6：与大纲的 depth 对应，编号用「深度 + 源码偏移」保证唯一。
+ */
+function addHeadingAnchors(html: string, outline: OutlineItem[]): string {
+  if (outline.length === 0) return html;
+  let index = 0;
+  return html.replace(/<h([1-6])>/g, (match, level: string) => {
+    const item = outline[index++];
+    if (!item) return match;
+    const anchor = `section-${item.depth}-${item.from}`;
+    return `<h${level} id="${anchor}">`;
+  });
+}
+
+/* ── 主入口 ── */
+
+/**
+ * 产出完整的 HTML 文档。
+ *
+ * @param source Markdown 源码
+ */
+export function exportToHtml(source: string, options: HtmlExportOptions): string {
+  // 正文：复用现成的 HTML 链路（含 KaTeX 公式渲染）
+  let body = markdownToHtml(source);
+  // 代码高亮：导出侧补上（编辑器里那份是 CodeMirror 装饰器，不在这条链路上）
+  body = highlightCodeBlocks(body);
+  // 标题锚点：让大纲可跳转
+  body = addHeadingAnchors(body, options.outline);
+
+  const outline = options.includeOutline ? buildOutline(options.outline) : "";
+  const katexCss = katexStylesheet();
+  const title = escapeHtml(options.title || "未命名");
+
+  const stats =
+    options.words !== undefined
+      ? `<footer class="inkstone-footer">${options.words} 字 · ${options.chars ?? 0} 字符</footer>`
+      : "";
+
+  // 公式的样式表拿不到时**如实说明**，而不是导出一份公式显示错乱的文件。
+  //
+  // 为什么这值得单独提示：KaTeX 的 CSS 里有 `.katex-mathml { position: absolute }`
+  // 这条规则——它负责把「给读屏软件用的 MathML 副本」藏起来。
+  // 少了这条规则，导出的文件里每条公式都会显示成
+  // 「KaTeX 渲染结果 + 一串裸 LaTeX」两份，读者完全无法使用。
+  const mathWarning =
+    katexCss === "" && body.includes("katex")
+      ? `\n<!-- 注意：未能内联 KaTeX 样式表，公式可能显示异常 -->\n`
+      : "";
+
+  return `<!DOCTYPE html>
+<html lang="zh-CN" data-theme="${escapeHtml(options.theme)}" data-mode="${
+    options.mode === "dark" ? "dark" : "light"
+  }">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="generator" content="Inkstone">
+<title>${title}</title>
+<style>
+${buildStyles(options)}
+</style>
+${katexCss ? `<style>\n${katexCss}\n</style>` : ""}${mathWarning}${options.extraHead ?? ""}
+</head>
+<body>
+${outline}
+<article class="inkstone-doc">
+${body}
+</article>
+${stats}
+${options.extraBody ?? ""}
+</body>
+</html>
+`;
+}

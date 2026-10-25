@@ -963,3 +963,192 @@
 .tab-bar__close:hover {
   color: var(--ink-fg);
 }
+
+/*
+ * 导出面板
+ * ═══════════════════════════════════════════════════════════ */
+
+/* z-index 与恢复提示同级：两者都是「用户明确触发的模态」 */
+.export-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(0, 0, 0, 0.32);
+}
+
+.export-panel {
+  width: min(560px, calc(100vw - 48px));
+  max-height: calc(100vh - 96px);
+  display: flex;
+  flex-direction: column;
+  background-color: var(--ink-bg);
+  border: 1px solid var(--ink-border);
+  border-radius: var(--ink-radius-lg);
+  box-shadow: var(--ink-shadow-md);
+  font-family: var(--ink-ui-family, var(--ink-font-family));
+}
+
+.export-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--ink-border);
+}
+
+.export-header h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink-fg);
+}
+
+.export-body {
+  overflow-y: auto;
+  padding: 14px 20px 18px;
+}
+
+.export-group-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 4px 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-fg-muted);
+  text-transform: none;
+}
+
+.export-group-title:not(:first-child) {
+  margin-top: 18px;
+}
+
+/* 版本号 / 不可用原因：跟在标题后面的小字 */
+.export-group-hint {
+  font-weight: 400;
+  font-size: 11px;
+  color: var(--ink-fg-faint);
+}
+
+.export-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.export-item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: baseline;
+  gap: 4px 10px;
+  width: 100%;
+  padding: 9px 12px;
+  text-align: left;
+  font: inherit;
+  color: var(--ink-fg);
+  background-color: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--ink-radius-md);
+  cursor: pointer;
+  transition: background-color var(--ink-transition);
+}
+
+.export-item:hover:not(:disabled) {
+  background-color: var(--ink-bg-soft);
+  border-color: var(--ink-border);
+}
+
+.export-item:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.export-item-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.export-item-desc {
+  font-size: 12px;
+  color: var(--ink-fg-muted);
+}
+
+.export-item-ext {
+  font-family: var(--ink-mono-family, monospace);
+  font-size: 11px;
+  color: var(--ink-fg-faint);
+}
+
+.export-item-busy {
+  grid-column: 1 / -1;
+  font-size: 11px;
+  color: var(--ink-accent);
+}
+
+.export-result {
+  margin: 14px 0 0;
+  padding: 8px 12px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink-fg);
+  background-color: var(--ink-bg-soft);
+  border: 1px solid var(--ink-border);
+  border-radius: var(--ink-radius-md);
+  word-break: break-all;
+}
+
+.export-result--error {
+  color: var(--ink-danger);
+  background-color: var(--ink-danger-bg);
+  border-color: var(--ink-danger);
+}
+
+/* 设置面板里的一行说明文字 */
+.settings-hint {
+  margin: 2px 0 10px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--ink-fg-faint);
+}
+
+/* 变量编辑的一行：名字 / 来源 / 值 / 删除 */
+.settings-row {
+  display: grid;
+  grid-template-columns: 140px 160px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+/* 导出警告：成功但产物有瑕疵 */
+.export-warnings {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background-color: var(--ink-bg-soft);
+  border: 1px solid var(--ink-border);
+  border-left: 3px solid var(--ink-code-keyword);
+  border-radius: var(--ink-radius-md);
+}
+
+.export-warnings-title {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-fg);
+}
+
+.export-warning {
+  margin: 0 0 4px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--ink-fg-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.export-warning:last-child {
+  margin-bottom: 0;
+}

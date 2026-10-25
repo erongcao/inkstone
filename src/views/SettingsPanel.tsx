@@ -18,6 +18,8 @@ import {
   type SettingsSectionId,
 } from "@/settings/schema";
 import { BUILTIN_THEMES } from "@/theme/themes";
+import { BUILTIN_VARIABLE_LABELS } from "@/export/variables";
+import type { ExportVariableSetting } from "@/settings/schema";
 import { AiSection } from "./AiSettingsSection";
 
 interface Props {
@@ -378,7 +380,134 @@ function ExportSection({ settings, patch }: { settings: Settings; patch: PatchFn
           }
         />
       </label>
+
+      <label className="field">
+        <span>导出文件名模板</span>
+        <input
+          type="text"
+          placeholder="${title}-${today}"
+          value={x.fileNameTemplate}
+          onChange={(e) => patch("export", { fileNameTemplate: e.target.value })}
+        />
+      </label>
+      <p className="settings-hint">
+        留空则用文档标题。支持 {"${title}"} {"${author}"} {"${date}"} {"${today}"}{" "}
+        {"${now}"} {"${filename}"} {"${words}"} 等变量。
+      </p>
+
+      <label className="field">
+        <span>HTML 追加内容（&lt;head&gt;）</span>
+        <textarea
+          className="settings-css"
+          rows={3}
+          placeholder={'<meta name="author" content="…">'}
+          value={x.htmlExtraHead}
+          onChange={(e) => patch("export", { htmlExtraHead: e.target.value })}
+        />
+      </label>
+
+      <label className="field">
+        <span>HTML 追加内容（&lt;body&gt; 末尾）</span>
+        <textarea
+          className="settings-css"
+          rows={3}
+          placeholder="<footer>页脚</footer>"
+          value={x.htmlExtraBody}
+          onChange={(e) => patch("export", { htmlExtraBody: e.target.value })}
+        />
+      </label>
+
+      <ExportVariablesSection settings={settings} patch={patch} />
     </section>
+  );
+}
+
+/**
+ * 自定义导出变量。
+ *
+ * 变量名可以自己起，值从「内置来源」里选或直接写固定文本。
+ * 同名变量按列表顺序后者覆盖前者——所以用户可以在内置变量之上
+ * 加一个自己的「title」。
+ */
+function ExportVariablesSection({
+  settings,
+  patch,
+}: {
+  settings: Settings;
+  patch: PatchFn;
+}) {
+  const variables = settings.export.variables;
+
+  const update = (next: ExportVariableSetting[]) => {
+    patch("export", { variables: next });
+  };
+
+  return (
+    <>
+      <h3>自定义导出变量</h3>
+      {variables.length === 0 && (
+        <p className="settings-hint">
+          还没有自定义变量。添加后可以在文件名模板与 HTML 追加内容里用 {"${名字}"} 引用。
+        </p>
+      )}
+      {variables.map((variable, index) => (
+        <div key={index} className="settings-row">
+          <input
+            type="text"
+            placeholder="变量名"
+            value={variable.name}
+            onChange={(e) => {
+              const next = [...variables];
+              next[index] = { ...variable, name: e.target.value };
+              update(next);
+            }}
+          />
+          <select
+            value={variable.source}
+            onChange={(e) => {
+              const next = [...variables];
+              next[index] = {
+                ...variable,
+                source: e.target.value as ExportVariableSetting["source"],
+              };
+              update(next);
+            }}
+          >
+            {Object.entries(BUILTIN_VARIABLE_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+          {variable.source === "custom" && (
+            <input
+              type="text"
+              placeholder="固定文本"
+              value={variable.value ?? ""}
+              onChange={(e) => {
+                const next = [...variables];
+                next[index] = { ...variable, value: e.target.value };
+                update(next);
+              }}
+            />
+          )}
+          <button
+            type="button"
+            className="btn"
+            onClick={() => update(variables.filter((_, i) => i !== index))}
+          >
+            删除
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        className="btn"
+        onClick={() => update([...variables, { name: "", source: "custom", value: "" }])}
+      >
+        添加变量
+      </button>
+    </>
   );
 }
 

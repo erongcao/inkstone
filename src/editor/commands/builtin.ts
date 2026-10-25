@@ -283,6 +283,19 @@ export function builtinCommands(): InkstoneCommand[] {
       },
     },
 
+    {
+      id: "file.export",
+      label: "导出…",
+      category: "文件",
+      surfaces: ["palette"],
+      keywords: "export daochu docx pdf epub html word",
+      shortcut: "⌘E",
+      run: () => {
+        emitIntent("file.export");
+        return true;
+      },
+    },
+
     /* ── 查找 / 替换（只在命令面板） ── */
     // 命令面板里能搜到，是因为**原生菜单只在 Tauri 里存在**：
     // 浏览器开发模式下「编辑 → 查找」是灰的，没有第二个入口就等于没法调试。

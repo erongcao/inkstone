@@ -3,6 +3,8 @@ mod asset;
 mod document;
 mod fs;
 mod menu;
+mod pandoc;
+mod print;
 mod recent;
 mod search;
 mod watch;
@@ -34,6 +36,12 @@ pub fn run() {
             document::save_document_as,
             document::set_document_title,
             document::read_document,
+            document::write_export_file,
+            pandoc::detect_pandoc,
+            pandoc::pick_pandoc_output,
+            pandoc::convert_with_pandoc,
+            print::print_document,
+            print::open_path,
             watch::watch_document,
             watch::unwatch_document,
             asset::save_image,

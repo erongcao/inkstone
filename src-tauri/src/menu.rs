@@ -101,6 +101,7 @@ fn build_file_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Submenu<tauri:
         "另存为…",
         Some("CmdOrCtrl+Shift+S"),
     )?;
+    let export_doc = action(app, "export-document", "导出…", Some("CmdOrCtrl+E"))?;
 
     SubmenuBuilder::new(app, "文件")
         .item(&new_doc)
@@ -108,6 +109,8 @@ fn build_file_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Submenu<tauri:
         .separator()
         .item(&save)
         .item(&save_as)
+        .separator()
+        .item(&export_doc)
         .separator()
         .close_window()
         .build()

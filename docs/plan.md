@@ -652,13 +652,23 @@ CM6 的 `EditorView.inputHandler` 扩展点实现，设置项 `editor.autoPairMo
 - **验收**：打开 1000 个文件的目录，搜索响应 < 200ms
 
 ### M4 · 导出（目标：4 周）
-- [ ] HTML 导出（内嵌主题、可选大纲、可追加 `<head>`/`<body>`）
-- [ ] PDF 导出（原生排版路径 + pandoc/LaTeX 路径）
-- [ ] pandoc 桥：DOCX / EPUB / ODT / RTF / LaTeX / MediaWiki / RST
+- [x] HTML 导出（内嵌主题、可选大纲、可追加 `<head>`/`<body>`）
+  - 单文件自包含网页；代码高亮复用编辑器同一套 highlight.js；
+    KaTeX 公式复用 `parser/html.ts` 的链路
+- [x] PDF 导出（原生排版路径 + pandoc/LaTeX 路径）
+  - 本机无 LaTeX/wkhtmltopdf/typst（实测全无）→ 走 macOS 系统打印面板
+    （临时 WebView 窗口 + `print()` + `@page { size }`）
+- [x] pandoc 桥：DOCX / EPUB / ODT / RTF / LaTeX / MediaWiki / RST
+  - 独立进程调用（GPL 不传染）；二进制不经 JS 边界；
+    显式对齐 `tex_math_dollars` 扩展；pandoc 的警告如实带回
 - [ ] 导出项可自定义（增删、重排、重命名、绑定快捷键）
-- [ ] 导出变量系统（`${title}` `${author}` `${today}` …）
-- [ ] YAML front matter 覆盖导出设置（需显式开关，出于安全）
+  - 注册表已就绪（`src/export/registry.ts`），自定义 UI 待做
+- [x] 导出变量系统（`${title}` `${author}` `${today}` …）
+  - 只在导出产物上替换，绝不碰文档正文；未定义变量原样保留
+- [x] YAML front matter 覆盖导出设置（需显式开关，出于安全）
+  - 默认关闭；只开放安全的那几项，不开放「导出后自动打开文件/文件夹」
 - **验收**：同一份文档导出 HTML 与 DOCX，内容语义一致
+  - ✅ 已用真实 pandoc 3.8 实证（标题/粗体/斜体/代码/公式/表格全部保真）
 
 ### M5 · 跨平台（目标：4 周）
 - [ ] Windows x64 + ARM64 构建与打包
