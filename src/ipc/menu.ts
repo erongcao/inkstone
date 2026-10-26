@@ -64,3 +64,26 @@ if (import.meta.hot) {
     unlisteners.length = 0;
   });
 }
+
+/**
+ * 把侧边栏的可见性同步给原生菜单的「显示侧边栏」复选项。
+ *
+ * ## 为什么需要它
+ *
+ * 侧边栏可以从**三个**地方变：原生菜单的「显示/隐藏侧边栏」、
+ * 复选项本身、以及面板上的折叠按钮。而复选项只有「勾 / 不勾」两个状态可显示——
+ * 一个不反映实际状态的勾选框比没有更糟：用户会以为侧边栏已经收起来了。
+ *
+ * 浏览器开发模式没有原生菜单，直接跳过。
+ *
+ * 失败只警告不抛错：勾选框没同步上，不该让整个应用出问题。
+ */
+export async function syncSidebarChecked(checked: boolean): Promise<void> {
+  if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return;
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("set_sidebar_checked", { checked });
+  } catch (error) {
+    console.warn("[menu] 同步侧边栏复选项失败：", error);
+  }
+}

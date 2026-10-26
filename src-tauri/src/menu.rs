@@ -63,6 +63,61 @@ pub fn rebuild(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
+/// 「显示侧边栏」复选项的 id
+///
+/// 单独提成常量：建菜单的地方与同步状态的地方都要用它，
+/// 写两遍字面量就有「改了这边忘了那边」的机会。
+pub const SIDEBAR_CHECK_ID: &str = "check-sidebar";
+
+/// 「视图」子菜单的 id
+///
+/// **为什么必须给它一个稳定的 id**：
+/// `Menu::get` 只在**顶层**找菜单项，不递归进子菜单——
+/// 而「显示侧边栏」复选项在「视图」子菜单里面。
+/// 子菜单的 id 默认是 muda 随机生成的，每次重建菜单都不一样，
+/// 于是按 id 找根本找不到。
+pub const VIEW_MENU_ID: &str = "view-menu";
+
+/// 把「显示侧边栏」复选项的勾选状态同步成前端的状态
+///
+/// ## 为什么需要这个函数
+///
+/// 侧边栏的可见性可以从**三个**地方变：
+/// 原生菜单的「显示/隐藏侧边栏」、复选项本身、以及面板上的折叠按钮。
+/// 而复选项只有「勾 / 不勾」两个状态可显示——
+/// 一个不反映实际状态的勾选框，比没有这个勾选框更糟：
+/// 用户会以为侧边栏已经收起来了。
+///
+/// ## 两条方向
+///
+/// - **Rust → 前端**：用户点了复选项，muda 自动翻转勾选状态，
+///   并发一个菜单事件过来；前端收到后切换自己的状态。
+/// - **前端 → Rust**：前端的侧边栏状态变了（快捷键、面板折叠），
+///   通过 `set_sidebar_checked` 命令把真实状态推回来。
+///
+/// 两条方向合起来，复选项才是**状态的显示**，而不是一个摆设。
+pub fn sync_sidebar_checked(app: &AppHandle, checked: bool) -> tauri::Result<()> {
+    let Some(menu) = app.menu() else {
+        // 菜单还没装上（前端比菜单先启动）——不是错误
+        return Ok(());
+    };
+    // 复选项在「视图」子菜单里，而 get() 不递归，所以要分两步找
+    let Some(tauri::menu::MenuItemKind::Submenu(view)) = menu.get(VIEW_MENU_ID) else {
+        return Ok(());
+    };
+    let Some(tauri::menu::MenuItemKind::Check(check)) = view.get(SIDEBAR_CHECK_ID) else {
+        return Ok(());
+    };
+    check.set_checked(checked)?;
+    Ok(())
+}
+
+/// 前端 → 原生：同步「显示侧边栏」复选项的勾选状态
+#[tauri::command]
+pub fn set_sidebar_checked(app: AppHandle, checked: bool) -> tauri::Result<()> {
+    sync_sidebar_checked(&app, checked)
+}
+
 /// 建出整棵菜单
 fn build(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
     let app_menu = build_app_menu(app)?;
@@ -184,13 +239,16 @@ fn build_view_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Submenu<tauri:
     let zoom_out = action(app, "zoom-out")?;
     let zoom_reset = action(app, "zoom-reset")?;
 
-    // 复选框菜单项：状态与前端设置双向同步（M2 起接通）
+    // 复选框菜单项：勾选状态与前端的侧边栏可见性双向同步
+    // （Rust → 前端走菜单事件，前端 → Rust 走 set_sidebar_checked 命令）
     let sidebar_check =
-        CheckMenuItemBuilder::with_id("check-sidebar", i18n::label("check-sidebar"))
+        CheckMenuItemBuilder::with_id(SIDEBAR_CHECK_ID, i18n::label("check-sidebar"))
             .checked(true)
             .build(app)?;
 
-    SubmenuBuilder::new(app, i18n::menu_title("view"))
+    // 用 with_id 而不是 new：菜单重建后要还能按 id 找到这个子菜单
+    // （`Menu::get` 不递归，复选项在子菜单里）
+    SubmenuBuilder::with_id(app, VIEW_MENU_ID, i18n::menu_title("view"))
         .item(&sidebar)
         .item(&sidebar_check)
         .separator()

@@ -7,7 +7,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useThemeRuntime } from "@/theme/useThemeRuntime";
-import { initMenuBridge, onMenuAction } from "@/ipc/menu";
+import { initMenuBridge, onMenuAction, syncSidebarChecked } from "@/ipc/menu";
 import { openDocumentAt, useDocument } from "@/ipc/document";
 import { useSettings } from "@/settings/store";
 import { Sidebar } from "@/views/Sidebar";
@@ -106,9 +106,17 @@ export default function App() {
     void initMenuBridge();
   }, []);
 
+  // 侧边栏可见性 → 原生菜单的「显示侧边栏」复选项
+  //
+  // 侧边栏可以从三个地方变：原生菜单的「显示/隐藏侧边栏」、
+  // 复选项本身、以及面板上的折叠。而复选项只有「勾 / 不勾」两个状态可显示——
+  // 一个不反映实际状态的勾选框比没有更糟。
+  useEffect(() => {
+    void syncSidebarChecked(sidebarVisible);
+  }, [sidebarVisible]);
+
   // 自动保存 + 崩溃恢复快照：跟着文档内容走，组件卸载时要停掉定时器
   useEffect(() => startAutoSaveRuntime(), []);
-
   // 挂载时再检查一次有没有待恢复的会话（模块加载时算的那次可能太早）
   useEffect(() => {
     refreshRecoveryCandidate();
@@ -256,6 +264,10 @@ export default function App() {
         setExportOpen(true);
       }),
       onMenuAction("toggle-sidebar", () => setSidebarVisible((v) => !v)),
+      // 「显示侧边栏」复选项：之前也是注册了却没人处理——
+      // muda 会自动翻转它的勾选状态，但侧边栏不动，
+      // 于是菜单里出现一个「勾了但什么也没发生」的框。
+      onMenuAction("check-sidebar", () => setSidebarVisible((v) => !v)),
       onMenuAction("toggle-focus-mode", () =>
         update({ editor: { focusMode: !settings.editor.focusMode } }),
       ),

@@ -159,6 +159,32 @@ describe("应用交互", () => {
     );
   });
 
+  it("原生菜单的「显示侧边栏」复选项能收放侧边栏", () => {
+    /*
+     * 这个复选项之前是**注册了却没人处理**的死菜单项：
+     * muda 会自动翻转它的勾选状态，但侧边栏不动——
+     * 于是菜单里出现一个「勾了但什么也没发生」的框。
+     *
+     * （原生侧的勾选状态同步走 Tauri 命令，浏览器里没有 Tauri，
+     * 那半条链路由 Rust 侧负责；这里守的是前端这一半。）
+     */
+    render(<App />);
+
+    const app = document.querySelector<HTMLElement>(".app");
+    expect(app?.dataset.sidebar).toBe("visible");
+
+    act(() => {
+      dispatchMenuAction("check-sidebar");
+    });
+    expect(app?.dataset.sidebar).toBe("hidden");
+
+    // 两条入口改的是同一个状态
+    act(() => {
+      dispatchMenuAction("toggle-sidebar");
+    });
+    expect(app?.dataset.sidebar).toBe("visible");
+  });
+
   it("从命令面板执行「替换」后，焦点落在替换框（面板关闭时不能把焦点抢回编辑器）", async () => {
     render(<App />);
 

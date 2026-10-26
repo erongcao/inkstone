@@ -43,6 +43,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             set_locale,
+            menu::set_sidebar_checked,
             document::open_document,
             document::save_document,
             document::save_document_as,
