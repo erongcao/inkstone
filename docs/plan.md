@@ -717,7 +717,7 @@ CM6 的 `EditorView.inputHandler` 扩展点实现，设置项 `editor.autoPairMo
   - ✅ 单元测试 32 条覆盖契约（可撤销 / 放弃不动文档 / 原文被改则拒绝）
 
 ### M5 · 跨平台（目标：4 周）
-- [x] Windows x64 + ARM64 构建与打包（首跑挂在 WiX 1252 代码页 → 已修，待重跑确认）
+- [x] Windows x64 + ARM64 构建与打包（首跑挂在 WiX 1252 代码页 → 已修；run 40247570744 确认 MSI + NSIS 都出包）
 - [x] Linux `.deb` / `.rpm` / AppImage / Wayland 兼容（Ubuntu 打包首跑即通过）
 - [x] 自动更新（最简形态：检查更新 → 打开下载页）
 - [x] i18n（简中 / 繁中 / 英文）
@@ -845,7 +845,14 @@ CM6 的 `EditorView.inputHandler` 扩展点实现，设置项 `editor.autoPairMo
 - ✅ 词典 426 → **486** 条；测试 1088 → **1101** 条（51 个文件）
 - ✅ 浏览器实测三语（简 / 繁 / 英）：两个面板的 DOM 里**零中文残留**、
   繁体零简体残留；多行示例（代码块 / 表格 / mermaid / 块级公式）缩进与换行原样保留
-- ⏳ **待验收**：重跑 CI，确认 Windows 的 MSI 与 NSIS 都出包
+- ✅ **验收（run `40247570744`，9 个 job 全绿）**：三平台各产出一个可安装包——
+  macOS x64/arm64（`.app` + `.dmg`）、Windows x64/arm64（`.msi` + `-setup.exe`）、
+  Linux（`.deb` + `.rpm` + `.AppImage`）
+- ✅ **CI 产物此前谁也下不到**：`tauri-action` 只负责构建，产物路径写成 JSON 数组输出，
+  `upload-artifact` 未必认得 → workflow 自己加 `actions/upload-artifact@v4`，
+  用**显式 glob**（7 条）而不是那个输出
+  （已用 minimatch 逐条对真实产物路径验证：7 个可安装包全命中，
+  `.sig` / `.zip` / `.AppImage.tar.gz` / `.app` 目录全排除）
 
 ### 长期（P2+，不排期）
 GitHub Alerts / 脚注 / RTL / 插件系统 / 主题市场 / 图片图床 / EPUB 精修 / RevealJS 幻灯片 / 多人协作
@@ -926,7 +933,10 @@ GitHub Alerts / 脚注 / RTL / 插件系统 / 主题市场 / 图片图床 / EPUB
   复制粘贴 HTML → Markdown ✅
 - [x] **M1**：lezer 增量解析 ✅（2026-10-21，击键成本降 3 倍，增量 vs 全量 0% 不一致）
 - [x] **M1 剩余**：复制为 HTML / 粘贴为纯文本 ✅（2026-10-21）
-- [ ] **M2**：表格/公式/图表渲染层、局部重建装饰器
+- [x] **M2**：表格/公式/图表渲染层（2026-10-25 全部落地）；
+      局部重建装饰器——**实测后决定不做**（增量路径 4000 行 p95 = 3.53ms，占 16ms 预算 22%；
+      逐个摘掉 mermaid / 数学 / 代码块 / 表格渲染器后 p95 均在 3.46–3.58ms，
+      **与基线无可测差异**——成本在 lezer 解析本身，不在装饰器构建）
 
 ### 本机环境快照（2026-10-20）
 
