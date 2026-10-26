@@ -183,3 +183,29 @@ jobs:
         with:
           projectPath: .
           args: --target ${{ matrix.target }}
+      # 把安装包传成 CI artifact。
+      #
+      # tauri-action **只负责构建**（它把产物路径写到 `artifactPaths` 输出里，
+      # 但那是一串 JSON 数组，upload-artifact 未必认）；
+      # 上传得 workflow 自己用 actions/upload-artifact 做——
+      # 少了这一步，run 全绿、包也构建出来了，但**谁也下不到**。
+      #
+      # 这里用显式 glob 而不是那个输出：路径规则自己说了算，
+      # 不用猜一个第三方 action 的输出格式。
+      # 只收**可安装包**，排除 .sig 签名文件与重复归档（msi.zip / appimage.tar.gz）。
+      #
+      # 名字里带 target：五个矩阵 job 各自产出不同架构的包，
+      # 名字重了会被 upload-artifact 判成冲突。
+      - name: 上传安装包
+        uses: actions/upload-artifact@v4
+        with:
+          name: inkstone-${{ matrix.target }}
+          path: |
+            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.deb
+            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.rpm
+            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.AppImage
+            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.dmg
+            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.msi
+            src-tauri/target/${{ matrix.target }}/release/bundle/**/*setup.exe
+            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.app.tar.gz
+          if-no-files-found: error
