@@ -17,6 +17,7 @@ import katex from "katex";
 import "katex/dist/katex.min.css";
 import { parseMarkdown } from "@/parser/markdown";
 import { MATH_OPTIONS, type MathRenderer, type InlineParser } from "./math-loader";
+import { stripMhchem } from "./mhchem";
 
 /**
  * 渲染公式。
@@ -29,8 +30,15 @@ import { MATH_OPTIONS, type MathRenderer, type InlineParser } from "./math-loade
  * 其余安全相关选项（`throwOnError` / `trust` / `output`）在
  * `MATH_OPTIONS` 里定死，调用方只能覆盖显示方式。
  */
-export const renderMath: MathRenderer = (tex, overrides) =>
-  katex.renderToString(tex, { ...MATH_OPTIONS, ...overrides });
+export const renderMath: MathRenderer = (tex, overrides) => {
+  // mhchem 关掉时，`\ce{…}` 降级成字面文本。
+  //
+  // 放在**这里**（而不是各调用点）是因为这是唯一的收口：
+  // 编辑器内的行内公式、块级公式、复制出去的 HTML、导出的 HTML
+  // 全都走这一个函数——一处处理，四处一致。
+  const source = overrides?.mhchem === false ? stripMhchem(tex) : tex;
+  return katex.renderToString(source, { ...MATH_OPTIONS, ...overrides });
+};
 
 /** 逐行解析出 mdast（供行内公式定位用） */
 export const parseInline: InlineParser = (lineText, options) =>

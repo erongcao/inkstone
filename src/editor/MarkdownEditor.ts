@@ -22,11 +22,12 @@ import {
   indentWithTab,
 } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
-import { gfmMarkdownLanguage } from "./markdown-language";
+import { getMarkdownLanguage } from "./markdown-language";
 import { searchKeymap, highlightSelectionMatches, search } from "@codemirror/search";
 import { openFindPanel } from "./search-panel";
 import { languages } from "@codemirror/language-data";
-import { livePreview, setDisplayModeOf, setMathOptionsOf } from "./live-preview";
+import { livePreview, setDisplayModeOf } from "./live-preview";
+import { setMarkdownFeatures, livePreviewField } from "./live-preview/state";
 import { emitIntent } from "./intents";
 import { setActiveEditorView } from "./active-view";
 import { autoPair } from "./auto-pair";
@@ -63,6 +64,7 @@ import {
   markdownCopy,
 } from "./clipboard";
 import type { AutoPairMode, MarkerDisplayMode } from "@/settings/schema";
+import { DEFAULT_FEATURES, featuresKey, type MarkdownFeatures } from "@/parser/features";
 
 export interface MarkdownEditorOptions {
   /** 初始内容 */
@@ -73,8 +75,8 @@ export interface MarkdownEditorOptions {
   displayMode?: MarkerDisplayMode;
   /** 初始自动配对级别 */
   autoPairMode?: AutoPairMode;
-  /** 初始：单个 `$` 是否作为行内公式定界符（默认开） */
-  inlineMathSingleDollar?: boolean;
+  /** 初始的 Markdown 扩展开关（默认全开） */
+  features?: MarkdownFeatures;
   /** 内容变化回调 */
   onChange?: (value: string) => void;
   /** 选区变化回调 */
@@ -89,11 +91,17 @@ export interface MarkdownEditorOptions {
  *
  * `exportShortcutBox` 同理：导出项的快捷键是用户自定义的，
  * 改设置时要立刻生效，不能要求重启。
+ *
+ * `languageBox` 也同理，但换的是**语法语言**：
+ * Markdown 扩展开关变了，lezer 的 parser 就要换（扩展是配置期决定的），
+ * 于是 CM6 的 `language` facet 也得跟着换，
+ * 否则源码模式的语法高亮还认着旧规则，与 Live Preview 分叉。
  */
 function buildExtensions(
   options: MarkdownEditorOptions,
   autoPairBox: Compartment,
   exportShortcutBox: Compartment,
+  languageBox: Compartment,
 ): Extension[] {
   return [
     // 编辑历史（撤销/重做）
@@ -105,13 +113,15 @@ function buildExtensions(
     search(),
     highlightSelectionMatches(),
     // Markdown 语法高亮（源码模式下也有用）
-    markdown({
-      base: gfmMarkdownLanguage,
-      codeLanguages: languages,
-      addKeymap: true,
-    }),
+    languageBox.of(
+      markdown({
+        base: getMarkdownLanguage(options.features ?? DEFAULT_FEATURES),
+        codeLanguages: languages,
+        addKeymap: true,
+      }),
+    ),
     // Live Preview：行内标记的实时隐藏/展开
-    livePreview(),
+    livePreview(options.features ?? DEFAULT_FEATURES),
     // 自动配对（可在运行时切换级别）
     autoPairBox.of(autoPair(options.autoPairMode ?? "off")),
     // 粘贴：网页富文本 → Markdown（图片粘贴也走这里，见 image-insert）
@@ -255,8 +265,13 @@ export interface MarkdownEditorHandle {
   setDisplayMode(mode: MarkerDisplayMode): void;
   /** 切换自动配对级别 */
   setAutoPairMode(mode: AutoPairMode): void;
-  /** 切换行内公式的定界符策略（单 `$` 是否算） */
-  setInlineMathSingleDollar(enabled: boolean): void;
+  /**
+   * 切换 Markdown 扩展开关。
+   *
+   * 同时做两件事：换 CM6 的 `language` facet（源码模式高亮）
+   * 与 Live Preview 的语法树（编辑布局）。
+   */
+  setMarkdownFeatures(features: MarkdownFeatures): void;
   /** 切换焦点模式（弱化光标所在段落之外的内容） */
   setFocusMode(enabled: boolean): void;
   /** 切换打字机模式（光标固定在视口垂直中线） */
@@ -321,9 +336,17 @@ export function createMarkdownEditor(
 ): MarkdownEditorHandle {
   const autoPairBox = new Compartment();
   const exportShortcutBox = new Compartment();
+  const languageBox = new Compartment();
+  // 当前生效的开关组合——用来判断「是不是真的变了」。
+  let appliedFeatures: MarkdownFeatures = options.features ?? DEFAULT_FEATURES;
   // 扩展只建一次：所有标签页的状态共用同一套扩展（Compartment 也共用），
   // 这样切换状态时自动配对级别之类的运行时配置不会丢
-  const extensions = buildExtensions(options, autoPairBox, exportShortcutBox);
+  const extensions = buildExtensions(
+    options,
+    autoPairBox,
+    exportShortcutBox,
+    languageBox,
+  );
   const state = EditorState.create({
     doc: options.doc ?? "",
     extensions,
@@ -359,7 +382,18 @@ export function createMarkdownEditor(
     },
     focus: () => view.focus(),
     getState: () => view.state,
-    createState: (doc: string) => EditorState.create({ doc, extensions }),
+    createState: (doc: string) => {
+      const state = EditorState.create({ doc, extensions });
+      // 扩展里的 facet 记的是**编辑器创建时**的开关。
+      // 用户在这之后改过设置的话，新状态（切标签页时创建的）就带着过期的开关——
+      // 那棵树会用错的规则解析，表格/高亮这些会对不上。
+      // 这里补一次 effect，让新状态跟上当前开关。
+      //
+      // 只有真的不一致时才做：一致的话省掉一次整篇重解析。
+      const current = state.field(livePreviewField).features;
+      if (featuresKey(current) === featuresKey(appliedFeatures)) return state;
+      return state.update({ effects: setMarkdownFeatures.of(appliedFeatures) }).state;
+    },
     setState: (next: EditorState) => view.setState(next),
     getSelectionRange: () => {
       const range = view.state.selection.main;
@@ -380,8 +414,33 @@ export function createMarkdownEditor(
     setAutoPairMode: (mode: AutoPairMode) => {
       view.dispatch({ effects: autoPairBox.reconfigure(autoPair(mode)) });
     },
-    setInlineMathSingleDollar: (enabled: boolean) =>
-      setMathOptionsOf(view, { singleDollarTextMath: enabled }),
+    setMarkdownFeatures: (next: MarkdownFeatures) => {
+      // 没变就别动。
+      //
+      // 换开关会触发**整篇重解析**（parser 换了，片段不能复用）——
+      // 而设置面板每改一个别的开关，`settings.markdown` 这个对象
+      // 都可能被重新合并出新引用。不挡一下的话，
+      // 用户改「主题」都会触发一次全文重解析。
+      if (featuresKey(appliedFeatures) === featuresKey(next)) return;
+      appliedFeatures = next;
+      // 一次事务里做两件事：
+      // 1. 换 `language` facet（源码模式的语法高亮）
+      // 2. 派发 effect 让 Live Preview 换 parser 重解析
+      //
+      // 顺序无所谓——两个都在同一批事务里生效，装饰器重算时看到的是新的树。
+      view.dispatch({
+        effects: [
+          languageBox.reconfigure(
+            markdown({
+              base: getMarkdownLanguage(next),
+              codeLanguages: languages,
+              addKeymap: true,
+            }),
+          ),
+          setMarkdownFeatures.of(next),
+        ],
+      });
+    },
     setFocusMode: (enabled: boolean) => setFocusModeOf(view, enabled),
     setTypewriterMode: (enabled: boolean) => setTypewriterModeOf(view, enabled),
     setExportShortcuts: (bindings: ExportShortcutBinding[]) => {

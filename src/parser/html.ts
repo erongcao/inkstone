@@ -22,6 +22,8 @@ import remarkMath from "remark-math";
 import remarkRehype from "remark-rehype";
 import rehypeStringify from "rehype-stringify";
 import { parseMarkdown, type MarkdownAst, type ParseOptions } from "./markdown";
+import { resolveFeatures } from "./features";
+import { applyAlerts } from "./alerts";
 import { highlightHastHandlers } from "./highlight";
 import { rehypeMath, katexStylesheet, type HastNode } from "./rehype-math";
 
@@ -82,9 +84,33 @@ function getHtmlProcessor(): HtmlProcessor {
  *
  * 直接吃 mdast（而不是源码），是为了保证「渲染出来的」与
  * 「解析出来的」出自同一棵语义树——这是架构约束 C 的要求。
+ *
+ * ## 会**就地修改**传入的树
+ *
+ * 因为 GitHub 提示块（`> [!NOTE]`）的变换是**破坏性**的：
+ * 上游插件会把 `[!NOTE]` 从正文里删掉，再往引用块里插一个标题段落。
+ *
+ * 这个变换**不能**放在解析层——放那儿的话，
+ * 往返（mdast → Markdown → mdast）就丢了标记，
+ * 而 Inkstone 对往返的要求是「再次解析后结构等价」。
+ *
+ * 所以它属于**表现层变换**，与公式的 `rehypeMath` 同性质，
+ * 都发生在这条「mdast → HTML」的链路上。
+ *
+ * 代价：调用方要保证传进来的是一棵**一次性**的树
+ * （`markdownToHtml` 传的就是刚解析出来的那棵）。
  */
-export function htmlFromAst(tree: MarkdownAst): string {
+export function htmlFromAst(tree: MarkdownAst, options: ParseOptions = {}): string {
   const processor = getHtmlProcessor();
+  const features = resolveFeatures(options.features);
+
+  // 提示块变换要在 mdast → hast **之前**做：
+  // 上游插件靠 `node.data.hName` 指定输出标签（`div` + `markdown-alert` 类名），
+  // 那套机制是 `mdast-util-to-hast` 的，晚了就只剩一个普通引用块。
+  if (features.githubAlerts) {
+    applyAlerts(tree);
+  }
+
   // 第一步：mdast → hast。
   // 注意 `runSync` 返回的是**hast 树本身**（不是 VFile）——
   // remark-rehype 的 transformer 直接返回新树，unified 就把它当作 run 的结果。
@@ -94,7 +120,13 @@ export function htmlFromAst(tree: MarkdownAst): string {
   // 最小 hast 结构（见 rehype-math.ts），挂进 unified 会让整条流水线的类型
   // 推断跑到 hast 上，`runSync` 的入参类型跟着变。手动调用既绕开这个，
   // 也让「公式在哪一步被替换」在代码里一目了然。
-  const withMath = rehypeMath({ styles: katexStylesheet() })(hast);
+  //
+  // `mhchem` 开关要跟着走：关掉时 `\ce{…}` 降级成字面文本，
+  // 与编辑器里的表现一致（架构约束 C）。
+  const withMath = rehypeMath({
+    styles: katexStylesheet(),
+    mhchem: features.mhchem,
+  })(hast);
   // 第三步：hast → HTML 字符串。
   // rehype-stringify 是 **compiler**，只在 stringify 阶段执行——
   // `run` 不会跑 compiler，所以必须显式分两步。
@@ -109,5 +141,5 @@ export function htmlFromAst(tree: MarkdownAst): string {
  * 这就是「解析规则唯一」被破坏的样子，签名与 `markdown-loader.ts` 保持一致。
  */
 export function markdownToHtml(source: string, options?: ParseOptions): string {
-  return htmlFromAst(parseMarkdown(source, options));
+  return htmlFromAst(parseMarkdown(source, options), options);
 }

@@ -12,6 +12,14 @@
  * 把它们写进速查表等于骗用户——用户照着写，屏幕上什么都不发生。
  * 所以表里的每一行都是**实测过的**。
  *
+ * ## 表要跟着设置走
+ *
+ * 「支持什么」是由设置面板的开关决定的：
+ * 用户关掉「表格」之后，表里就不该再有表格语法。
+ *
+ * 所以渲染前先按开关过滤一遍
+ * （见 `reference/markdown-syntax.ts` 的 `filterSyntaxGroups`）。
+ *
  * ## 为什么不渲染成「预览」
  *
  * 想过做成「左边源码、右边效果」的样子，但渲染路径有两套：
@@ -22,14 +30,24 @@
  * 速查表要的是**可靠**，不是好看：给源码，让用户自己在编辑器里试。
  */
 
+import { useMemo } from "react";
 import { t } from "@/i18n";
-import { SYNTAX_GROUPS } from "@/reference/markdown-syntax";
+import { SYNTAX_GROUPS, filterSyntaxGroups } from "@/reference/markdown-syntax";
+import { useSettings } from "@/settings/store";
+import { featuresFromSettings } from "@/parser/features";
 
 interface Props {
   onClose: () => void;
 }
 
 export function MarkdownReferenceDialog({ onClose }: Props) {
+  const [settings] = useSettings();
+  // 开关变了，表跟着变——关掉的语法不该再出现在表里。
+  const groups = useMemo(
+    () => filterSyntaxGroups(SYNTAX_GROUPS, featuresFromSettings(settings.markdown)),
+    [settings.markdown],
+  );
+
   return (
     <div
       className="recovery-overlay"
@@ -45,14 +63,14 @@ export function MarkdownReferenceDialog({ onClose }: Props) {
         </p>
 
         <div className="syntax-reference">
-          {SYNTAX_GROUPS.map((group) => (
+          {groups.map((group) => (
             <section key={group.name} className="syntax-reference__group">
               <h3 className="syntax-reference__title">{t(group.name)}</h3>
               {group.note && <p className="syntax-reference__note">{t(group.note)}</p>}
               <ul className="syntax-reference__samples">
                 {group.samples.map((sample) => (
-                  <li key={sample} className="syntax-reference__item">
-                    <code className="syntax-reference__sample">{t(sample)}</code>
+                  <li key={sample.text} className="syntax-reference__item">
+                    <code className="syntax-reference__sample">{t(sample.text)}</code>
                   </li>
                 ))}
               </ul>

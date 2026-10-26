@@ -14,6 +14,7 @@ import { onMenuAction } from "@/ipc/menu";
 import { runCommand } from "@/editor/commands";
 import { useSettings } from "@/settings/store";
 import { MARKER_DISPLAY_MODES } from "@/settings/schema";
+import { featuresFromSettings } from "@/parser/features";
 import { resolveExportItems } from "@/export/items";
 import { setAiEditorBridge } from "@/ai/editor-bridge";
 import { openAiPanel } from "@/ai/panel-store";
@@ -28,7 +29,17 @@ export function EditorSurface({ onOpenSettings }: Props) {
   const [settings, updateSettings] = useSettings();
   const markerDisplay = settings.editor.markerDisplay;
   const autoPairMode = settings.editor.autoPairMode;
-  const inlineMathSingleDollar = settings.markdown.inlineMathSingleDollar;
+  /**
+   * Markdown 扩展开关。
+   *
+   * 用 `settings.markdown` 的**引用**做依赖：
+   * 设置合并是深合并，没动 `markdown` 这一支时引用不变，
+   * 于是改「主题」不会触发编辑器重解析。
+   */
+  const markdownFeatures = useMemo(
+    () => featuresFromSettings(settings.markdown),
+    [settings.markdown],
+  );
   const focusMode = settings.editor.focusMode;
   const typewriterMode = settings.editor.typewriterMode;
   /**
@@ -68,7 +79,7 @@ export function EditorSurface({ onOpenSettings }: Props) {
       doc: "",
       displayMode: markerDisplay,
       autoPairMode,
-      inlineMathSingleDollar,
+      features: markdownFeatures,
       onChange: (value) => {
         lastSyncedRef.current = value;
         setContent(value);
@@ -143,11 +154,14 @@ export function EditorSurface({ onOpenSettings }: Props) {
     editorRef.current?.setAutoPairMode(autoPairMode);
   }, [autoPairMode]);
 
-  // 设置里的「单 $ 也当行内公式」变化 → 同步到编辑器。
-  // 它直接透传给 remark-math，所以导出的 HTML 与编辑器表现一致。
+  // 设置里的 Markdown 扩展开关变化 → 同步到编辑器。
+  //
+  // 换开关会换掉 lezer 的 parser（扩展是配置期决定的），
+  // 于是语法树要整篇重解析——编辑器的 `setMarkdownFeatures` 内部会判断
+  // 「是不是真的变了」，没变就不动。
   useEffect(() => {
-    editorRef.current?.setInlineMathSingleDollar(inlineMathSingleDollar);
-  }, [inlineMathSingleDollar]);
+    editorRef.current?.setMarkdownFeatures(markdownFeatures);
+  }, [markdownFeatures]);
 
   // 焦点模式 / 打字机模式：都走设置层的开关（持久化），编辑器侧只接收结果
   useEffect(() => {

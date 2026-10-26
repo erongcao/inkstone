@@ -71,6 +71,8 @@ export function findMermaidBlocks(
 /** Mermaid 块渲染器 */
 export const mermaidBlockRenderer: BlockRenderer = {
   id: "mermaid-block",
+  /** 关掉「Mermaid 图表」时这个渲染器不参与——图表退回代码块形态 */
+  feature: "mermaid",
 
   find(tree, source, claimed) {
     return findMermaidBlocks(tree, source, claimed);

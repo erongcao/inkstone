@@ -19,6 +19,7 @@ import type { Node, Parent } from "mdast";
 import { parseSyntax } from "@/editor/live-preview/syntax";
 import { buildLivePreviewDecorations } from "@/editor/live-preview/decorations";
 import { parseMarkdown, type ParseOptions } from "@/parser/markdown";
+import type { MarkdownFeatures } from "@/parser/features";
 import { ensureMathRenderer } from "@/editor/render/math-loader";
 import { findMathBlocks, mathBlockRenderer } from "@/editor/render/math-block";
 import { codeBlockRenderer } from "@/editor/render/code-block";
@@ -74,10 +75,15 @@ describe("对拍：逐行解析 ≡ 全文解析", () => {
 
     for (const singleDollarTextMath of [true, false]) {
       const expected = withoutBlockRanges(
-        fullDocumentInlineMath(source, { singleDollarTextMath }),
+        fullDocumentInlineMath(source, {
+          features: { inlineMathSingleDollar: singleDollarTextMath },
+        }),
         blockRanges,
       );
-      const actual = findInlineMath(tree, source, { singleDollarTextMath, blockRanges });
+      const actual = findInlineMath(tree, source, {
+        features: { inlineMathSingleDollar: singleDollarTextMath },
+        blockRanges,
+      });
       expect(actual, `${file}（singleDollarTextMath=${singleDollarTextMath}）`).toEqual(expected);
     }
   });
@@ -118,10 +124,15 @@ describe("对拍：逐行解析 ≡ 全文解析", () => {
 
     for (const singleDollarTextMath of [true, false]) {
       const expected = withoutBlockRanges(
-        fullDocumentInlineMath(source, { singleDollarTextMath }),
+        fullDocumentInlineMath(source, {
+          features: { inlineMathSingleDollar: singleDollarTextMath },
+        }),
         blockRanges,
       );
-      const actual = findInlineMath(tree, source, { singleDollarTextMath, blockRanges });
+      const actual = findInlineMath(tree, source, {
+        features: { inlineMathSingleDollar: singleDollarTextMath },
+        blockRanges,
+      });
       expect(actual, `${source}（singleDollarTextMath=${singleDollarTextMath}）`).toEqual(expected);
     }
   });
@@ -167,23 +178,31 @@ describe("singleDollarTextMath 开关", () => {
 
   it("关掉后：单 $ 不再是定界符", () => {
     const source = "行内 $x^2$ 结束";
-    const hits = findInlineMath(parseSyntax(source), source, { singleDollarTextMath: false });
+    const hits = findInlineMath(parseSyntax(source), source, {
+      features: { inlineMathSingleDollar: false },
+    });
     expect(hits).toEqual([]);
   });
 
   it("关掉后：价格区间不再被误判（这是关它的主要动机）", () => {
     const source = "价格 $5 到 $10 元";
     expect(
-      findInlineMath(parseSyntax(source), source, { singleDollarTextMath: true }),
+      findInlineMath(parseSyntax(source), source, {
+      features: { inlineMathSingleDollar: true },
+    }),
     ).toHaveLength(1);
     expect(
-      findInlineMath(parseSyntax(source), source, { singleDollarTextMath: false }),
+      findInlineMath(parseSyntax(source), source, {
+      features: { inlineMathSingleDollar: false },
+    }),
     ).toEqual([]);
   });
 
   it("关掉后：$$…$$ 在行内仍然是行内公式（所以关掉不等于失去行内公式）", () => {
     const source = "行内 $$x^2$$ 结束";
-    const hits = findInlineMath(parseSyntax(source), source, { singleDollarTextMath: false });
+    const hits = findInlineMath(parseSyntax(source), source, {
+      features: { inlineMathSingleDollar: false },
+    });
     expect(hits).toHaveLength(1);
     expect(hits[0].tex).toBe("x^2");
   });
@@ -234,14 +253,14 @@ describe("装饰器管线集成", () => {
   function replacedRanges(
     source: string,
     cursor: number,
-    math: { singleDollarTextMath?: boolean } = {},
+    features?: Partial<MarkdownFeatures>,
   ) {
     const set = buildLivePreviewDecorations(
       source,
       cursor,
       "live",
       parseSyntax(source),
-      math,
+      features,
     );
     const out: { from: number; to: number; block: boolean }[] = [];
     const it = set.iter();
@@ -273,10 +292,12 @@ describe("装饰器管线集成", () => {
   it("关掉单 $ 之后，同一份文档不再产生行内装饰器", async () => {
     await ensureMathRenderer();
     const source = "行内 $x^2$ 结束";
-    const hit = findInlineMath(parseSyntax(source), source, { singleDollarTextMath: false });
+    const hit = findInlineMath(parseSyntax(source), source, {
+      features: { inlineMathSingleDollar: false },
+    });
     expect(hit).toEqual([]);
     expect(
-      replacedRanges(source, 0, { singleDollarTextMath: false }).find((r) => r.from === 3),
+      replacedRanges(source, 0, { inlineMathSingleDollar: false }).find((r) => r.from === 3),
     ).toBeUndefined();
   });
 

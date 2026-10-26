@@ -49,33 +49,7 @@ import {
 import type { Options } from "remark-rehype";
 import type { Plugin } from "unified";
 import type { Root } from "mdast";
-
-/**
- * unified 的 `Data` 里，插件之间传递扩展用的那几个数组。
- *
- * unified 的 `Data` 类型只声明了 `settings`，
- * 这几个键是 micromark / mdast 生态约定的「扩展挂载点」，
- * 由各自生态的包通过模块增强声明——但那些包是传递依赖，
- * 本项目 import 不到它们的类型，所以这里自己描述一份最小结构。
- */
-interface ExtensionMounts {
-  /** micromark 分词器扩展 */
-  micromarkExtensions?: unknown[];
-  /** mdast 解析扩展（把 token 变成 mdast 节点） */
-  fromMarkdownExtensions?: unknown[];
-  /** mdast 序列化扩展（把 mdast 节点变回 Markdown） */
-  toMarkdownExtensions?: unknown[];
-}
-
-/** 把一个扩展挂到 unified 的 data 上 */
-function mount(
-  data: ExtensionMounts,
-  key: keyof ExtensionMounts,
-  extension: unknown,
-): void {
-  const list = data[key] ?? (data[key] = []);
-  list.push(extension);
-}
+import { mount, type ExtensionMounts } from "./extensions";
 
 /**
  * remark 插件：让解析与序列化都认 `==高亮==`。

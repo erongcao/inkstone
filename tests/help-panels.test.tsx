@@ -19,11 +19,12 @@ import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 import { MarkdownReferenceDialog } from "@/views/MarkdownReferenceDialog";
 import { ShortcutsDialog, buildShortcutGroups } from "@/views/ShortcutsDialog";
-import { SYNTAX_GROUPS } from "@/reference/markdown-syntax";
+import { SYNTAX_GROUPS, filterSyntaxGroups } from "@/reference/markdown-syntax";
 import { parseMarkdown } from "@/parser/markdown";
 import { en } from "@/i18n/locales/en";
 import { zhTW } from "@/i18n/locales/zh-TW";
 import { resetSettings, updateSettings } from "@/settings/store";
+import { DEFAULT_FEATURES, featuresFromSettings } from "@/parser/features";
 import { MENU_CHROME, SHORTCUTS } from "@/shortcuts";
 
 /** 简体里才有的字（繁体用同形的字不算） */
@@ -59,7 +60,11 @@ describe("语法速查表：数据", () => {
     const missingTw: string[] = [];
 
     for (const group of SYNTAX_GROUPS) {
-      const texts = [group.name, group.note, ...group.samples].filter(Boolean);
+      const texts = [
+        group.name,
+        group.note,
+        ...group.samples.map((sample) => sample.text),
+      ].filter(Boolean);
       for (const text of texts) {
         // 不含中文的条目（"Emoji"、"---"、代码示例）三个语言下是同一个词，
         // 查不到字典不算漏译——它本来就不需要翻译。
@@ -88,7 +93,9 @@ describe("语法速查表：数据", () => {
     // 解析器必须真的切出对应的 mdast 节点。
     // 以后再实现一个新扩展、忘了往表里加（或加了却没实现），
     // 这条都会红。
-    const all = SYNTAX_GROUPS.flatMap((group) => group.samples).join("\n");
+    const all = SYNTAX_GROUPS.flatMap((group) =>
+      group.samples.map((sample) => sample.text),
+    ).join("\n");
 
     // 已经实现的：表里有，解析器也认
     expect(all).toContain("==高亮==");
@@ -120,15 +127,16 @@ describe("语法速查表：界面", () => {
     // （换行变空格），而多行示例的缩进与换行**本身就是语法的一部分**。
     const { container } = render(<MarkdownReferenceDialog onClose={() => {}} />);
 
+    const groups = filterSyntaxGroups(SYNTAX_GROUPS, DEFAULT_FEATURES);
     const titles = Array.from(container.querySelectorAll(".syntax-reference__title")).map(
       (node) => node.textContent ?? "",
     );
-    expect(titles).toEqual(SYNTAX_GROUPS.map((group) => group.name));
+    expect(titles).toEqual(groups.map((group) => group.name));
 
     const samples = Array.from(container.querySelectorAll(".syntax-reference__sample")).map(
       (node) => node.textContent ?? "",
     );
-    expect(samples).toEqual(SYNTAX_GROUPS.flatMap((group) => group.samples));
+    expect(samples).toEqual(groups.flatMap((group) => group.samples.map((s) => s.text)));
   });
 
   it("英文界面里不出现任何中文", () => {
@@ -147,6 +155,56 @@ describe("语法速查表：界面", () => {
       [...text].some((char) => SIMPLIFIED_ONLY.has(char)),
     );
     expect(leaked).toEqual([]);
+  });
+});
+
+describe("语法速查表：跟着开关走", () => {
+  it("关掉表格 → 表格分组整个消失", () => {
+    const groups = filterSyntaxGroups(SYNTAX_GROUPS, {
+      ...DEFAULT_FEATURES,
+      tables: false,
+    });
+    expect(groups.map((g) => g.name)).not.toContain("表格");
+  });
+
+  it("关掉高亮 → 强调分组还在，但高亮那条没了", () => {
+    const groups = filterSyntaxGroups(SYNTAX_GROUPS, {
+      ...DEFAULT_FEATURES,
+      highlight: false,
+    });
+    const emphasize = groups.find((g) => g.name === "强调");
+    expect(emphasize).toBeTruthy();
+    const texts = emphasize?.samples.map((s) => s.text) ?? [];
+    expect(texts).not.toContain("==高亮==");
+    expect(texts).toContain("**粗体**");
+  });
+
+  it("关掉行内公式 → 只影响行内那条，块级那条还在", () => {
+    const groups = filterSyntaxGroups(SYNTAX_GROUPS, {
+      ...DEFAULT_FEATURES,
+      inlineMath: false,
+    });
+    const math = groups.find((g) => g.name === "公式");
+    const texts = math?.samples.map((s) => s.text) ?? [];
+    expect(texts).not.toContain("$E = mc^2$");
+    expect(texts.some((t) => t.startsWith("$$"))).toBe(true);
+  });
+
+  it("全部开着 → 一条都不少", () => {
+    const groups = filterSyntaxGroups(SYNTAX_GROUPS, DEFAULT_FEATURES);
+    expect(groups).toHaveLength(SYNTAX_GROUPS.length);
+    expect(groups.flatMap((g) => g.samples)).toHaveLength(
+      SYNTAX_GROUPS.flatMap((g) => g.samples).length,
+    );
+  });
+
+  it("界面跟着设置走：关掉表格后 DOM 里没有表格分组", () => {
+    updateSettings({ markdown: { tables: false } });
+    const { container } = render(<MarkdownReferenceDialog onClose={() => {}} />);
+    const titles = Array.from(container.querySelectorAll(".syntax-reference__title")).map(
+      (node) => node.textContent ?? "",
+    );
+    expect(titles).not.toContain("表格");
   });
 });
 

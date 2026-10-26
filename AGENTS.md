@@ -2491,7 +2491,7 @@ lezer 侧照抄 `@lezer/markdown` 的 GFM `Strikethrough`——
 「设置里的参数不接到请求上，就是摆设」这条原则最早是为 AI 面板写的，
 这里同样适用。
 
-**为什么没有顺手修**（2026-10-26 的判断，留给后续拍板）：
+**为什么当时没有顺手修**（2026-10-26 的判断，留给后续拍板）：
 
 要让它生效，得先回答三个设计问题，每一个都会动到架构：
 
@@ -2506,7 +2506,246 @@ lezer 侧照抄 `@lezer/markdown` 的 GFM `Strikethrough`——
 3. **格式命令要不要受限**。关掉高亮后，「高亮」命令还该不该插 `==`？
 
 所以这是一件**独立的功能**（「Markdown 扩展开关真正生效」），
-不是某个功能的收尾。已记为待办。
+不是某个功能的收尾。
+
+→ **2026-10-26 已实施**，三个设计问题都拍板了，详见下一节。
+
+## Markdown 扩展开关：13 个复选框，11 个真接线（2026-10-26）
+
+上一节记的那个「摆设开关」，本轮全部接上线了。
+
+### 先纠正一个数字
+
+`settings.markdown` 是 **13 个**字段，不是 12 个——
+本轮实现时逐一核对过（`autoNumberEquations` / `subscriptSuperscript` 也在里面）。
+
+13 个里有 **11 个**进了 `src/parser/features.ts` 的开关模型（真的接线），
+另外 **2 个**对应���功能**还不存在**，设置面板里**置灰并写明原因**：
+
+| 置灰的开关 | 为什么没做 |
+|---|---|
+| `autoNumberEquations`（公式自动编号） | 代码里**根本没有**编号功能。它的默认值是 `false`——它是个**许愿** |
+| `subscriptSuperscript`（下标 / 上标） | lezer 侧**有**现成扩展（`@lezer/markdown` 导出了 `Subscript` / `Superscript`），但 remark 侧没有对应的解析规则。只开一半会破「解析规则唯一」那条红线，所以两条一起等 |
+
+把它们放进 `MarkdownFeatures` 等于给「还没实现的功能」发一张通行证。
+不放，设置面板里就置灰——**置灰比许愿诚实**。
+
+### 唯一真相源：`src/parser/features.ts`
+
+一份 `MarkdownFeatures`（11 个字段），四处派生：
+
+```
+settings.markdown ──featuresFromSettings──┐
+                                          ├──► MarkdownFeatures ──► 语义层（remark）
+                              featuresKey ─┤                  ├──► 编辑布局层（lezer）
+                                          │                  ├──► 渲染层（装饰器）
+                                          └──────────────────┴──► 导出与剪贴板
+```
+
+`featuresKey` 是 11 个 0/1 拼成的字符串——解析器与语法分析器都按它缓存，
+所以最多 2¹¹ 种组合，而且**同一组合永远命中同一个缓存**。
+
+### 三个层次，「不生效」的样子不一样
+
+| 层 | 开关关掉后 |
+|---|---|
+| remark（语义） | 不再产出对应节点（表格 / 任务 / 脚注 / 高亮…） |
+| lezer（编辑布局） | 不再认对应标记（表格 / 任务 / 高亮） |
+| 渲染层 | 不渲染（公式不渲染成 KaTeX、图表不渲染成 SVG） |
+
+三层同时关 → 用户看到的是「这段语法不被识别，显示为字面文本」，
+导出也是字面文本。**屏幕与导出必须一致**（架构约束 C）。
+
+### GFM 拆开是**零成本**的
+
+`remark-gfm` 是一次性挂上五样东西（自动链接 / 脚注 / 删除线 / 表格 / 任务列表），
+**没有单独的开关**——想关「表格」就只能把 GFM 拆开自己装。
+
+而这五样东西本来就是 `remark-gfm` 的**传递依赖**，早就在 pnpm store 里了：
+
+```
+micromark-extension-gfm-{autolink-literal,footnote,strikethrough,table,task-list-item}
+mdast-util-gfm-{autolink-literal,footnote,strikethrough,table,task-list-item}
+```
+
+把它们提升为**直接依赖**即可（`pnpm add` 报 `downloaded 0`，不下载任何新包，
+许可证还是同一批 MIT）。顺序**原样照抄** `remark-gfm`（自动链接 → 脚注 → 删除线 → 表格 → 任务列表）——
+micromark 的 text 构造是按顺序叠加的，换顺序会改变某些输入的判定。
+
+**实测包体代价**（前端产物，同一份代码只差本轮改动，两次 `pnpm build` 对比）：
+
+```
+baseline  8,064,500 bytes
+new       8,077,679 bytes
+增量      +13,179 bytes ≈ 12.9 KB（占 8.06 MB 的 0.16%）
+```
+
+GFM 那 10 个子扩展**一点都没涨**——它们本来就被 `remark-gfm` 打进产物了，
+提升为直接依赖只是让 import 路径合法化。真正新增的是
+`remark-github-blockquote-alert`（约 3 KB）与本轮自己写的代码。
+
+### 踩到的四个坑（都是「看起来能跑，其实没跑」）
+
+**坑一：lezer 的 `configure` 是加法，`base` 里**已经**自带 GFM。**
+
+`base` 是 `@codemirror/lang-markdown` 的 `markdownLanguage.parser`，
+而它不是裸的 CommonMark——CM6 那边的定义是：
+
+```js
+const extended = commonmark.configure([GFM, Subscript, Superscript, Emoji, …])
+const markdownLanguage = mkLang(extended)
+```
+
+也就是说 `base` 里**已经有** Table / TaskList / Strikethrough / Autolink。
+而 lezer 的 `configure` 只会**追加**，没有「替换掉已有解析器」的概念——
+所以「表格开关关掉」如果只是「不往里加 Table」，**根本关不掉**。
+
+真正能摘掉一个解析器的只有 `MarkdownConfig.remove`（按**解析器名**置空）：
+
+```ts
+const remove: string[] = [];
+if (!features.tables) remove.push("Table");
+if (!features.taskLists) remove.push("TaskList");
+base.configure({ remove, … });
+```
+
+也不能改成「从裸 CommonMark 重新搭」：`base` 上还挂着 CM6 的
+`headingProp`（标题折叠靠它）、`indentNodeProp`、`languageDataProp`——
+那些定义在 `@codemirror/lang-markdown` 的模块作用域里，**没有导出**，拿不到。
+
+**坑二：unified 的变换器只在 `run()` 阶段执行，而 `parseMarkdown` 只调 `parse()`。**
+
+早先把「关掉的公式还原成原文」做成 remark 插件（`remarkMathOff`），
+它**一次都没跑过**——测试是绿的，因为**没有测试断言它生效**。
+「插件挂上了」不等于「插件跑了」。
+
+现在改成普通函数 `restoreDisabledMath(tree, source, options)`，
+由 `parseMarkdown` 在解析完立刻调用：调用关系是显式的，跑没跑一眼看得见。
+
+**坑三：`resolveFeatures` 原来用 `{...DEFAULT_FEATURES, ...partial}` 展开。**
+
+形状传错时（该扁平的地方多套了一层 `{ features: {...} }`），
+那个嵌套对象被当成一个叫 `features` 的开关塞了进去，
+于是真正要改的 `inlineMathSingleDollar` **根本没被改到**，
+而功能「看起来是关掉的」——排查了很久。
+
+现在**只挑已知键**，其余原样丢掉。丢掉未知键之后，
+至少结果只受已知开关影响；形状错了会立刻表现为「开关没生效」，
+而不是悄悄塞进垃圾键。
+
+**坑四：`export/html.ts` 原来调 `markdownToHtml(source)` **不传 options**。**
+
+也就是说**导出完全不跟随用户的开关**——
+用户关掉「表格」，屏幕上不是表格、导出却是表格。
+这是本轮顺手修掉的既有缺口（架构约束 C 的一个实际破口）。
+
+### 公式关掉必须做在**解析层**
+
+`remark-math` 只有一个开关（`singleDollarTextMath`），
+**没有**「行内公式」「块级公式」分开的开关——而设置面板里这两个是分开的。
+
+只关行内公式时，`remark-math` 仍然要挂（块级还要用），
+于是 `$x$` 会被解析成 `inlineMath` 节点——
+**定界符 `$` 在 mdast 里是不存在的**（节点只有 `value: "x"`）。
+
+直接不渲染它，导出会变成 `<code>x</code>`——**用户的 `$` 没了**。
+那比「不解析」更糟：文档内容被悄悄改掉了。
+
+解法：用 node 的 position 把原文切回来。
+`inlineMath` / `math` 节点的 position **完整覆盖定界符**（实测）：
+
+| 源码 | position 切出来的原文 |
+|---|---|
+| `$x^2$` | `$x^2$` |
+| `$ x^2 $`（带空格） | `$ x^2 $` |
+| `$$\ny = mc^2\n$$` | `$$\ny = mc^2\n$$` |
+
+把节点换成一个**内容等于原文**的文本节点，效果就等于「这个公式根本不被识别」。
+
+### mhchem 做成**真开关**
+
+KaTeX **内置** mhchem：`\ce{H2O}` 直接就能渲染成化学式，不需要额外插件。
+所以「关掉 mhchem」不是「装没装插件」的问题，而是「要不要让它生效」的问题。
+
+关掉之后 `\ce{…}` 应该显示成**字面文本**——不是空白，不是报错，
+更不是「悄悄变成别的意思」。做法是用 KaTeX 的 `\verb|…|`（**完全按字面**渲染）。
+
+不自己拼 `\backslash ce\{…\}`：后者要逐个转义 `_` `^` `&` `%` `$` `#`，
+而且 `\^` 在 KaTeX 里是**重音命令**（要吃参数），拿来转义尖括号会直接报错
+（实测 `KaTeX parse error: Undefined control sequence`）。
+
+标志**显式传下去**（`MathRenderOptions.mhchem` → `renderMath` 唯一收口 →
+编辑器 / 块级 / 复制 / 导出四处一致），**不在渲染器里读全局设置**——
+装饰器管线是**纯函数**（不吃 EditorState，只吃显式参数）。
+
+### GitHub 提示块：变换放在**导出期**，不放解析层
+
+上游 `remark-github-blockquote-alert`（MIT，336 万月下载）是**破坏性**的：
+它把 `[!NOTE]` 从正文里删掉，再往引用块里插一个「图标 + 标题」段落。
+
+放进解析层的话，往返（mdast → Markdown → mdast）就**丢了标记**——
+而 Inkstone 对往返的要求是「再次解析后结构等价」。
+
+所以它属于**表现层变换**（与公式的 `rehypeMath` 同性质），
+发生在「mdast → HTML」这条链路上。语义层因此保持干净：
+mdast 里它就是**普通引用块**，标记还在正文里。
+
+判定规则抄了一份（上游没导出它的正则），两边**对拍**：
+上游认的是「引用块里**第一个匹配上的**段落，其第一个文本节点以 `[!TYPE]` 开头」——
+注意是「第一个**匹配上的**」而不是「第一个段落」，
+`> 引用\n>\n> [!NOTE]` 上游会认成 alert。
+
+lezer 不认识 alert（`[!NOTE]` 在它眼里是个 Link 节点，和脚注一样），
+所以编辑器侧按「引用块 + 段落」扫一遍。
+
+**编辑器侧的渲染**：底色用 **`Decoration.line`** 而不是行内 mark——
+mark 只盖住文字那么宽，底色到文字末尾就断了，提示块看起来像一小截彩色文字；
+行装饰挂在 `.cm-line` 上，底色能铺满整行 ✓
+（行装饰一次只管一行，所以逐行挂）。
+`>` 引用符号用零宽 widget 顶替藏掉——提示块已经有标题徽章了，
+再留个 `>` 只会让人以为是普通引用块。
+
+### 速查表与格式命令也跟着开关走
+
+**速查表**：每条示例带一个 `feature` 标签，开关关着时**那条示例消失**；
+一组全被过滤掉时整组也消失（留个空标题更糟）。
+数据模型从 `samples: string[]` 改成 `samples: SyntaxSample[]`。
+
+**格式命令**：`FormatSpec` 加 `feature` 字段，
+关掉高亮后「高亮」命令**不进命令面板、不进斜杠菜单**——
+命令面板里出现一个**不生效**的格式命令，比没有更糟：
+用户点了以为成功了，屏幕上什么都没变。
+
+### 运行时怎么切
+
+| 东西 | 怎么换 |
+|---|---|
+| remark 处理器 | `getProcessor(options)` 按 `featuresKey` 缓存，天然按需重建 |
+| lezer parser | `getMarkdownParser(features)` 同样按 `featuresKey` 缓存 |
+| CM6 `language` facet | Compartment `languageBox` 换（源码模式的语法高亮） |
+| Live Preview 的树 | `setMarkdownFeatures` effect → **整篇重解析** |
+
+**必须换 parser**（不是可选项）：parser 换了，`TreeFragment` 不能复用——
+`TreeFragment` 是与 parser 绑定的，拿旧 parser 的片段喂新 parser 会得到错误的树。
+
+初始开关通过一个 **facet** 传给 `StateField.create`
+（`StateField` 没有「初始值」配置项，而 facet 的值在状态创建前就算好了）。
+早先的做法是「创建后再派发一次 effect」——那会让第一棵树用**默认 parser** 解析一遍，
+然后立刻整篇重解析：多余的解析，而且中间那一帧的装饰器是按错的规则算的
+（表格已经渲染出来了，下一帧才消失）。
+
+切标签页时新建的状态也要跟上当前开关（facet 里记的是**编辑器创建时**的开关），
+所以 `createState` 会比对一次，不一致就补一次 effect。
+
+### 已知缺口
+
+- `tests/` **不在 `tsconfig.json` 的 include 范围**里 →
+  `pnpm typecheck` **不检查测试代码**。实测有约 35 处既有类型错误在那儿。
+  补这一项是独立的工作量（本轮只顺手修了自己新写的文件里的 3 处）。
+- `~下标~` / `^上标^` 两个格式命令仍不生效（与第二轮一致，KNOWN_PENDING 钉着）
+- 提示块规则的一处已知分歧：文档里若有 `[!NOTE]: https://…` 这样的链接定义，
+  mdast 会把 `[!NOTE]` 解析成 linkReference（上游插件不认），
+  编辑器侧仍会认 → 记在 `src/editor/render/alert.ts` 的文件头
 
 ## 当前状态
 
@@ -2675,6 +2914,20 @@ M3 全部完成（2026-10-23）。M4（导出）进行中（2026-10-25）：
 - 顺带修掉一个**比不渲染更糟**的 bug：`remark-gfm` 默认把单个 `~` 也当删除线，
   `~下标~` 屏幕是字面量、**导出却是 `<del>下标</del>`**；现与 lezer 对齐
 - 仍不做：`~下标~` / `^上标^`（要动 `~` 与 `~~` 的仲裁，成本最高，等用户定夺）
-- **待办（独立功能）**：`settings.markdown` 的 12 个扩展开关里只有 1 个真接线，
-  `highlight` 也在其中。要让它们生效得先定 parser 实例怎么切、
-  速查表要不要跟着变、格式命令要不要受限（见上文「设置面板里的摆设开关」）
+
+**Markdown 扩展开关已全部接线（2026-10-26）**：
+
+- `settings.markdown` 的 **13 个**开关里，**11 个**真的生效
+  （表格 / 任务列表 / 脚注 / 高亮 / front matter / 行内公式 / 块级公式 /
+  mhchem / mermaid / GitHub 提示块 / 单 `$` 定界符）；
+  另外 2 个（公式自动编号、下标上标）对应功能**还不存在**，
+  设置面板里**置灰并写明原因**
+- 开关贯穿三层：remark 语义、lezer 编辑布局、渲染与导出——
+  关掉一个，那套语法在屏幕与导出里**一致地**变成字面文本
+- GFM 拆开**零成本**：10 个子扩展本就是传递依赖，提升为直接依赖（`downloaded 0`）
+- 顺带修掉一个既有缺口：`export/html.ts` 原来**不传**解析选项，
+  导出完全不跟随用户的开关（架构约束 C 的实际破口）
+- 新增 GitHub 提示块（上游 `remark-github-blockquote-alert`，MIT）
+- 速查表与格式命令也跟着开关走
+- 四个「看起来能跑、其实没跑」的坑记在
+  「Markdown 扩展开关：13 个复选框，11 个真接线」一节

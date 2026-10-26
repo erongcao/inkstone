@@ -23,9 +23,9 @@ import { buildLivePreviewDecorations } from "./decorations";
 import {
   livePreviewField,
   setDisplayMode,
-  setMathOptions,
   refreshRendering,
   getSyntaxTree,
+  initialFeaturesFacet,
 } from "./state";
 import { registerBlockRenderer } from "../render/registry";
 import { codeBlockRenderer } from "../render/code-block";
@@ -54,6 +54,7 @@ import {
   findEditableTable,
 } from "../render/table-operations";
 import type { MarkerDisplayMode } from "@/settings/schema";
+import { DEFAULT_FEATURES, type MarkdownFeatures } from "@/parser/features";
 
 /**
  * Live Preview 装饰器。
@@ -70,12 +71,10 @@ import type { MarkerDisplayMode } from "@/settings/schema";
  */
 const livePreviewDecorations = EditorView.decorations.from(
   livePreviewField,
-  ({ source, cursor, mode, tree, singleDollarTextMath }) => {
+  ({ source, cursor, mode, tree, features }) => {
     // 源码模式：不做任何渲染
     if (mode === "source") return Decoration.none;
-    return buildLivePreviewDecorations(source, cursor, mode, tree, {
-      singleDollarTextMath,
-    });
+    return buildLivePreviewDecorations(source, cursor, mode, tree, features);
   },
 );
 
@@ -221,11 +220,16 @@ function runTableAction(
 /**
  * Live Preview 扩展。
  *
+ * `features` 是**创建编辑器时**生效的开关：
+ * 它被塞进一个 facet，`StateField.create` 从里面取——
+ * 于是第一棵树就是按用户设置解析出来的，
+ * 不会出现「先按默认规则渲染一帧、再纠正」的情况（理由见 state.ts）。
+ *
  * 初值不通过 StateField 传入（StateField 没有 init 配置项），
- * 而是由调用方在创建编辑器后派发一次 effect 设置——
+ * 显示策略那部分由调用方在创建编辑器后派发一次 effect 设置——
  * 见 `createMarkdownEditor` 里的 `initialDisplayMode`。
  */
-export function livePreview(): Extension {
+export function livePreview(features: MarkdownFeatures = DEFAULT_FEATURES): Extension {
   // 注册块级渲染器（幂等，重复调用会覆盖）
   // 顺序有意义：后面的渲染器会拿到前面已占用的区间并让开。
   // **mermaid 必须排在 code-block 前面**——两者匹配同一个 `FencedCode` 节点。
@@ -235,6 +239,7 @@ export function livePreview(): Extension {
   registerBlockRenderer(tableRenderer);
 
   return [
+    initialFeaturesFacet.of(features),
     livePreviewField,
     livePreviewDecorations,
     mathReadinessWatcher,
@@ -381,18 +386,6 @@ export function toggleTaskAt(view: EditorView, at: number): void {
   if (!item) return;
   const change = taskToggleChange(item);
   view.dispatch({ changes: { from: change.from, to: change.to, insert: change.insert } });
-}
-
-/**
- * 编程式设置行内公式的定界符策略。
- *
- * 设置面板改这个开关时调用；值直接透传给 remark-math 的 `singleDollarTextMath`。
- */
-export function setMathOptionsOf(
-  view: EditorView,
-  options: { singleDollarTextMath: boolean },
-): void {
-  view.dispatch({ effects: setMathOptions.of(options) });
 }
 
 export { setDisplayMode };

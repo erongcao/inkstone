@@ -26,6 +26,8 @@
  */
 
 import { markdownToHtml } from "@/parser/html";
+import { featuresFromSettings } from "@/parser/features";
+import { readSettings } from "@/settings/store";
 import { highlightCode, resolveLanguage } from "@/editor/render/code-block";
 import type { OutlineItem } from "@/editor/document-index";
 import type { ColorMode } from "@/settings/schema";
@@ -321,6 +323,42 @@ body {
   border-left: 4px solid var(--ink-quote-border);
 }
 
+/* GitHub 提示块：类名由 remark-github-blockquote-alert 生成 */
+.inkstone-doc .markdown-alert {
+  margin: 0 0 1em;
+  padding: 0.4em 0.9em;
+  border-left: 4px solid var(--ink-border-strong);
+  border-radius: 0 4px 4px 0;
+  background-color: rgba(127, 127, 127, 0.08);
+}
+
+.inkstone-doc .markdown-alert-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  margin: 0 0 0.3em;
+  font-weight: 600;
+}
+
+.inkstone-doc .markdown-alert-title .octicon {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+  flex: none;
+}
+
+.inkstone-doc .markdown-alert-note { border-left-color: #0969da; }
+.inkstone-doc .markdown-alert-tip { border-left-color: #1a7f37; }
+.inkstone-doc .markdown-alert-important { border-left-color: #8250df; }
+.inkstone-doc .markdown-alert-warning { border-left-color: #bf8700; }
+.inkstone-doc .markdown-alert-caution { border-left-color: #cf222e; }
+
+.inkstone-doc .markdown-alert-note .markdown-alert-title { color: #0969da; }
+.inkstone-doc .markdown-alert-tip .markdown-alert-title { color: #1a7f37; }
+.inkstone-doc .markdown-alert-important .markdown-alert-title { color: #8250df; }
+.inkstone-doc .markdown-alert-warning .markdown-alert-title { color: #bf8700; }
+.inkstone-doc .markdown-alert-caution .markdown-alert-title { color: #cf222e; }
+
 .inkstone-doc code {
   font-family: var(--ink-mono-family);
   font-size: 0.875em;
@@ -598,7 +636,12 @@ function addHeadingAnchors(html: string, outline: OutlineItem[]): string {
  */
 export function exportToHtml(source: string, options: HtmlExportOptions): string {
   // 正文：复用现成的 HTML 链路（含 KaTeX 公式渲染）
-  let body = markdownToHtml(source);
+  //
+  // **必须传当前的 Markdown 开关**——不然关掉表格/脚注/高亮的用户
+  // 导出来的 HTML 里那些语法还在，与屏幕上看到的不一致（架构约束 C）。
+  let body = markdownToHtml(source, {
+    features: featuresFromSettings(readSettings().markdown),
+  });
   // 代码高亮：导出侧补上（编辑器里那份是 CodeMirror 装饰器，不在这条链路上）
   body = highlightCodeBlocks(body);
   // 标题锚点：让大纲可跳转

@@ -692,6 +692,80 @@
 }
 
 /* ═══════════════════════════════════════════════════════════
+   GitHub 提示块（`> [!NOTE]`）
+   ═══════════════════════════════════════════════════════════ */
+
+/*
+ * 整块样式：左边框 + 淡底色。
+ *
+ * 颜色按 GitHub 自己的五档来（蓝 / 绿 / 紫 / 橙 / 红），
+ * 但底色用**透明度**而不是固定色值——
+ * 这样明暗两套主题都不用各写一遍颜色，
+ * 底色跟着底色走、边框跟着边框走。
+ */
+/*
+ * 挂在**行**上（`Decoration.line`），不是行内 mark。
+ *
+ * 行内 mark 只盖住文字那么宽，底色到文字末尾就断了，
+ * 提示块看起来像一小截彩色文字，而不像一个块。
+ * 行装饰挂在 `.cm-line` 上，底色能铺满整行 ✓
+ *
+ * 竖向不留内边距：相邻两行各自有底色与左边框，
+ * 连起来就是一整条。横向留一点，把正文从左边框推开。
+ */
+.cm-line.cm-md-alert {
+  padding-left: 0.8em;
+  border-left: 4px solid var(--ink-border-strong);
+  background-color: color-mix(in srgb, var(--ink-fg) 6%, transparent);
+}
+
+/* 标题徽章：把 `[!NOTE]` 换成类型名 */
+.cm-md-alert-title {
+  display: inline-block;
+  margin-right: 0.5em;
+  padding: 0 0.4em;
+  border-radius: 4px;
+  font-size: 0.85em;
+  font-weight: 600;
+  line-height: 1.6;
+  color: var(--ink-fg);
+  background-color: color-mix(in srgb, var(--ink-fg) 12%, transparent);
+  user-select: none;
+}
+
+.cm-md-alert--note {
+  border-left-color: #0969da;
+}
+.cm-md-alert--tip {
+  border-left-color: #1a7f37;
+}
+.cm-md-alert--important {
+  border-left-color: #8250df;
+}
+.cm-md-alert--warning {
+  border-left-color: #bf8700;
+}
+.cm-md-alert--caution {
+  border-left-color: #cf222e;
+}
+
+.cm-md-alert-title--note {
+  color: #0969da;
+}
+.cm-md-alert-title--tip {
+  color: #1a7f37;
+}
+.cm-md-alert-title--important {
+  color: #8250df;
+}
+.cm-md-alert-title--warning {
+  color: #bf8700;
+}
+.cm-md-alert-title--caution {
+  color: #cf222e;
+}
+
+/* ═══════════════════════════════════════════════════════════
    图片
    ═══════════════════════════════════════════════════════════ */
 

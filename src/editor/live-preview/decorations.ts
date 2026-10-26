@@ -25,11 +25,14 @@ import { findInlineMath, renderInlineMath } from "../render/inline-math";
 import { findTaskItems } from "../render/task-list";
 import { findSizedImages, stripImageSize } from "../render/image-size";
 import { overlapsAny } from "../render/scan";
-import { findFootnotes, type FootnoteModel } from "../render/footnote";
+import { findFootnotes, EMPTY_FOOTNOTES, type FootnoteModel } from "../render/footnote";
 import { FootnoteRefWidget, FootnoteDefWidget } from "./footnote-widget";
 import { ImageWidget, renderImage } from "./image-widget";
+import { findAlerts } from "../render/alert";
+import { AlertTitleWidget } from "./alert-widget";
 import type { BlockMatch, BlockRenderer } from "../render/types";
 import type { MarkerDisplayMode } from "@/settings/schema";
+import { resolveFeatures, type MarkdownFeatures } from "@/parser/features";
 
 /**
  * 行内标记类型 → 规格 的查找表。
@@ -191,16 +194,23 @@ function analyze(
  *   - `live`   标记隐藏（零宽 widget 顶替），光标进入该结构才显露
  *   - `dimmed` 标记始终可见，但弱化着色（Ulysses 式）
  * @param tree   增量维护的语法树
- * @param math   行内公式选项（是否把单个 `$` 当定界符）
+ * @param features 当前的 Markdown 扩展开关。
+ *   关掉一个扩展，那套语法就**不被识别**——显示为字面文本。
+ *   解析层（remark）那边同时关着，两层才对得上（架构约束 C）。
  */
 export function buildLivePreviewDecorations(
   source: string,
   cursor: number,
   mode: MarkerDisplayMode = "live",
   tree: Tree,
-  math: { singleDollarTextMath?: boolean } = {},
+  features?: Partial<MarkdownFeatures>,
 ): DecorationSet {
   const syntaxTree = tree;
+  // 补齐缺省：传进来的对象可能只写了要改的那几项。
+  //
+  // 不补齐的话，一个只带 `tables: false` 的对象会让**所有**其它功能
+  // 都变成 undefined → falsy → 静默关掉。这个坑太隐蔽，直接在入口挡住。
+  const on = resolveFeatures(features);
 
   // 注意：`Decoration.mark(...).range(a, b)` 返回的是 `Range<Decoration>`（带 from/to 的区间），
   // 不是 `Decoration` 本身；`DecorationSet.create` 需要的正是这种区间数组。
@@ -214,14 +224,25 @@ export function buildLivePreviewDecorations(
   const footnoteDecos: Range<Decoration>[] = [];
   const imageDecos: Range<Decoration>[] = [];
 
-  // 任务项要**先**算出来：后面的装饰循环要用它来藏列表符号、换勾选框
-  const taskItems = findTaskItems(syntaxTree, source);
+  // 任务项要**先**算出来：后面的装饰循环要用它来藏列表符号、换勾选框。
+  // 「任务列表」关掉时**不认**这个语法——`- [ ]` 就是普通列表项。
+  const taskItems = on.taskLists ? findTaskItems(syntaxTree, source) : [];
 
   // 脚注也要**先**算出来：lezer 会把 `[^1]和另一个[^note]` 合成**一个**
   // `Link` 节点（实测生产 DOM：`cm-md-link` 覆盖了 `^1]和另一个[^note`，
   // 两端的方括号被当链接括号藏掉），而脚注引用要自己接管这几个字符。
   // 所以行内标记那一轮必须先知道脚注引用的区间，才能让开。
-  const footnotes = findFootnotes(syntaxTree, source);
+  //
+  // 「脚注」关掉时同样不认——`[^1]` 就是普通文本。
+  const footnotes = on.footnotes ? findFootnotes(syntaxTree, source) : EMPTY_FOOTNOTES;
+
+  // 提示块也要**先**算出来：`[!NOTE]` 在 lezer 眼里是一个 **Link** 节点
+  // （和脚注的 `[^1]` 同一个现象），而行内标记那一轮会把 Link 的方括号藏掉——
+  // 所以必须先知道 alert 标记的区间，才能让它躲开。
+  const alerts = on.githubAlerts ? findAlerts(syntaxTree, source) : [];
+  const alertMarkerRanges = alerts.map((a) => ({ from: a.markerFrom, to: a.markerTo }));
+  // 提示块**整块**的区间——用来判断某个引用符号（`>`）是不是属于提示块。
+  const alertBlockRanges = alerts.map((a) => ({ from: a.from, to: a.to }));
 
   // 链接引用表**惰性**建：绝大多数文档一个 `![alt][ref]` 都没有，
   // 而收集定义要整棵语法树走一遍（1000 行约 0.16ms）——每击键都付这个钱不值。
@@ -264,10 +285,23 @@ export function buildLivePreviewDecorations(
       // ---- 1. 行内标记（可隐藏 / 可弱化）----
       const spec = INLINE_MARKER_BY_TYPE.get(name);
       if (spec) {
+        // 这个标记属于某个扩展开关，而那个开关关着 → 这个语法**不被识别**。
+        //
+        // 注意不是「识别了但不渲染」：关掉高亮后 `==文字==` 应该是字面文本，
+        // 与解析层（remark 那边也没挂高亮扩展）的结论一致。
+        if (spec.feature && !on[spec.feature]) return;
+
         // 这个 Link 里含有脚注引用 → 整个节点交给脚注渲染器，别插手
         if (
           name === "Link" &&
           overlapsAny({ from: ref.from, to: ref.to }, footnoteRefRanges)
+        ) {
+          return false;
+        }
+        // 这个 Link 就是 alert 标记（`[!NOTE]`）→ 交给提示块渲染器，别插手
+        if (
+          name === "Link" &&
+          overlapsAny({ from: ref.from, to: ref.to }, alertMarkerRanges)
         ) {
           return false;
         }
@@ -312,6 +346,22 @@ export function buildLivePreviewDecorations(
       const blockClass = BLOCK_MARKERS[name];
       if (blockClass) {
         const parent = ref.node.parent;
+        // 提示块里的 `>` 藏掉。
+        //
+        // 提示块已经有自己的标题徽章（NOTE / TIP…）了，
+        // 再留一个 `>` 只会让人以为是普通引用块——
+        // 而「普通引用块」恰恰是提示块**不是**的东西。
+        //
+        // 用零宽 widget 顶替（而不是不画装饰）：不画的话 `>` 会以原文色显示，
+        // 看起来像是「漏了样式」；顶替掉才真的看不见。
+        if (
+          name === "QuoteMark" &&
+          parent &&
+          overlapsAny({ from: parent.from, to: parent.to }, alertBlockRanges)
+        ) {
+          inlineDecos.push(hiddenMarker().range(ref.from, ref.to));
+          return;
+        }
         const active = parent
           ? cursorInRange(parent.from, parent.to, cursor)
           : cursorInRange(ref.from, ref.to, cursor);
@@ -336,10 +386,10 @@ export function buildLivePreviewDecorations(
 
   // ── 块级渲染（代码块 / 公式块 / 表格 / 图表）──
   // 光标在块内 → 显示源码（可编辑）；光标在块外 → 显示渲染结果。
-  const blockMatches = collectBlockMatches(syntaxTree, source);
+  const blockMatches = collectBlockMatches(syntaxTree, source, on);
   for (const { match, renderer } of blockMatches) {
     if (isBlockExpanded(match, cursor, source)) continue;
-    const result = renderer.render(match, source);
+    const result = renderer.render(match, source, on);
     if (!result) continue;
     renderedDecos.push(
       Decoration.replace({
@@ -383,12 +433,12 @@ export function buildLivePreviewDecorations(
     to: match.to,
   }));
   for (const hit of findInlineMath(syntaxTree, source, {
-    singleDollarTextMath: math.singleDollarTextMath,
+    features: on,
     blockRanges,
   })) {
     // 与块级同一套展开规则：光标落在公式内 → 露出 `$…$` 源码
     if (cursor > hit.from && cursor < hit.to) continue;
-    const html = renderInlineMath(hit.tex);
+    const html = renderInlineMath(hit.tex, on.mhchem);
     if (html === null) continue; // KaTeX 还没就绪，保持源码
     inlineDecos.push(
       Decoration.replace({
@@ -399,6 +449,36 @@ export function buildLivePreviewDecorations(
           "cm-md-inline-math",
         ),
       }).range(hit.from, hit.to),
+    );
+  }
+
+  // ── GitHub 提示块 `> [!NOTE]` ──
+  // 整行挂底色 + 左边框，`[!NOTE]` 换成标题徽章。
+  // 光标落进标记里时露出原文，方便直接改类型。
+  for (const alert of alerts) {
+    // 底色用**行装饰**（Decoration.line）而不是行内 mark：
+    //
+    // mark 只盖住**文字那么宽**，提示块会变成一小截彩色文字，
+    // 底色到文字末尾就断了——不像一个块。
+    // 行装饰挂在 `.cm-line` 上，底色能铺满整行 ✓
+    //
+    // 行装饰一次只管一行，所以逐行挂。
+    let pos = alert.from;
+    while (pos <= alert.to) {
+      blockDecos.push(
+        Decoration.line({
+          class: `cm-md-alert cm-md-alert--${alert.type.toLowerCase()}`,
+        }).range(pos),
+      );
+      const newline = source.indexOf("\n", pos);
+      if (newline === -1 || newline >= alert.to) break;
+      pos = newline + 1;
+    }
+    if (cursor > alert.markerFrom && cursor < alert.markerTo) continue;
+    inlineDecos.push(
+      Decoration.replace({
+        widget: new AlertTitleWidget(alert.type, alert.markerFrom),
+      }).range(alert.markerFrom, alert.markerTo),
     );
   }
 
@@ -645,10 +725,16 @@ function buildSizedImageDecorations(
 function collectBlockMatches(
   tree: Tree,
   source: string,
+  features: MarkdownFeatures,
 ): { match: BlockMatch; renderer: BlockRenderer }[] {
   const result: { match: BlockMatch; renderer: BlockRenderer }[] = [];
   const claimed: Interval[] = [];
   for (const renderer of blockRenderers()) {
+    // 开关关着 → 这个渲染器整个不参与。
+    //
+    // 图表关掉就回到代码块、公式关掉就回到字面文本、表格关掉就回到纯文本——
+    // 与解析层「不认这个语法」的结论一致（架构约束 C）。
+    if (renderer.feature && !features[renderer.feature]) continue;
     for (const match of renderer.find(tree, source, claimed)) {
       result.push({ match, renderer });
       claimed.push({ from: match.from, to: match.to });

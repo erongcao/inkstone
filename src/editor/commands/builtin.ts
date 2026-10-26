@@ -23,6 +23,8 @@ import { registerCommands, type InkstoneCommand } from "../commands";
 import { emitIntent } from "../intents";
 import { openFindPanel, openReplacePanel } from "../search-panel";
 import { KEYS } from "@/shortcuts";
+import { readSettings } from "@/settings/store";
+import { featuresFromSettings, type MarkdownFeatures } from "@/parser/features";
 import {
   commandAddTableColumn,
   commandAddTableRow,
@@ -97,6 +99,18 @@ export interface FormatSpec {
   placeholder: string;
   /** 命令面板的搜索关键词 */
   keywords: string;
+  /**
+   * 这个格式依赖哪个扩展开关。
+   *
+   * 写了 = 那个开关关着时，这条命令**不可用**（不进命令面板、不进斜杠菜单，
+   * 快捷键也不响应）。
+   *
+   * 为什么要这样：命令面板里出现一个**不生效**的格式命令，比没有更糟——
+   * 用户点了以为成功了，屏幕上什么都没变。
+   * 插进去 `==高亮==` 而高亮开关是关着的，就是这种情况：
+   * 标记插进去了，解析层却不认它，屏幕上永远是裸的等号。
+   */
+  feature?: keyof MarkdownFeatures;
 }
 
 /** 全部行内格式命令的规格 */
@@ -135,6 +149,7 @@ export const FORMAT_SPECS: FormatSpec[] = [
     marker: "==",
     placeholder: "高亮",
     keywords: "highlight gaoliang",
+    feature: "highlight",
   },
   {
     id: "sub",
@@ -152,11 +167,25 @@ export const FORMAT_SPECS: FormatSpec[] = [
   },
 ];
 
+/**
+ * 某个扩展开关当前是否开着。
+ *
+ * 命令表是**模块级**的，拿不到 React 的 hook，所以走设置存储的同步读取
+ * （`readSettings()`）——与剪贴板那条路径同一个办法。
+ *
+ * `enabled` 是在**列命令的时候**求值的（`commandsFor`），
+ * 所以用户改完设置再打开命令面板，看到的就是新的可用性。
+ */
+const featureEnabled = (feature: keyof MarkdownFeatures) => (): boolean =>
+  featuresFromSettings(readSettings().markdown)[feature];
+
 const format = (spec: FormatSpec): InkstoneCommand => ({
   id: `format.${spec.id}`,
   label: spec.label,
   category: "格式",
   keywords: spec.keywords,
+  // 依赖某个扩展开关的格式：开关关着时这条命令整个不出现
+  ...(spec.feature ? { enabled: featureEnabled(spec.feature) } : {}),
   run: (view) => toggleWrap(view, spec.marker, spec.placeholder),
 });
 

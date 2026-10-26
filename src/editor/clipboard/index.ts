@@ -33,6 +33,7 @@ import {
 import { ensureMarkdownToHtml, renderMarkdownToHtml } from "@/parser/html-loader";
 import { readSettings } from "@/settings/store";
 import type { ParseOptions } from "@/parser/markdown";
+import { featuresFromSettings } from "@/parser/features";
 import { writeHtmlAndText, writePlainText } from "./write";
 
 /** Inkstone 专用的 MIME 类型：标记「这段 Markdown 来自 Inkstone」 */
@@ -111,15 +112,18 @@ export function handleCopy(view: EditorView, event: ClipboardEvent): boolean {
 }
 
 /**
- * 把用户当前的公式设置转成解析选项。
+ * 把用户当前的 Markdown 开关转成解析选项。
  *
  * 剪贴板处理是非 React 的（copy 事件里必须同步跑完），拿不到 hook，
- * 所以走 `readSettings()`。不传的话 HTML 链路会用 remark-math 的默认值，
+ * 所以走 `readSettings()`。不传的话 HTML 链路会用默认值，
  * 与用户在编辑器里的设置分叉——关掉单 `$` 的用户会看到「屏幕上不是公式、
- * 复制出去却是」。
+ * 复制出去却是」；关掉表格的用户会看到「屏幕上不是表格、复制出去却是」。
+ *
+ * 传的是**全部**开关，不只是公式那一个：
+ * 复制出去的 HTML 必须与屏幕上看到的一致（架构约束 C）。
  */
 function parseOptionsNow(): ParseOptions {
-  return { singleDollarTextMath: readSettings().markdown.inlineMathSingleDollar };
+  return { features: featuresFromSettings(readSettings().markdown) };
 }
 
 /**

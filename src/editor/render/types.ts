@@ -41,6 +41,7 @@ export interface BlockRenderResult {
 
 import type { Tree } from "@lezer/common";
 import type { Interval } from "./scan";
+import type { MarkdownFeatures } from "@/parser/features";
 
 /**
  * 块级渲染器。
@@ -59,6 +60,15 @@ export interface BlockRenderer {
   /** 唯一标识 */
   id: string;
   /**
+   * 这个渲染器属于哪个扩展开关。
+   *
+   * 开关关掉时，这个渲染器**整个不参与**——
+   * 图表关掉就是回到代码块，公式关掉就是回到字面文本。
+   *
+   * 不填 = 始终渲染（代码块高亮没有开关）。
+   */
+  feature?: keyof MarkdownFeatures;
+  /**
    * 找出所有可渲染的块。
    *
    * `blockRanges` 是**先注册的渲染器**已经占用的区间集合：
@@ -67,6 +77,15 @@ export interface BlockRenderer {
    * 否则同一段文本会被替换两次。装饰器管线按注册顺序透传。
    */
   find(tree: Tree, source: string, blockRanges?: readonly Interval[]): BlockMatch[];
-  /** 渲染一个块；返回 null 表示这个块不渲染 */
-  render(match: BlockMatch, source: string): BlockRenderResult | null;
+  /**
+   * 渲染一个块；返回 null 表示这个块不渲染。
+   *
+   * `features` 是当前的扩展开关——渲染器要靠它决定
+   * 「这个块还认不认」（比如 mhchem 关掉时公式要降级成字面文本）。
+   */
+  render(
+    match: BlockMatch,
+    source: string,
+    features?: MarkdownFeatures,
+  ): BlockRenderResult | null;
 }

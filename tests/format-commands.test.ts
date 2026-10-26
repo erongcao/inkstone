@@ -13,10 +13,16 @@
  * 标记必须被当成语法吃掉，不能只是普通文本。
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, beforeEach, afterEach } from "vitest";
+import { EditorState } from "@codemirror/state";
+import { EditorView } from "@codemirror/view";
 import type { Node, Parent } from "mdast";
 import { parseMarkdown } from "@/parser/markdown";
 import { FORMAT_SPECS } from "@/editor/commands/builtin";
+import { commandsFor } from "@/editor/commands";
+import { livePreview } from "@/editor/live-preview";
+import { resetSettings, updateSettings } from "@/settings/store";
+import "@/editor/commands/builtin";
 
 /**
  * 已知「命令在、但渲染还没做」的格式。
@@ -83,5 +89,65 @@ describe("KNOWN_PENDING 清单本身不许有陈旧条目", () => {
     for (const [id, reason] of KNOWN_PENDING) {
       expect(reason.length, `${id} 没写原因`).toBeGreaterThan(0);
     }
+  });
+});
+
+/* ═══════════════════════════════════════════════════════════
+   受开关控制的格式命令
+   ═══════════════════════════════════════════════════════════ */
+
+/** 造一个真实编辑器（`commandsFor` 要有 view 才会检查 `enabled`） */
+function createEditor(): EditorView {
+  const parent = document.body.appendChild(document.createElement("div"));
+  return new EditorView({
+    // 必须挂 livePreview：表格命令的 `enabled` 要读语法树，
+    // 没有那个字段会抛 "Field is not present in this state"。
+    state: EditorState.create({ doc: "", extensions: [livePreview()] }),
+    parent,
+  });
+}
+
+describe("格式命令：依赖扩展开关的那些", () => {
+  beforeEach(() => {
+    resetSettings();
+  });
+  afterEach(() => {
+    resetSettings();
+  });
+
+  it("高亮命令声明了它依赖「行内高亮」开关", () => {
+    const spec = FORMAT_SPECS.find((s) => s.id === "highlight");
+    expect(spec?.feature).toBe("highlight");
+  });
+
+  it("开关开着时，高亮命令在面板里", () => {
+    const view = createEditor();
+    const ids = commandsFor("palette", view).map((c) => c.id);
+    expect(ids).toContain("format.highlight");
+  });
+
+  it("开关关掉后，高亮命令从面板里消失", () => {
+    // 关掉高亮之后插进去的 `==…==` 不会被解析层认，
+    // 屏幕上永远是裸的等号——那这条命令就不该出现。
+    updateSettings({ markdown: { highlight: false } });
+    const view = createEditor();
+    const ids = commandsFor("palette", view).map((c) => c.id);
+    expect(ids).not.toContain("format.highlight");
+  });
+
+  it("关掉高亮不影响其它格式命令", () => {
+    updateSettings({ markdown: { highlight: false } });
+    const view = createEditor();
+    const ids = commandsFor("palette", view).map((c) => c.id);
+    expect(ids).toContain("format.bold");
+    expect(ids).toContain("format.italic");
+    expect(ids).toContain("format.strike");
+  });
+
+  it("斜杠菜单里同样受开关控制", () => {
+    updateSettings({ markdown: { highlight: false } });
+    const view = createEditor();
+    const ids = commandsFor("slash", view).map((c) => c.id);
+    expect(ids).not.toContain("format.highlight");
   });
 });

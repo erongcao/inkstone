@@ -312,7 +312,23 @@ function EditorSection({ settings, patch }: { settings: Settings; patch: PatchFn
 
 function MarkdownSection({ settings, patch }: { settings: Settings; patch: PatchFn }) {
   const m = settings.markdown;
-  const toggles: { key: keyof typeof m; label: string; hint?: string }[] = [
+  const toggles: {
+    key: keyof typeof m;
+    label: string;
+    hint?: string;
+    /**
+     * 还没实现的功能：置灰并写明原因。
+     *
+     * 为什么要写明原因，而不是默默置灰：
+     * 一个点不动的复选框，用户只会当成 bug；
+     * 写清楚了「这个功能还没做、为什么没做」，用户才知道该等还是该绕开。
+     *
+     * 这两个开关对应的功能**确实还不存在**——
+     * 它们不在 `parser/features.ts` 的开关模型里
+     * （那个模型只收「真的会生效」的开关）。
+     */
+    pending?: string;
+  }[] = [
     { key: "inlineMath", label: t("行内数学 $…$") },
     {
       key: "inlineMathSingleDollar",
@@ -320,13 +336,21 @@ function MarkdownSection({ settings, patch }: { settings: Settings; patch: Patch
       hint: t("关掉后「价格 $5 到 $10 元」不再被误判成公式；$$x^2$$ 在行内仍可用"),
     },
     { key: "blockMath", label: t("数学块 $$…$$") },
-    { key: "autoNumberEquations", label: t("公式自动编号") },
+    {
+      key: "autoNumberEquations",
+      label: t("公式自动编号"),
+      pending: t("还没实现：代码里目前没有公式编号这个功能。"),
+    },
     { key: "mhchem", label: t("化学扩展 mhchem") },
     { key: "mermaid", label: t("Mermaid 图表") },
     { key: "githubAlerts", label: "GitHub Alerts" },
     { key: "footnotes", label: t("脚注") },
     { key: "highlight", label: t("行内高亮 ==…==") },
-    { key: "subscriptSuperscript", label: t("下标 / 上标") },
+    {
+      key: "subscriptSuperscript",
+      label: t("下标 / 上标"),
+      pending: t("还没实现：编辑器认得下标与上标，导出还不认，两边会对不上。"),
+    },
     { key: "frontMatter", label: "YAML front matter" },
     { key: "tables", label: t("表格") },
     { key: "taskLists", label: t("任务列表") },
@@ -334,14 +358,20 @@ function MarkdownSection({ settings, patch }: { settings: Settings; patch: Patch
   return (
     <section className="settings-group">
       <h3>Markdown</h3>
-      {toggles.map(({ key, label, hint }) => (
-        <label key={key} className="field field--inline" title={hint}>
+      {toggles.map(({ key, label, hint, pending }) => (
+        <label
+          key={key}
+          className={`field field--inline${pending ? " field--pending" : ""}`}
+          title={hint}
+        >
           <span>{label}</span>
           <input
             type="checkbox"
             checked={m[key]}
+            disabled={pending !== undefined}
             onChange={(ev) => patch("markdown", { [key]: ev.target.checked })}
           />
+          {pending && <p className="field__note">{pending}</p>}
         </label>
       ))}
     </section>

@@ -24,6 +24,7 @@
 import type { Node, Parent } from "mdast";
 import type { Tree } from "@lezer/common";
 import { parseInlineSync, renderMathSync } from "./math-loader";
+import { resolveFeatures, type MarkdownFeatures } from "@/parser/features";
 import {
   collectSkipRanges,
   makeSkipTest,
@@ -39,8 +40,13 @@ export interface InlineMathMatch extends Interval {
 }
 
 export interface InlineMathOptions {
-  /** 单个 `$` 是否作为定界符（透传给 remark-math，默认开） */
-  singleDollarTextMath?: boolean;
+  /**
+   * 要启用的扩展。
+   *
+   * 这里只需要两件事：`inlineMath` 决定**找不找**（关了就直接不找），
+   * `inlineMathSingleDollar` 决定单个 `$` 算不算定界符。
+   */
+  features?: Partial<MarkdownFeatures>;
   /** 已被块级渲染器占用的区间，行内渲染必须让开 */
   blockRanges?: readonly Interval[];
 }
@@ -70,8 +76,8 @@ function collectInlineMath(node: Node, out: InlineMathMatch[], offsetBase: numbe
  * KaTeX 还没就绪时返回 null —— 调用方据此不生成装饰器，
  * 行内公式保持源码形态，加载完成后由 `onMathRendererReady` 触发重算。
  */
-export function renderInlineMath(tex: string): string | null {
-  return renderMathSync(tex, { displayMode: false });
+export function renderInlineMath(tex: string, mhchem = true): string | null {
+  return renderMathSync(tex, { displayMode: false, mhchem });
 }
 
 /**
@@ -89,6 +95,13 @@ export function findInlineMath(
   // 绝大多数文档里根本没有 `$`，先做一次原生字符串快筛
   if (!source.includes("$")) return matches;
 
+  const features = resolveFeatures(options.features);
+  // 行内公式整个关掉 → 根本不找。
+  //
+  // 解析层那边也会把公式还原成字面文本（`remarkMathOff`），
+  // 所以这里其实是个快筛——但它省掉整篇逐行解析，值得放在最前面。
+  if (!features.inlineMath) return matches;
+
   const skipRanges: Interval[] = [
     ...collectSkipRanges(tree),
     ...(options.blockRanges ?? []),
@@ -105,7 +118,7 @@ export function findInlineMath(
     // 不退回任何「轻量正则」——那会变成编辑器自造的规则，红线 C 就破了。
     // 加载完成会触发 refreshRendering，那时再补上。
     const lineTree = parseInlineSync(`${line.text}\n`, {
-      singleDollarTextMath: options.singleDollarTextMath !== false,
+      features: { inlineMathSingleDollar: features.inlineMathSingleDollar },
     });
     if (lineTree === null) return [];
 

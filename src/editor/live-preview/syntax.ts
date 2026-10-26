@@ -12,8 +12,15 @@
  * 两者的一致性由 tests/parser-agreement.test.ts 在语料库上断言。
  */
 
-import type { Tree, SyntaxNode, SyntaxNodeRef, TreeFragment } from "@lezer/common";
+import type {
+  Tree,
+  SyntaxNode,
+  SyntaxNodeRef,
+  TreeFragment,
+  Parser,
+} from "@lezer/common";
 import { gfmMarkdownParser as gfmParser } from "../markdown-language";
+import type { MarkdownFeatures } from "@/parser/features";
 
 export type { Tree, SyntaxNode, SyntaxNodeRef };
 
@@ -25,9 +32,16 @@ export type { Tree, SyntaxNode, SyntaxNodeRef };
  *   lezer 会复用没被变更区间挖空的那部分旧树，只重扫变动区域。
  *   实测（`scripts/verify-incremental.ts`）：900 轮随机编辑后，
  *   增量树与全量树逐节点对比 0% 不一致，p95 0.07ms vs 2.74ms。
+ * @param parser    用哪个 parser。默认是全开的那一套。
+ *   **换开关时必须换 parser**——`TreeFragment` 是与 parser 绑定的，
+ *   跨 parser 复用片段会得到错误的树。
  */
-export function parseSyntax(source: string, fragments?: readonly TreeFragment[]): Tree {
-  return fragments ? gfmParser.parse(source, fragments) : gfmParser.parse(source);
+export function parseSyntax(
+  source: string,
+  fragments?: readonly TreeFragment[],
+  parser: Parser = gfmParser,
+): Tree {
+  return fragments ? parser.parse(source, fragments) : parser.parse(source);
 }
 
 /** 遍历语法树的所有节点 */
@@ -65,6 +79,14 @@ export interface InlineMarkerSpec {
   contentType?: string;
   /** 该标记对应的 CSS class（用于给正文加样式） */
   contentClass?: string;
+  /**
+   * 这个标记属于哪个扩展开关。
+   *
+   * 开关关掉时，这个标记**不被识别**——
+   * `==高亮==` 就该显示成字面文本，而不是「识别了但不渲染」。
+   * 解析层（remark）那边同时也关，两层才对得上（架构约束 C）。
+   */
+  feature?: keyof MarkdownFeatures;
 }
 
 /** 各类行内标记的规格 */
@@ -98,6 +120,7 @@ export const INLINE_MARKERS: InlineMarkerSpec[] = [
     markType: "HighlightMark",
     contentType: "HighlightMark",
     contentClass: "cm-md-highlight",
+    feature: "highlight",
   },
   {
     nodeType: "Link",

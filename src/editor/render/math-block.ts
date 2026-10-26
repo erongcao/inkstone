@@ -153,15 +153,20 @@ export function findMathBlocks(tree: Tree, source: string): BlockMatch[] {
 /** 公式块渲染器 */
 export const mathBlockRenderer: BlockRenderer = {
   id: "math-block",
+  /** 关掉「块级公式」时这个渲染器不参与——公式退回字面文本 */
+  feature: "blockMath",
 
   find(tree, source) {
     return findMathBlocks(tree, source);
   },
 
-  render(match) {
+  render(match, _source, features) {
     // KaTeX 还没加载完 → 返回 null，装饰器管线会跳过它，
     // 公式块保持源码形态；加载完成后由 `onMathRendererReady` 触发重算。
-    const html = renderMathSync(match.content);
+    //
+    // `mhchem` 关掉时，公式里的 `\ce{…}` 降级成字面文本
+    // （降级发生在渲染器里，所以块级与行级表现一致）。
+    const html = renderMathSync(match.content, { mhchem: features?.mhchem !== false });
     if (html === null) return null;
 
     const dom = document.createElement("div");

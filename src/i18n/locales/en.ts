@@ -325,6 +325,14 @@ export const en: Record<string, string> = {
   按量计费: "Pay per token",
   排版: "Typography",
   提炼要点: "Key points",
+  "还没实现：代码里目前没有公式编号这个功能。":
+    "Not implemented yet — there is no equation-numbering feature in the code.",
+  "还没实现：编辑器认得下标与上标，导出还不认，两边会对不上。":
+    "Not implemented yet — the editor recognises sub/superscript but export does not, so the two would disagree.",
+  提示块: "Alerts",
+  "GitHub 风格的提示块，NOTE / TIP / IMPORTANT / WARNING / CAUTION 五种。":
+    "GitHub-style alerts — NOTE / TIP / IMPORTANT / WARNING / CAUTION.",
+  "> [!NOTE]\n> 这是提示内容": "> [!NOTE]\n> This is the alert body",
   插入图片: "Insert image",
   插入链接: "Insert link",
   搜索: "Search",

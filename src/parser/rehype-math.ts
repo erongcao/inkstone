@@ -79,6 +79,13 @@ export interface RehypeMathOptions {
    * 剪贴板场景每次复制都带 25 KB 样式是浪费——绝大多数文档一个公式都没有。
    */
   styles?: string;
+  /**
+   * mhchem（化学扩展）是否生效。
+   *
+   * 关掉时 `\ce{…}` 降级成字面文本——
+   * 与编辑器里的表现一致（架构约束 C）。
+   */
+  mhchem?: boolean;
 }
 
 /**
@@ -101,7 +108,7 @@ export function rehypeMath(options: RehypeMathOptions = {}) {
 
       for (let i = 0; i < children.length; i++) {
         const child = children[i];
-        const rendered = renderIfFormula(child);
+        const rendered = renderIfFormula(child, options.mhchem !== false);
         if (rendered) {
           children[i] = rendered;
           sawFormula = true;
@@ -136,7 +143,7 @@ export function rehypeMath(options: RehypeMathOptions = {}) {
  * 已经是 false，KaTeX 自己会把语法错误画成带 hover 提示的红色源码；
  * 走到 catch 说明是更离谱的异常，此时**保留原文比吞掉内容好**。
  */
-function renderIfFormula(node: HastNode): HastNode | null {
+function renderIfFormula(node: HastNode, mhchem: boolean): HastNode | null {
   if (node.type !== "element" || node.tagName !== "code") return null;
 
   const raw = node.properties?.className;
@@ -153,7 +160,7 @@ function renderIfFormula(node: HastNode): HastNode | null {
 
   // 与编辑器内渲染走**同一个** `renderMath`——
   // 屏幕上和复制出去必须是同一套结果，否则「所见即所得」当场破功。
-  const html = renderFormula(tex, display);
+  const html = renderFormula(tex, display, mhchem);
   if (html === null) return null;
 
   return {
@@ -189,9 +196,13 @@ function collectText(node: HastNode): string | null {
  * `renderMathSync` 在渲染器就绪时同步返回 HTML，没就绪时返回 null——
  * 此时保留原始 `<code>`，公式以源码形式出现在剪贴板里（和现在的行为一致，不算退化）。
  */
-function renderFormula(tex: string, displayMode: boolean): string | null {
+function renderFormula(
+  tex: string,
+  displayMode: boolean,
+  mhchem: boolean,
+): string | null {
   try {
-    return renderMathSync(tex, { displayMode });
+    return renderMathSync(tex, { displayMode, mhchem });
   } catch {
     return null;
   }

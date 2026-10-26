@@ -20,12 +20,27 @@ import type { MarkdownAst } from "@/parser/markdown";
 import type { ParseOptions } from "@/parser/markdown";
 
 /**
+ * 渲染选项：在 KaTeX 自己的选项之外，加一个 Inkstone 自己的开关。
+ *
+ * `mhchem` —— 化学扩展是否生效。
+ * 关掉时 `\ce{…}` 降级成字面文本（见 `mhchem.ts`）。
+ *
+ * 为什么不放进 KaTeX 的 `macros`：KaTeX 没有「禁用某个命令」的开关，
+ * 而宏重定义只能改变命令的**输出**，改不掉命令本身——
+ * 用户看到的是 `H2O` 而不是 `\ce{H2O}`，标记丢了。
+ */
+export interface MathRenderOptions extends KatexOptions {
+  /** mhchem 是否生效（默认开） */
+  mhchem?: boolean;
+}
+
+/**
  * 渲染函数签名：TeX → HTML。
  *
  * 第二个参数覆盖默认选项，主要是 `displayMode`
  * （块级公式 `true` / 行内公式 `false`）。
  */
-export type MathRenderer = (tex: string, overrides?: KatexOptions) => string;
+export type MathRenderer = (tex: string, overrides?: MathRenderOptions) => string;
 
 /**
  * 逐行解析：行文本 → mdast。
@@ -107,7 +122,10 @@ export function parseInlineSync(
  * @param overrides  覆盖默认选项（块级 `displayMode: true`）
  * @returns 渲染器尚未就绪时返回 null——调用方应据此退回源码显示
  */
-export function renderMathSync(tex: string, overrides?: KatexOptions): string | null {
+export function renderMathSync(
+  tex: string,
+  overrides?: MathRenderOptions,
+): string | null {
   if (!renderer) return null;
   try {
     return renderer(tex, { ...MATH_OPTIONS, ...overrides });

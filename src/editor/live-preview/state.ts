@@ -17,10 +17,12 @@
  * 增量解析的原理见 AGENTS.md「Live Preview 性能」章节。
  */
 
-import { StateEffect, StateField, type EditorState } from "@codemirror/state";
+import { StateEffect, StateField, Facet, type EditorState } from "@codemirror/state";
 import { TreeFragment, type Tree } from "@lezer/common";
 import { parseSyntax } from "./syntax";
+import { getMarkdownParser } from "../markdown-language";
 import type { MarkerDisplayMode } from "@/settings/schema";
+import { DEFAULT_FEATURES, featuresKey, type MarkdownFeatures } from "@/parser/features";
 
 /** 切换标记符显示策略 */
 export const setDisplayMode = StateEffect.define<MarkerDisplayMode>();
@@ -40,16 +42,39 @@ export const setDisplayMode = StateEffect.define<MarkerDisplayMode>();
 export const refreshRendering = StateEffect.define<null>();
 
 /**
- * 行内公式的定界符策略。
+ * Markdown 扩展开关变了。
  *
- * `singleDollarTextMath: false` 时单个 `$` 不再是定界符——
- * 直接透传给 remark-math，所以**不是编辑器自造的规则**，
- * 编辑器视图与 HTML 导出认的是同一套（架构约束 C）。
- *
- * 这个选项必须进 StateField：它影响装饰器输出，
- * 而 `EditorView.decorations.from` 只认这一个字段作依赖。
+ * 换开关意味着换 parser（lezer 的扩展是**配置期**决定的），
+ * 所以这个 effect 会让整篇文档重新解析——
+ * `TreeFragment` 与 parser 绑定，跨 parser 复用片段会得到错误的树。
  */
-export const setMathOptions = StateEffect.define<{ singleDollarTextMath: boolean }>();
+export const setMarkdownFeatures = StateEffect.define<MarkdownFeatures>();
+
+/**
+ * 编辑器**创建时**生效的开关。
+ *
+ * ## 为什么需要它
+ *
+ * `StateField` 没有「初始值」配置项——`create` 只拿到 `EditorState`，
+ * 拿不到扩展工厂的入参。而开关必须能在**创建那一刻**就生效：
+ * 用户上次关掉了「表格」，这次打开应用，编辑器第一棵树就该是
+ * 「不认表格」的那棵树。
+ *
+ * 早先的做法是「创建后再派发一次 effect」：
+ * 那会让第一棵树用**默认 parser** 解析一遍，然后立刻整篇重解析——
+ * 多余的一次全量解析，而且中间那一帧的装饰器是按错的规则算的
+ * （表格已经渲染出来了，下一帧才消失）。
+ *
+ * 改成 facet 就没这个问题了：`Facet` 的值在**状态创建前**就算好了，
+ * `StateField.create` 里 `state.facet(...)` 直接读得到。
+ *
+ * 为什么不用 `state.facet(language)` 反推 parser：
+ * CM6 的 `language` facet 里那个 parser 是「我们的 parser + `parseCode`」，
+ * 多了嵌入式代码解析——Live Preview 的树不能带它（代码块的内容结构会变）。
+ */
+export const initialFeaturesFacet = Facet.define<MarkdownFeatures, MarkdownFeatures>({
+  combine: (values) => values[0] ?? DEFAULT_FEATURES,
+});
 
 /** Live Preview 需要的全部状态 */
 export interface LivePreviewState {
@@ -63,8 +88,8 @@ export interface LivePreviewState {
   cursor: number;
   /** 标记符显示策略 */
   mode: MarkerDisplayMode;
-  /** 单个 `$` 是否作为行内公式定界符（透传给 remark-math，默认开） */
-  singleDollarTextMath: boolean;
+  /** 当前的 Markdown 扩展开关 */
+  features: MarkdownFeatures;
 }
 
 /**
@@ -76,14 +101,16 @@ export interface LivePreviewState {
 export const livePreviewField = StateField.define<LivePreviewState>({
   create: (state) => {
     const source = state.doc.toString();
-    const tree = parseSyntax(source);
+    // 开关从 facet 里取（编辑器创建时定的），不是写死的默认值。
+    const features = state.facet(initialFeaturesFacet);
+    const tree = parseSyntax(source, undefined, getMarkdownParser(features));
     return {
       tree,
       fragments: TreeFragment.addTree(tree),
       source,
       cursor: state.selection.main.head,
       mode: "live",
-      singleDollarTextMath: true,
+      features,
     };
   },
 
@@ -91,29 +118,45 @@ export const livePreviewField = StateField.define<LivePreviewState>({
     // 显示策略可能被 effect 改掉；重算请求也要处理
     let mode = value.mode;
     let forced = false;
-    let singleDollarTextMath = value.singleDollarTextMath;
+    let features = value.features;
     for (const effect of tr.effects) {
       if (effect.is(setDisplayMode)) mode = effect.value;
-      if (effect.is(setMathOptions))
-        singleDollarTextMath = effect.value.singleDollarTextMath;
+      if (effect.is(setMarkdownFeatures)) features = effect.value;
       if (effect.is(refreshRendering)) forced = true;
     }
 
     const cursor = tr.state.selection.main.head;
+    // 按**内容**比，不按引用比。
+    //
+    // 设置面板每次改动都会 `featuresFromSettings` 出一个新对象，
+    // 引用永远不同——按引用比的话，改任何一个开关都会触发整篇重解析。
+    const featuresChanged = featuresKey(features) !== featuresKey(value.features);
 
     if (!tr.docChanged) {
+      // 换开关 → 换 parser → 整篇重解析。
+      //
+      // 片段**不能**复用：`TreeFragment` 是与 parser 绑定的，
+      // 拿旧 parser 的片段喂新 parser 会得到错误的树。
+      if (featuresChanged) {
+        const source = tr.state.doc.toString();
+        const tree = parseSyntax(source, undefined, getMarkdownParser(features));
+        return {
+          tree,
+          fragments: TreeFragment.addTree(tree),
+          source,
+          cursor,
+          mode,
+          features,
+        };
+      }
       // 强制重算：返回**新对象**（身份变了）让 CM6 重跑装饰器映射。
       // 注意不能在这里提前 return value，那会把请求吞掉。
-      if (forced) return { ...value, cursor, mode, singleDollarTextMath };
-      // 只是选区、模式或公式策略变了：树与片段都保持不变
-      if (
-        cursor === value.cursor &&
-        mode === value.mode &&
-        singleDollarTextMath === value.singleDollarTextMath
-      ) {
+      if (forced) return { ...value, cursor, mode, features };
+      // 只是选区或模式变了：树与片段都保持不变
+      if (cursor === value.cursor && mode === value.mode) {
         return value;
       }
-      return { ...value, cursor, mode, singleDollarTextMath };
+      return { ...value, cursor, mode, features };
     }
 
     // 文档变了 → 增量解析
@@ -131,7 +174,7 @@ export const livePreviewField = StateField.define<LivePreviewState>({
     const fragments = TreeFragment.applyChanges(value.fragments, ranges);
 
     const source = tr.state.doc.toString();
-    const tree = parseSyntax(source, fragments);
+    const tree = parseSyntax(source, fragments, getMarkdownParser(features));
 
     return {
       tree,
@@ -139,7 +182,7 @@ export const livePreviewField = StateField.define<LivePreviewState>({
       source,
       cursor,
       mode,
-      singleDollarTextMath,
+      features,
     };
   },
 });

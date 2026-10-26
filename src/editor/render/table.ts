@@ -192,6 +192,8 @@ function renderCell(source: string): string {
 /** 表格渲染器 */
 export const tableRenderer: BlockRenderer = {
   id: "table",
+  /** 关掉「表格」时这个渲染器不参与——表格退回字面文本 */
+  feature: "tables",
 
   find(tree, source, blockRanges) {
     return findTables(tree, source, { blockRanges }) as unknown as BlockMatch[];
