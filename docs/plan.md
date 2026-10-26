@@ -830,9 +830,10 @@ CM6 的 `EditorView.inputHandler` 扩展点实现，设置项 `editor.autoPairMo
   - 「Markdown 语法参考」——一份**实测过的数据**（`src/reference/markdown-syntax.ts`），
     写的是 Inkstone **支持什么**；不写还没实现的语法（`==高亮==`），
     用户照着写而屏幕上什么都不发生比不写更糟
-  - 「显示侧边栏」复选项——muda 会自动翻转它的勾选状态，但前端没人监听，
+  - 「显示侧边栏」复选项——菜单系统会翻转它的勾选状态，但前端没人监听，
     于是菜单里出现一个「勾了但侧边栏没动」的框。
-    接成**状态的显示**：Rust → 前端走菜单事件，前端 → Rust 走 `set_sidebar_checked` 命令。
+    接成**状态的显示**：Rust → 前端走菜单事件，前端 → Rust 走 `set_sidebar_checked` 命令
+    （第二个方向是权威的：各平台要不要自己翻转勾选并不一致）。
     坑：`Menu::get` **不递归进子菜单**，而复选项在「视图」子菜单里 →
     得给子菜单一个稳定 id（`SubmenuBuilder::with_id`），分两步找
 - ✅ 两条入口：原生菜单 + 命令面板（命令面板那条不是可选的——

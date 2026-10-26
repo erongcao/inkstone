@@ -265,7 +265,7 @@ export default function App() {
       }),
       onMenuAction("toggle-sidebar", () => setSidebarVisible((v) => !v)),
       // 「显示侧边栏」复选项：之前也是注册了却没人处理——
-      // muda 会自动翻转它的勾选状态，但侧边栏不动，
+      // 菜单系统会翻转它的勾选状态，但侧边栏不动，
       // 于是菜单里出现一个「勾了但什么也没发生」的框。
       onMenuAction("check-sidebar", () => setSidebarVisible((v) => !v)),
       onMenuAction("toggle-focus-mode", () =>
