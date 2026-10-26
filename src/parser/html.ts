@@ -9,6 +9,9 @@
  * 插件组合与解析层保持一致（frontmatter / gfm / math），
  * 否则会出现「解析按 GFM、渲染不按 GFM」的语义分裂——
  * 那会直接违反架构约束 C（解析规则唯一）。
+ *
+ * `==高亮==` 的节点在解析层就定型了（`highlight`），
+ * 这里只负责把它变成 `<mark>`，不重新判断什么是高亮。
  */
 
 import { unified } from "unified";
@@ -19,6 +22,7 @@ import remarkMath from "remark-math";
 import remarkRehype from "remark-rehype";
 import rehypeStringify from "rehype-stringify";
 import { parseMarkdown, type MarkdownAst, type ParseOptions } from "./markdown";
+import { highlightHastHandlers } from "./highlight";
 import { rehypeMath, katexStylesheet, type HastNode } from "./rehype-math";
 
 /**
@@ -46,13 +50,19 @@ interface HtmlPipeline {
 }
 
 function buildHtmlProcessor(): HtmlPipeline {
-  return unified()
-    .use(remarkParse)
-    .use(remarkFrontmatter, ["yaml"])
-    .use(remarkGfm)
-    .use(remarkMath)
-    .use(remarkRehype)
-    .use(rehypeStringify, { allowDangerousHtml: true }) as unknown as HtmlPipeline;
+  return (
+    unified()
+      .use(remarkParse)
+      .use(remarkFrontmatter, ["yaml"])
+      // 插件选项必须与解析层**完全一致**（`singleTilde: false` 的理由见 markdown.ts）——
+      // 这里若用默认值，导出会把 `~x~` 变成删除线，而编辑器里它是普通文本。
+      .use(remarkGfm, { singleTilde: false })
+      .use(remarkMath)
+      // `highlight` 节点 → `<mark>`。handler 挂在 remarkRehype 的选项上——
+      // 那是 mdast-util-to-hast 唯一开放的扩展入口。
+      .use(remarkRehype, { handlers: highlightHastHandlers })
+      .use(rehypeStringify, { allowDangerousHtml: true }) as unknown as HtmlPipeline
+  );
 }
 
 type HtmlProcessor = ReturnType<typeof buildHtmlProcessor>;

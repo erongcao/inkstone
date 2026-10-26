@@ -52,6 +52,9 @@
   /* 选中态的底色：文件树当前文件、列表当前项这类「不是 hover」的提示 */
   --ink-accent-soft: #ddf4ff;
 
+  /* `==高亮==` 的底色：高亮笔是黄的，不是强调色那种蓝 */
+  --ink-highlight-bg: #fff3b8;
+
   --ink-code-bg: #f6f8fa;
   --ink-code-fg: #1f2328;
   --ink-code-border: #d1d9e0;
@@ -108,6 +111,8 @@
   --ink-accent-hover: #58a6ff;
   --ink-selection: rgba(68, 147, 248, 0.25);
   --ink-accent-soft: #121d2f;
+  /* 深色下用更暗的赭黄，否则文字压在上面看不清 */
+  --ink-highlight-bg: #4a3c0a;
 
   --ink-code-bg: #161b22;
   --ink-code-fg: #e6edf3;

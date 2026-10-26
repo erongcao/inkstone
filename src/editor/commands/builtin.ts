@@ -75,30 +75,95 @@ function heading(level: number): InkstoneCommand {
   };
 }
 
-const format = (
-  id: string,
-  label: string,
-  marker: string,
-  placeholder: string,
-  keywords: string,
-): InkstoneCommand => ({
-  id: `format.${id}`,
-  label,
+/**
+ * 格式命令的标记表。
+ *
+ * 单独导出，是为了让测试能对着它断言「这个标记真的会被渲染」。
+ *
+ * 命令面板里出现一个**不生效**的格式命令，比没有这个命令更糟：
+ * 用户点了以为成功了，屏幕上什么都没变——
+ * 他不会知道是自己用错了，只会以为编辑器坏了。
+ * （`==高亮==` 就是这么活了很久：命令在、标记也在，
+ *   但解析层不认，屏幕上永远是裸的等号。）
+ */
+export interface FormatSpec {
+  /** 命令 id 的后缀（完整 id 是 `format.<id>`） */
+  id: string;
+  /** 命令面板上显示的名字 */
+  label: string;
+  /** 包裹选区的标记 */
+  marker: string;
+  /** 没有选区时插入的占位文字 */
+  placeholder: string;
+  /** 命令面板的搜索关键词 */
+  keywords: string;
+}
+
+/** 全部行内格式命令的规格 */
+export const FORMAT_SPECS: FormatSpec[] = [
+  {
+    id: "bold",
+    label: "加粗",
+    marker: "**",
+    placeholder: "加粗文字",
+    keywords: "bold b cizhong",
+  },
+  {
+    id: "italic",
+    label: "斜体",
+    marker: "*",
+    placeholder: "斜体文字",
+    keywords: "italic i xieti em",
+  },
+  {
+    id: "code",
+    label: "行内代码",
+    marker: "`",
+    placeholder: "代码",
+    keywords: "code backtick xingnei",
+  },
+  {
+    id: "strike",
+    label: "删除线",
+    marker: "~~",
+    placeholder: "删除",
+    keywords: "strike del shanchuxian",
+  },
+  {
+    id: "highlight",
+    label: "高亮",
+    marker: "==",
+    placeholder: "高亮",
+    keywords: "highlight gaoliang",
+  },
+  {
+    id: "sub",
+    label: "下标",
+    marker: "~",
+    placeholder: "下标",
+    keywords: "subscript xiabiao",
+  },
+  {
+    id: "super",
+    label: "上标",
+    marker: "^",
+    placeholder: "上标",
+    keywords: "superscript shangbiao",
+  },
+];
+
+const format = (spec: FormatSpec): InkstoneCommand => ({
+  id: `format.${spec.id}`,
+  label: spec.label,
   category: "格式",
-  keywords,
-  run: (view) => toggleWrap(view, marker, placeholder),
+  keywords: spec.keywords,
+  run: (view) => toggleWrap(view, spec.marker, spec.placeholder),
 });
 
 export function builtinCommands(): InkstoneCommand[] {
   return [
     /* ── 格式 ── */
-    format("bold", "加粗", "**", "加粗文字", "bold b cizhong"),
-    format("italic", "斜体", "*", "斜体文字", "italic i xieti em"),
-    format("code", "行内代码", "`", "代码", "code backtick xingnei"),
-    format("strike", "删除线", "~~", "删除", "strike del shanchuxian"),
-    format("highlight", "高亮", "==", "高亮", "highlight gaoliang"),
-    format("sub", "下标", "~", "下标", "subscript xiabiao"),
-    format("super", "上标", "^", "上标", "superscript shangbiao"),
+    ...FORMAT_SPECS.map(format),
 
     {
       id: "format.link",

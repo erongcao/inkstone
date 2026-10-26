@@ -102,6 +102,7 @@ export const zhTW: Record<string, string> = {
   "| 列一 | 列二 |\n| --- | --- |\n| 单元格 | 单元格 |":
     "| 欄一 | 欄二 |\n| --- | --- |\n| 儲存格 | 儲存格 |",
   "~~删除线~~": "~~刪除線~~",
+  "==高亮==": "==高亮==",
   "⚠️ 当前系统的钥匙串不可用（Linux 需要 gnome-keyring / libsecret），":
     "⚠️ 當前系統的鑰匙串不可用（Linux 需要 gnome-keyring / libsecret），",
   一句话摘要: "一句話摘要",
@@ -167,8 +168,8 @@ export const zhTW: Record<string, string> = {
   "删除失败：{error}": "刪除失敗：{error}",
   删除密钥: "刪除密鑰",
   删除线: "刪除線",
-  "删除线是 GitHub 扩展（GFM）语法，其它编辑器未必支持。":
-    "刪除線是 GitHub 擴充（GFM）語法，其它編輯器未必支援。",
+  "删除线是 GitHub 扩展（GFM）语法，高亮是 Typora 同款扩展，其它编辑器未必支持。":
+    "刪除線是 GitHub 擴充（GFM）語法，高亮是 Typora 同款擴充，其它編輯器未必支援。",
   删除这一列: "刪除這一欄",
   删除这一行: "刪除這一列",
   刷新: "刷新",

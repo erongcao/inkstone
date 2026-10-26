@@ -94,6 +94,12 @@ export const INLINE_MARKERS: InlineMarkerSpec[] = [
     contentClass: "cm-md-strikethrough",
   },
   {
+    nodeType: "Highlight",
+    markType: "HighlightMark",
+    contentType: "HighlightMark",
+    contentClass: "cm-md-highlight",
+  },
+  {
     nodeType: "Link",
     markType: "LinkMark",
     contentType: "LinkMark",

@@ -99,6 +99,17 @@
 - **三平台 CI**：Linux / macOS / Windows 三套构建与打包在 CI 里跑通；
   产出的安装包同时作为 CI artifact 上传（此前包构建了，但谁也下不到）
 
+#### 补齐 · Typora 行内语法
+
+- **`==高亮==`**：Typora 同款行内高亮，端到端打通——
+  - 解析层：remark 侧用 `mdast-util-highlight-mark` + `micromark-extension-highlight-mark`，
+    lezer 侧自研同名扩展，**两侧 flanking 判据完全一致**（12 条对拍断言钉住）
+  - Live Preview：标记符照常隐藏，内容渲染成高亮底色
+  - 导出：HTML 走 `<mark>`，round-trip 保持 `==高亮==` 原样
+  - 「高亮」格式命令与语法速查表同步生效
+  - 此前这个语法是**命令在、标记也在，但解析层不认**——
+    用户点了「高亮」，屏幕上永远是裸的等号
+
 ### 修复
 
 - **Windows 打包挂在 WiX**：MSI 数据库的代码页是 1252，装不下中文——
@@ -113,5 +124,10 @@
   勾选框会自己翻转，但侧边栏不动，用户会以为侧边栏已经收起来了。
   现在它跟着侧边栏的真实状态走（原生菜单与快捷键改动都会同步）
 - 界面国际化：词典条数 426 → 486；「快捷键一览」的显示 bug 见上
+- **单个 `~` 被吃成删除线**：`remark-gfm` 默认把**单个**波浪号也当删除线
+  （GFM 规范并不允许，这是 GitHub 的宽松行为），而 lezer 只认成对 `~~`。
+  两层对不上，后果比「不渲染」更糟——`~下标~` 在编辑器里显示为字面文本，
+  **导出却变成 `<del>下标</del>`**；化学式 `H~2~O` 同样中招。
+  现在 remark 侧显式关掉单波浪号，与 lezer 行为对齐
 
 ## [Unreleased]: https://github.com/erongcao/inkstone/compare/HEAD...HEAD

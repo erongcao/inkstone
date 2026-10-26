@@ -106,6 +106,7 @@ export const en: Record<string, string> = {
   "| 列一 | 列二 |\n| --- | --- |\n| 单元格 | 单元格 |":
     "| Column 1 | Column 2 |\n| --- | --- |\n| Cell | Cell |",
   "~~删除线~~": "~~Strikethrough~~",
+  "==高亮==": "==Highlight==",
   "⚠️ 当前系统的钥匙串不可用（Linux 需要 gnome-keyring / libsecret），":
     "⚠️ The system keychain isn't available here (Linux needs gnome-keyring / libsecret), ",
   一句话摘要: "One-line summary",
@@ -174,8 +175,8 @@ export const en: Record<string, string> = {
   "删除失败：{error}": "Delete failed: {error}",
   删除密钥: "Delete key",
   删除线: "Strikethrough",
-  "删除线是 GitHub 扩展（GFM）语法，其它编辑器未必支持。":
-    "Strikethrough is a GitHub extension (GFM); other editors may not support it.",
+  "删除线是 GitHub 扩展（GFM）语法，高亮是 Typora 同款扩展，其它编辑器未必支持。":
+    "Strikethrough is a GitHub extension (GFM) and highlight is a Typora-style extension; other editors may not support them.",
   删除这一列: "Delete this column",
   删除这一行: "Delete this row",
   刷新: "Refresh",

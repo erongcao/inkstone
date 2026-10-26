@@ -687,6 +687,7 @@ CM6 的 `EditorView.inputHandler` 扩展点实现，设置项 `editor.autoPairMo
   - 🐛 修掉：`tests/export-service.test.ts` 里混入裸控制字节，git 把它当二进制
   - ⚠️ 已知缺口（非 M4）：`==高亮==` 解析层不支持，编辑器与导出**一致**地显示为字面量；
     但「高亮」命令与 `settings.markdown.highlight` 开关目前是无效的
+    → **已于 2026-10-26 补齐**（remark + lezer 两侧实现，见下文「Typora 行内语法补齐」）
 - **验收（M4-7 浏览器 UI）**：2026-10-25 真实浏览器逐项走通
   - ✅ 改名（HTML → 「网页版」）、重排（PDF 移到第一位，首项的 ↑ 正确禁用）
   - ✅ 移除（RTF 进入「已移除的格式」折叠区，带「恢复」按钮）
@@ -827,9 +828,10 @@ CM6 的 `EditorView.inputHandler` 扩展点实现，设置项 `editor.autoPairMo
 - ✅ **接上三个死菜单项**：
   - 「快捷键一览」——内容**从注册表生成**（`SHORTCUTS` + `MENU_CHROME`），
     手抄的清单一定会漂移，而一个「和你实际按的键不一样」的速查表比没有更糟
-  - 「Markdown 语法参考」——一份**实测过的数据**（`src/reference/markdown-syntax.ts`），
-    写的是 Inkstone **支持什么**；不写还没实现的语法（`==高亮==`），
+  - 「Markdown 语法参考」——一份**实测过的**数据（`src/reference/markdown-syntax.ts`），
+    写的是 Inkstone **支持什么**；不写还没实现的语法（`~下标~`、`^上标^`），
     用户照着写而屏幕上什么都不发生比不写更糟
+    （`==高亮==` 原先也在这个黑名单里，2026-10-26 补齐后移出）
   - 「显示侧边栏」复选项——菜单系统会翻转它的勾选状态，但前端没人监听，
     于是菜单里出现一个「勾了但侧边栏没动」的框。
     接成**状态的显示**：Rust → 前端走菜单事件，前端 → Rust 走 `set_sidebar_checked` 命令
@@ -853,6 +855,37 @@ CM6 的 `EditorView.inputHandler` 扩展点实现，设置项 `editor.autoPairMo
   用**显式 glob**（7 条）而不是那个输出
   （已用 minimatch 逐条对真实产物路径验证：7 个可安装包全命中，
   `.sig` / `.zip` / `.AppImage.tar.gz` / `.app` 目录全排除）
+
+### 补齐 · Typora 行内语法（2026-10-26）
+
+M5 收尾后补的一项：**`==高亮==`**（Typora 同款行内高亮）。
+用户拍板：**只补 `==高亮==`**，`~下标~` / `^上标^` 暂不做
+（`~` 要与 GFM 的 `~~` 仲裁，成本最高；两项都是 Typora P1 功能，
+见 `docs/typora-feature-inventory.md` 第 13/54/55 行）。
+
+- ✅ **remark 侧**：`mdast-util-highlight-mark` + `micromark-extension-highlight-mark`
+  （事实标准，各 400 万+ 月下载）；`<mark>` 走 `remark-rehype` 的 `options.handlers`
+  （`mdast-util-to-hast` v13 **没有** `toHastExtensions` 机制）
+- ✅ **lezer 侧**：自研 25 行 `MarkdownConfig`，照抄 `@lezer/markdown` 的 GFM
+  `Strikethrough`（`Subscript`/`Superscript` 只支持**单字符**标记，`==` 用不了）。
+  两边的 flanking 规则都派生自同一份 GFM 模板，判据天然一致
+- ✅ **一致性由测试钉住**：`tests/highlight.test.ts` 里 12 条 lezer↔remark 对拍断言
+- ✅ Live Preview 渲染（`.cm-md-highlight` + `--ink-highlight-bg`）、
+  HTML 导出 `<mark>`、round-trip 保持 `==高亮==` 原样
+- ✅ **速查表**加了 `==高亮==` 条目；断言从「不许出现 `==`」改成
+  **拿解析器交叉验证**（表里有 → 解析器必须切出 `highlight` 节点）
+- ✅ **「高亮」格式命令**从「命令在、解析层不认」变成真的生效
+- ✅ 浏览器实测：速查表 DOM 里有 `<code>==高亮==</code>`，
+  编辑器里渲染成 `<span class="cm-md-highlight">高亮</span>`
+- 🐛 **顺带修掉一个比不渲染更糟的 bug**：`remark-gfm` 默认 `singleTilde: true`
+  把**单个** `~` 也当删除线（GFM 规范并不允许，是 GitHub 的宽松行为），
+  而 lezer 只认成对 `~~` → `~下标~` 屏幕是字面量、**导出却是 `<del>下标</del>`**；
+  化学式 `H~2~O` 同样中招（语料库 `12-typora-extensions.md` 里就有）。
+  现在 remark 侧显式 `{ singleTilde: false }`（`markdown.ts` 与 `html.ts` **两处都要改**）
+- ✅ 守卫测试：7 个格式命令的标记提成导出的 `FORMAT_SPECS` 数据表，
+  命令从它派生，测试断言的**就是命令实际用的那份数据**；
+  暂时不实现的走显式 `KNOWN_PENDING` 清单（每条写明原因）
+- 测试 1101 → **1148** 条（54 个文件）
 
 ### 长期（P2+，不排期）
 GitHub Alerts / 脚注 / RTL / 插件系统 / 主题市场 / 图片图床 / EPUB 精修 / RevealJS 幻灯片 / 多人协作

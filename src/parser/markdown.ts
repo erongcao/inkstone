@@ -8,6 +8,7 @@
  *   remark-frontmatter  YAML front matter
  *   remark-gfm          表格、任务列表、删除线、自动链接、GFM 脚注
  *   remark-math         行内 $…$ 与块级 $$…$$
+ *   remarkHighlightMark ==高亮==（Typora 同款，见 highlight.ts）
  */
 
 import { unified } from "unified";
@@ -16,6 +17,7 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import remarkFrontmatter from "remark-frontmatter";
 import remarkStringify from "remark-stringify";
+import { remarkHighlightMark } from "./highlight";
 import type { Root } from "mdast";
 
 export type MarkdownAst = Root;
@@ -26,12 +28,30 @@ function buildProcessor(parseOptions: ParseOptions = {}) {
     unified()
       .use(remarkParse)
       .use(remarkFrontmatter, ["yaml"])
-      .use(remarkGfm)
+      // `singleTilde: false`：**单波浪号不算删除线**。
+      //
+      // GFM 的默认是 `true`（github.com 认单波浪号），但 GFM 规范本身并不允许。
+      // 而 Inkstone 这里必须关掉它，有两个具体理由：
+      //
+      //   1. **编辑视图不认单波浪号**：lezer 那侧的 GFM 删除线扩展要求成对两个 `~`，
+      //      所以 `~x~` 在编辑器里是普通文本。remark 若认它，两层就对不上了
+      //      ——屏幕上是字面文本，导出却变成删除线。
+      //   2. **Typora 的 `~x~` 是下标**，不是删除线；而 `H~2~O`（化学式）
+      //      里的单波浪号更不该被吃掉。开着这个选项，导出 HTML 时
+      //      `H~2~O` 会变成 `H<del>2</del>O`。
+      //
+      // 顺带说明：Typora 的下标/上标（`~x~` / `^x^`）是 P1 功能，
+      // 但 remark 侧还没有对应解析规则，所以本轮没开——
+      // 只开 lezer 那一半会破「解析规则唯一」那条红线。
+      .use(remarkGfm, { singleTilde: false })
       // 选项透传：关掉单 `$` 时 micromark 只会把 `$$…$$` 当行内定界符，
       // 块级 `$$` 始终要求至少两个 `$`，不受这个选项影响。
       .use(remarkMath, {
         singleDollarTextMath: parseOptions.singleDollarTextMath !== false,
       })
+      // `==高亮==`：Typora 同款的行内高亮（不是 GFM，但 Typora/Obsidian 都用）。
+      // 必须挂在 remarkStringify 之前——序列化器要知道这个节点该怎么写回去。
+      .use(remarkHighlightMark)
       .use(remarkStringify, {
         bullet: "-",
         emphasis: "*",

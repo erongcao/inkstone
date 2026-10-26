@@ -61,6 +61,21 @@
   text-decoration-color: var(--ink-fg-faint);
 }
 
+/*
+ * `==高亮==` 的内容底色。
+ *
+ * 用高亮笔的黄而不是强调色的蓝——`==` 在 Typora / Obsidian 里都是黄色荧光笔，
+ * 用户对「高亮」的预期颜色是固定的。深浅两套主题各给一个 token，
+ * 避免暗色主题下文字压在亮黄上读不清。
+ */
+.cm-md-highlight {
+  background-color: var(--ink-highlight-bg);
+  border-radius: 2px;
+  /* 高亮底色会盖住选区，所以给选区留个边 */
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
 .cm-md-link {
   color: var(--ink-accent);
   text-decoration: underline;

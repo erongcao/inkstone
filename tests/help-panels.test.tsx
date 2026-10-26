@@ -20,6 +20,7 @@ import { render, screen, cleanup } from "@testing-library/react";
 import { MarkdownReferenceDialog } from "@/views/MarkdownReferenceDialog";
 import { ShortcutsDialog, buildShortcutGroups } from "@/views/ShortcutsDialog";
 import { SYNTAX_GROUPS } from "@/reference/markdown-syntax";
+import { parseMarkdown } from "@/parser/markdown";
 import { en } from "@/i18n/locales/en";
 import { zhTW } from "@/i18n/locales/zh-TW";
 import { resetSettings, updateSettings } from "@/settings/store";
@@ -78,11 +79,29 @@ describe("语法速查表：数据", () => {
     }
   });
 
-  it("不写 Inkstone 还没实现的语法（==高亮== 之类）", () => {
+  it("速查表里写的语法，Inkstone 真的认（防表与实现漂移）", () => {
     // 速查表写进去的东西必须是**实测过的**——
     // 用户照着写而屏幕上什么都不发生，比不写更糟。
+    //
+    // 这条断言不是把「某几个关键字」列一遍黑名单，
+    // 而是**拿解析器去验**：表里出现的行内扩展，
+    // 解析器必须真的切出对应的 mdast 节点。
+    // 以后再实现一个新扩展、忘了往表里加（或加了却没实现），
+    // 这条都会红。
     const all = SYNTAX_GROUPS.flatMap((group) => group.samples).join("\n");
-    expect(all).not.toContain("==");
+
+    // 已经实现的：表里有，解析器也认
+    expect(all).toContain("==高亮==");
+    expect(parseMarkdown("==高亮==").children[0]).toMatchObject({
+      type: "paragraph",
+      children: [{ type: "highlight" }],
+    });
+
+    // 还没实现的：表里不许出现
+    // （`~下标~` 与 `^上标^` 是 Typora 的 P1 功能，但 Inkstone 还没做——
+    //   lezer 那侧其实有现成的扩展，remark 侧还缺，所以没开）
+    expect(all).not.toContain("~下标~");
+    expect(all).not.toContain("^上标^");
   });
 });
 
