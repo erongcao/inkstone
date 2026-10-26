@@ -10,15 +10,6 @@
 import { describe, expect, it } from "vitest";
 import { ConcurrencyLimiter } from "@/ai/limiter";
 
-/** 可控的延迟，用来把请求卡在飞行状态 */
-function deferred<T>() {
-  let resolve!: (v: T) => void;
-  const promise = new Promise<T>((r) => {
-    resolve = r;
-  });
-  return { promise, resolve };
-}
-
 describe("ConcurrencyLimiter", () => {
   it("maxConcurrent = 0 表示不限", async () => {
     const limiter = new ConcurrencyLimiter();
@@ -39,7 +30,6 @@ describe("ConcurrencyLimiter", () => {
 
     // 第二个不能立刻拿到许可
     let secondAcquired = false;
-    const gate = deferred<void>();
     const pending = limiter.acquire({ id: "glm", maxConcurrent: 1 }).then((release) => {
       secondAcquired = true;
       return release;

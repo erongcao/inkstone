@@ -15,7 +15,6 @@ import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { history, undo } from "@codemirror/commands";
 import { livePreview } from "@/editor/live-preview";
-import { tableRenderer } from "@/editor/render/table";
 import {
   CELL_COL_ATTR,
   CELL_ROW_ATTR,
@@ -144,7 +143,7 @@ describe("渲染出来的坐标", () => {
 describe("事务层", () => {
   it("工具栏给的坐标能直接驱动增删——行号不需要换算", () => {
     const view = createEditor();
-    const from = Number(view.dom.querySelector(".cm-md-table-wrap")?.dataset.blockFrom);
+    const from = Number(view.dom.querySelector<HTMLElement>(".cm-md-table-wrap")?.dataset.blockFrom);
     expect(Number.isFinite(from)).toBe(true);
 
     // 悬停在**第一个**数据行（几何行 2）上点「＋行」→ 插在它下面，
@@ -159,14 +158,14 @@ describe("事务层", () => {
 
   it("悬停列上点「＋列」→ 插在那一列右边", () => {
     const view = createEditor();
-    const from = Number(view.dom.querySelector(".cm-md-table-wrap")?.dataset.blockFrom);
+    const from = Number(view.dom.querySelector<HTMLElement>(".cm-md-table-wrap")?.dataset.blockFrom);
     expect(commandAddTableColumn(view, { column: 0 }, from + 1)).toBe(true);
     expect(view.state.doc.toString().split("\n")[0]).toBe("| 名称 |  | 说明 |");
   });
 
   it("删行删的是悬停的那一行", () => {
     const view = createEditor();
-    const from = Number(view.dom.querySelector(".cm-md-table-wrap")?.dataset.blockFrom);
+    const from = Number(view.dom.querySelector<HTMLElement>(".cm-md-table-wrap")?.dataset.blockFrom);
     expect(commandRemoveTableRow(view, { row: 2 }, from + 1)).toBe(true);
     expect(view.state.doc.toString()).not.toContain("甲");
     expect(view.state.doc.toString()).toContain("乙");
@@ -174,7 +173,7 @@ describe("事务层", () => {
 
   it("删列删的是悬停的那一列", () => {
     const view = createEditor();
-    const from = Number(view.dom.querySelector(".cm-md-table-wrap")?.dataset.blockFrom);
+    const from = Number(view.dom.querySelector<HTMLElement>(".cm-md-table-wrap")?.dataset.blockFrom);
     expect(commandRemoveTableColumn(view, { column: 1 }, from + 1)).toBe(true);
     const lines = view.state.doc.toString().split("\n");
     expect(lines[0]).toBe("| 名称 |");
@@ -183,14 +182,14 @@ describe("事务层", () => {
 
   it("对齐写进分隔行，不是只改渲染出来的 style", () => {
     const view = createEditor();
-    const from = Number(view.dom.querySelector(".cm-md-table-wrap")?.dataset.blockFrom);
+    const from = Number(view.dom.querySelector<HTMLElement>(".cm-md-table-wrap")?.dataset.blockFrom);
     expect(commandSetTableAlign(view, "center", { column: 1 }, from + 1)).toBe(true);
     expect(view.state.doc.toString().split("\n")[1]).toBe("| --- | :-: |");
   });
 
   it("取消对齐回到 ---", () => {
     const view = createEditor();
-    const from = Number(view.dom.querySelector(".cm-md-table-wrap")?.dataset.blockFrom);
+    const from = Number(view.dom.querySelector<HTMLElement>(".cm-md-table-wrap")?.dataset.blockFrom);
     commandSetTableAlign(view, "right", { column: 0 }, from + 1);
     expect(commandSetTableAlign(view, null, { column: 0 }, from + 1)).toBe(true);
     expect(view.state.doc.toString().split("\n")[1]).toBe("| --- | --- |");
@@ -205,7 +204,7 @@ describe("事务层", () => {
 
   it("一次操作 = 撤销栈里的一条", () => {
     const view = createEditor();
-    const from = Number(view.dom.querySelector(".cm-md-table-wrap")?.dataset.blockFrom);
+    const from = Number(view.dom.querySelector<HTMLElement>(".cm-md-table-wrap")?.dataset.blockFrom);
     commandAddTableRow(view, { row: 2 }, from + 1);
     expect(view.state.doc.toString().split("\n")).toHaveLength(5);
 

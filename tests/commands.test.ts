@@ -14,7 +14,7 @@
  */
 
 import { describe, expect, it, beforeEach } from "vitest";
-import { EditorState } from "@codemirror/state";
+import { EditorState, type Extension } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { history, undoDepth } from "@codemirror/commands";
 import { livePreview } from "@/editor/live-preview";
@@ -41,7 +41,7 @@ import { onIntent, type Intent } from "@/editor/intents";
 
 /* ═══════════════════════════════════════════════════════════ */
 
-function createEditor(doc = "", extensions: unknown[] = []): EditorView {
+function createEditor(doc = "", extensions: Extension[] = []): EditorView {
   const parent = document.body.appendChild(document.createElement("div"));
   return new EditorView({
     state: EditorState.create({

@@ -37,8 +37,10 @@ describe("设置版本迁移", () => {
     const { result } = renderHook(() => useSettings());
     expect("autoPair" in result.current[0].editor).toBe(false);
 
-    // 触发一次写入，确认持久化出去的内容里也没有旧字段
-    updateSettings({ editor: { fontSize: 18 } });
+    // 触发一次写入，确认持久化出去的内容里也没有旧字段。
+    // 写的是 `editor` 分节里**真实存在**的设置——`fontSize` 在 `appearance` 分节，
+    // 写进 `editor` 会往持久化内容里塞一个 schema 里没有的键。
+    updateSettings({ editor: { spellCheck: false } });
     const persisted = JSON.parse(localStorage.getItem(STORAGE_KEY)!);
     expect(persisted.editor.autoPair).toBeUndefined();
     expect(persisted.editor.autoPairMode).toBe("markdown");

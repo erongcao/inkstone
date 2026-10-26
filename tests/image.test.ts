@@ -26,7 +26,6 @@ import {
 } from "@/ipc/image";
 import { dropHasImage, looksLikeImage, pasteHasImage } from "@/editor/image-insert";
 import { handlePaste } from "@/editor/paste";
-import type { Range } from "@codemirror/view";
 
 interface Deco {
   from: number;

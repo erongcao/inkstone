@@ -24,7 +24,7 @@ import { parseMarkdown } from "@/parser/markdown";
 import { en } from "@/i18n/locales/en";
 import { zhTW } from "@/i18n/locales/zh-TW";
 import { resetSettings, updateSettings } from "@/settings/store";
-import { DEFAULT_FEATURES, featuresFromSettings } from "@/parser/features";
+import { DEFAULT_FEATURES } from "@/parser/features";
 import { MENU_CHROME, SHORTCUTS } from "@/shortcuts";
 
 /** 简体里才有的字（繁体用同形的字不算） */

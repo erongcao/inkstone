@@ -17,14 +17,14 @@
  */
 
 import { describe, expect, it } from "vitest";
-import type { Node, Parent } from "mdast";
+import type { Parent } from "mdast";
 import { parseMarkdown } from "@/parser/markdown";
 import { markdownToHtml } from "@/parser/html";
 
 /** 取段落里直接子节点的类型 */
 function childTypes(source: string): string[] {
-  const tree = parseMarkdown(source) as unknown as Node;
-  const paragraph = tree.children[0] as Parent;
+  const tree = parseMarkdown(source) as unknown as Parent;
+  const paragraph = tree.children[0] as unknown as Parent;
   if (!Array.isArray(paragraph.children)) return [];
   return paragraph.children.map((c) => c.type);
 }

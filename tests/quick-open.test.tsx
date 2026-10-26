@@ -7,7 +7,7 @@
  *   - 面板在「文件模式」下的渲染与打开行为
  */
 
-import { describe, expect, it, beforeEach, vi } from "vitest";
+import { describe, expect, it, beforeEach } from "vitest";
 import { render, screen, fireEvent, cleanup, act, waitFor } from "@testing-library/react";
 import {
   invalidateVaultFiles,
@@ -17,7 +17,7 @@ import {
 } from "../src/file-tree/quick-open";
 import { resetFileTree, setTreeRoot } from "../src/file-tree/store";
 import { SAMPLE_ROOT } from "../src/ipc/fs";
-import { openPalette, closePalette, usePalette } from "../src/editor/palette";
+import { openPalette, closePalette } from "../src/editor/palette";
 import { CommandPalette } from "../src/views/CommandPalette";
 import { getDocumentContent, newDocument } from "../src/ipc/document";
 

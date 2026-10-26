@@ -46,6 +46,15 @@ function nodesOfType(tree: Node, type: string): Node[] {
 }
 
 /**
+ * 上游 transformer 的真实签名。
+ *
+ * 上游把 `remarkAlert` 标成 `Plugin`（`this: Processor`），
+ * 但运行时返回的其实是一个纯 transformer——`src/parser/alerts.ts` 里
+ * 也是这么调的（同一个坑，同一个解法）。
+ */
+type AlertTransformer = (tree: Root) => void;
+
+/**
  * 上游插件的判定结果：它会不会把这个引用块当成 alert？
  *
  * 复刻上游的做法——**就地**跑一遍插件，然后看引用块上有没有
@@ -55,7 +64,8 @@ function nodesOfType(tree: Node, type: string): Node[] {
  */
 function upstreamSaysAlert(source: string): boolean {
   const tree = parseMarkdown(source) as Root;
-  remarkAlert()(tree);
+  const transform = (remarkAlert as unknown as () => AlertTransformer)();
+  transform(tree);
   for (const node of nodesOfType(tree as unknown as Node, "blockquote")) {
     const data = (node as { data?: { hProperties?: { className?: string[] } } }).data;
     const classes = data?.hProperties?.className ?? [];

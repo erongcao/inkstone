@@ -111,7 +111,9 @@ describe("==高亮==：lezer 编辑布局层", () => {
   it("切出 Highlight 与 HighlightMark 节点", () => {
     const types: string[] = [];
     parseSyntax("==高亮==").iterate({
-      enter: (ref) => types.push(ref.node.type.name),
+      enter: (ref) => {
+        types.push(ref.node.type.name);
+      },
     });
     expect(types).toContain("Highlight");
     expect(types.filter((t) => t === "HighlightMark")).toHaveLength(2);
@@ -128,7 +130,9 @@ describe("==高亮==：lezer 编辑布局层", () => {
   it("GFM 删除线不受影响", () => {
     const types: string[] = [];
     parseSyntax("~~删除~~").iterate({
-      enter: (ref) => types.push(ref.node.type.name),
+      enter: (ref) => {
+        types.push(ref.node.type.name);
+      },
     });
     expect(types).toContain("Strikethrough");
   });

@@ -37,9 +37,13 @@ function remarkTables(source: string): { from: number; to: number; align: Align[
       for (const row of (node as unknown as { children: Node[] }).children) {
         cols.push((row as unknown as { children: Node[] }).children.length);
       }
+      const from = node.position.start.offset;
+      const to = node.position.end.offset;
+      // mdast 的 `offset` 是可选的（unist 的类型如此），但 micromark 一定会给
+      if (from === undefined || to === undefined) return;
       out.push({
-        from: node.position.start.offset,
-        to: node.position.end.offset,
+        from,
+        to,
         align: (node as unknown as { align: Align[] }).align,
         cols,
       });

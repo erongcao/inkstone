@@ -16,7 +16,7 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
-import type { Node, Parent } from "mdast";
+import type { Parent } from "mdast";
 import { parseMarkdown } from "@/parser/markdown";
 import { FORMAT_SPECS } from "@/editor/commands/builtin";
 import { commandsFor } from "@/editor/commands";
@@ -44,8 +44,8 @@ const KNOWN_PENDING = new Map<string, string>([
 
 /** 取段落里直接子节点的类型 */
 function childTypes(source: string): string[] {
-  const tree = parseMarkdown(source) as unknown as Node;
-  const paragraph = tree.children[0] as Parent;
+  const tree = parseMarkdown(source) as unknown as Parent;
+  const paragraph = tree.children[0] as unknown as Parent;
   if (!Array.isArray(paragraph.children)) return [];
   return paragraph.children.map((c) => c.type);
 }

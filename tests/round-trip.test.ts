@@ -19,7 +19,10 @@ function findNode(
   }
   if (node !== null && typeof node === "object") {
     const obj = node as { type?: string; children?: unknown[] };
-    if (typeof obj.type === "string" && predicate(obj)) return obj;
+    // `type` 收窄成 string 之后才是 `{ type: string }`——谓词要的就是这个形状
+    if (typeof obj.type === "string" && predicate(obj as { type: string })) {
+      return obj as { type: string };
+    }
     if (obj.children) return findNode(obj.children, predicate);
   }
   return undefined;

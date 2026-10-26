@@ -124,10 +124,6 @@ function createEditor(doc: string): EditorView {
   });
 }
 
-function parkAtEnd(view: EditorView): void {
-  view.dispatch({ selection: { anchor: view.state.doc.length } });
-}
-
 /**
  * 渲染层。
  *

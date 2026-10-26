@@ -21,7 +21,6 @@ import {
   openDocumentAt,
   resetTabs,
   setDocumentContent,
-  useTabs,
 } from "@/ipc/document";
 import { SAMPLE_ROOT } from "@/ipc/fs";
 

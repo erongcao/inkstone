@@ -41,10 +41,14 @@ function fullDocumentInlineMath(source: string, options: ParseOptions): InlineMa
       return;
     }
     if (node.type !== "inlineMath" || !node.position) return;
+    const from = node.position.start.offset;
+    const to = node.position.end.offset;
+    // mdast 的 `offset` 是可选的（unist 的类型如此），但 micromark 一定会给
+    if (from === undefined || to === undefined) return;
     out.push({
-      from: node.position.start.offset,
-      to: node.position.end.offset,
-      tex: (node as { value: string }).value,
+      from,
+      to,
+      tex: (node as unknown as { value: string }).value,
     });
   };
   walk(parseMarkdown(source, options) as unknown as Node);

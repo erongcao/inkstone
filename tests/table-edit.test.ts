@@ -12,7 +12,6 @@ import { EditorState } from "@codemirror/state";
 import { findTables } from "@/editor/render/table";
 import { gfmMarkdownLanguage } from "@/editor/markdown-language";
 import { ensureSyntaxTree } from "@codemirror/language";
-import type { Tree } from "@lezer/common";
 import {
   addTableColumn,
   addTableRow,
@@ -29,7 +28,11 @@ import {
 /** 取源码里第一张表的行几何 */
 function geometryOf(doc: string) {
   const state = EditorState.create({ doc, extensions: [gfmMarkdownLanguage] });
-  const tree: Tree = ensureSyntaxTree(state, gfmMarkdownLanguage, 10_000);
+  // `ensureSyntaxTree(state, upto, timeout)` 的第二个参数是**位置**，不是 Language。
+  // 之前这里传的是 `gfmMarkdownLanguage`——它靠「Language >= number 恒为 false」
+  // 这个巧合退化成了「解析整篇」，测试是绿的，但调用方式是错的。
+  const tree = ensureSyntaxTree(state, state.doc.length, 10_000);
+  if (!tree) throw new Error(`语法树没建起来：\n${doc}`);
   const [table] = findTables(tree, doc);
   if (!table) throw new Error(`文档里没有表格：\n${doc}`);
   return { table, rows: tableRowsGeometry(doc, table.from, table.to), doc };

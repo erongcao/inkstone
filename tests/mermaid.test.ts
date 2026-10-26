@@ -33,7 +33,12 @@ function treeOf(doc: string): Tree {
     doc,
     extensions: [gfmMarkdownLanguage],
   });
-  return ensureSyntaxTree(state, gfmMarkdownLanguage, 10_000);
+  // `ensureSyntaxTree(state, upto, timeout)` 的第二个参数是**位置**，不是 Language。
+  // 之前这里传的是 `gfmMarkdownLanguage`——它靠「Language >= number 恒为 false」
+  // 这个巧合退化成了「解析整篇」，测试是绿的，但调用方式是错的。
+  const tree = ensureSyntaxTree(state, state.doc.length, 10_000);
+  if (!tree) throw new Error("语法树没建起来");
+  return tree;
 }
 
 const DOC = [
