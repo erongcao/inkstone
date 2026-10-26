@@ -98,7 +98,7 @@ export function findInlineMath(
   const features = resolveFeatures(options.features);
   // 行内公式整个关掉 → 根本不找。
   //
-  // 解析层那边也会把公式还原成字面文本（`remarkMathOff`），
+  // 解析层那边也会把公式还原成字面文本（`restoreDisabledMath`），
   // 所以这里其实是个快筛——但它省掉整篇逐行解析，值得放在最前面。
   if (!features.inlineMath) return matches;
 
