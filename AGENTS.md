@@ -49,6 +49,7 @@ Inkstone（砚）是一个**开源 Markdown 编辑器**，对标 Typora 的 Live
 | 语义解析 | remark / unified / mdast | 渲染、导出、大纲、脚注编号的唯一来源 |
 | 编辑视图布局 | lezer / @lezer/markdown | 增量快 10–15 倍，只回答「标记在哪」 |
 | 高亮/公式/图表 | **highlight.js** / KaTeX / Mermaid | 高亮用 `highlight.js/lib/core` + 显式注册（**不是** Prism——生产构建下会静默失效，见「块级渲染层与代码高亮」）；KaTeX 而非 MathJax——同步渲染，编辑器里不抖 |
+| 行内高亮（`==…==`） | remark 侧 `mdast-util-highlight-mark` + `micromark-extension-highlight-mark`；lezer 侧**自研** | remark 侧用上游（事实标准）；lezer 侧自研 25 行——`@lezer/markdown` 没有高亮扩展，而它的 `Subscript`/`Superscript` 只支持**单字符**标记。已知代价：上游那个包的运行时文件 `import` 了测试框架 `uvu/assert`（会被打进产物） |
 | 前端 | React 19 + Vite 8 + TypeScript 5.9 | TS 锁 5.9：typescript-eslint 8.72 尚未适配 TS 7 |
 
 ## M1 选型结论：为什么是 CodeMirror 6 而不是 Milkdown（2026-10-20 实测 / 2026-10-21 正式拍板）
