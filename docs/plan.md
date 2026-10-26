@@ -687,7 +687,9 @@ CM6 的 `EditorView.inputHandler` 扩展点实现，设置项 `editor.autoPairMo
   - 🐛 修掉：`tests/export-service.test.ts` 里混入裸控制字节，git 把它当二进制
   - ⚠️ 已知缺口（非 M4）：`==高亮==` 解析层不支持，编辑器与导出**一致**地显示为字面量；
     但「高亮」命令与 `settings.markdown.highlight` 开关目前是无效的
-    → **已于 2026-10-26 补齐**（remark + lezer 两侧实现，见下文「Typora 行内语法补齐」）
+    → **解析层与命令已于 2026-10-26 补齐**（remark + lezer 两侧实现，见下文「补齐 · Typora 行内语法」）；
+    **开关仍未接线**（`settings.markdown` 的 12 个开关里只有 1 个真接线，
+    这是独立待办，见 AGENTS.md「设置面板里的摆设开关」）
 - **验收（M4-7 浏览器 UI）**：2026-10-25 真实浏览器逐项走通
   - ✅ 改名（HTML → 「网页版」）、重排（PDF 移到第一位，首项的 ↑ 正确禁用）
   - ✅ 移除（RTF 进入「已移除的格式」折叠区，带「恢复」按钮）
