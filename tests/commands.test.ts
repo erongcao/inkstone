@@ -136,6 +136,23 @@ describe("命令模糊匹配", () => {
     expect(hits.map((hit) => hit.command.id)).toContain("block.table");
   });
 
+  it("搜「缩放」能找到三条缩放命令", () => {
+    /*
+     * 菜单文案用的是系统惯例（「放大 / 缩小 / 实际大小」），
+     * 但用户在命令面板里打的是「缩放」——那是这个功能的**中文名**。
+     * 搜不到就等于这个功能没有第二个入口。
+     */
+    const ids = matchCommands(commands, "缩放").map((hit) => hit.command.id);
+    expect(ids).toContain("view.zoom-in");
+    expect(ids).toContain("view.zoom-out");
+    expect(ids).toContain("view.zoom-reset");
+  });
+
+  it("搜「字号」也能找到缩放命令（它改的就是字号）", () => {
+    const ids = matchCommands(commands, "字号").map((hit) => hit.command.id);
+    expect(ids).toContain("view.zoom-in");
+  });
+
   it("前缀命中排在子串命中之前", () => {
     // 「表格」在「插入表格」开头，在「导出为 HTML 表格」中间
     const hits = matchCommands(commands, "表格");
@@ -449,6 +466,28 @@ describe("意图总线", () => {
     off();
     runCommand("view.source", createEditor());
     expect(seen).toEqual([]);
+  });
+
+  it("三条缩放命令发的是缩放意图", () => {
+    /*
+     * 缩放的实现在 React 侧（改设置），所以命令表只发意图。
+     * 三条命令 ↔ 三个意图是一一对应的——
+     * 少一条，那个菜单项就还是死的。
+     */
+    const seen: Intent[] = [];
+    const off = onIntent((intent) => seen.push(intent));
+    try {
+      runCommand("view.zoom-in", createEditor());
+      runCommand("view.zoom-out", createEditor());
+      runCommand("view.zoom-reset", createEditor());
+      expect(seen).toEqual([
+        { type: "view.zoom-in" },
+        { type: "view.zoom-out" },
+        { type: "view.zoom-reset" },
+      ]);
+    } finally {
+      off();
+    }
   });
 });
 

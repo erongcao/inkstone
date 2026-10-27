@@ -9,6 +9,8 @@ import * as documentModule from "@/ipc/document";
 import { openDocumentAt, setDocumentContent } from "@/ipc/document";
 import { handleExternalChange } from "@/document/conflict";
 import { SAMPLE_ROOT } from "@/ipc/fs";
+import { readSettings, updateSettings } from "@/settings/store";
+import { DEFAULT_FONT_SIZE } from "@/settings/zoom";
 
 const README = `${SAMPLE_ROOT}/README.md`;
 
@@ -41,6 +43,14 @@ describe("应用交互", () => {
   beforeEach(() => {
     cleanup();
     localStorage.clear();
+    /*
+     * 设置 store 的 state 是**模块级**的，localStorage.clear() 清不掉它——
+     * 上一条用例改过的设置会漏到下一条。显式复位几个会被用例改到的字段。
+     */
+    updateSettings({
+      editor: { markerDisplay: "live" },
+      appearance: { fontSize: DEFAULT_FONT_SIZE },
+    });
   });
 
   it("输入内容后状态栏字数统计随之更新", async () => {
@@ -183,6 +193,76 @@ describe("应用交互", () => {
       dispatchMenuAction("toggle-sidebar");
     });
     expect(app?.dataset.sidebar).toBe("visible");
+  });
+
+  it("原生菜单的「源码模式」切得动（之前是注册了却没人处理的死菜单项）", () => {
+    /*
+     * 「源码模式」这个菜单项在 Rust 侧建出来了，加速键 ⌘/ 也登记了，
+     * 但前端从来没订阅过它——点了没反应。
+     * 现在它接到意图总线上，与命令面板里的「源码模式」是同一个动作。
+     */
+    render(<App />);
+
+    expect(readSettings().editor.markerDisplay).toBe("live");
+
+    act(() => {
+      dispatchMenuAction("toggle-source-mode");
+    });
+
+    expect(readSettings().editor.markerDisplay).toBe("source");
+  });
+
+  it("原生菜单的三个缩放项都有反应（之前也是死菜单项）", () => {
+    /*
+     * 「放大 / 缩小 / 实际大小」这三个菜单项注册了、加速键也登记了，
+     * 但行为是空的——整个缩放功能在原生菜单这条路上根本不存在。
+     *
+     * 这里守两件事：
+     *   1. 菜单项真的有反应（不是静默失效）
+     *   2. 改的是 `appearance.fontSize`，且真的落到了 `--ink-font-size` 上
+     *      （设置与 CSS 变量脱节 = 用户改了字号但界面没变）
+     */
+    render(<App />);
+    updateSettings({ appearance: { fontSize: DEFAULT_FONT_SIZE } });
+
+    act(() => {
+      dispatchMenuAction("zoom-in");
+    });
+    expect(readSettings().appearance.fontSize).toBe(DEFAULT_FONT_SIZE + 1);
+    expect(document.documentElement.style.getPropertyValue("--ink-font-size")).toBe(
+      `${DEFAULT_FONT_SIZE + 1}px`,
+    );
+
+    act(() => {
+      dispatchMenuAction("zoom-out");
+    });
+    expect(readSettings().appearance.fontSize).toBe(DEFAULT_FONT_SIZE);
+
+    act(() => {
+      dispatchMenuAction("zoom-reset");
+    });
+    expect(readSettings().appearance.fontSize).toBe(DEFAULT_FONT_SIZE);
+  });
+
+  it("连续两次放大是放两档，不是一档（缩放要读当前值，不能读过期快照）", () => {
+    /*
+     * 这条守的是**闭包过期**那个坑：
+     * 意图处理器如果读的是 React 渲染时的快照，两次连续放大之间
+     * 未必已经重渲染过 → 两次都拿同一个旧值算 → 只放大了一档。
+     *
+     * 缩放读的是 store 的当前值（readSettings()），所以第二次一定读到新值。
+     */
+    render(<App />);
+    updateSettings({ appearance: { fontSize: DEFAULT_FONT_SIZE } });
+
+    act(() => {
+      dispatchMenuAction("zoom-in");
+    });
+    act(() => {
+      dispatchMenuAction("zoom-in");
+    });
+
+    expect(readSettings().appearance.fontSize).toBe(DEFAULT_FONT_SIZE + 2);
   });
 
   it("从命令面板执行「替换」后，焦点落在替换框（面板关闭时不能把焦点抢回编辑器）", async () => {

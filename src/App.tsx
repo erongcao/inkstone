@@ -24,12 +24,13 @@ import { ConflictDialog } from "@/views/ConflictDialog";
 import { UpdateDialog } from "@/views/UpdateDialog";
 import { ShortcutsDialog } from "@/views/ShortcutsDialog";
 import { MarkdownReferenceDialog } from "@/views/MarkdownReferenceDialog";
-import { onIntent } from "@/editor/intents";
+import { emitIntent, onIntent } from "@/editor/intents";
 import { startAutoSaveRuntime } from "@/document/autosave";
 import { exportDocument, type ExportResult } from "@/export/service";
 import { findResolvedExportItem } from "@/export/items";
 import { readSettings } from "@/settings/store";
 import { openAiPanel, useAiPanel } from "@/ai/panel-store";
+import { zoomIn, zoomOut, zoomReset } from "@/settings/zoom";
 import { useLocale } from "@/i18n";
 import { checkForUpdate, openUrl, type UpdateCheck } from "@/ipc/update";
 import { syncNativeLocale } from "@/i18n/native";
@@ -208,6 +209,24 @@ export default function App() {
         case "view.toggle-typewriter-mode":
           update({ editor: { typewriterMode: !settings.editor.typewriterMode } });
           break;
+        // 缩放三档读的是 **readSettings() 的当前值**，不是闭包里的 React 快照。
+        // 快照会过期：连续按两次 ⌘= 时，两次之间未必已经重渲染过，
+        // 闭包里还是同一个旧值 → 算出来还是「16 → 17」，等于只放大了一档。
+        // readSettings() 读的是 store 的模块级 state，
+        // updateSettings() 是同步改的，所以第二次一定读到 17。
+        case "view.zoom-in":
+          update({
+            appearance: { fontSize: zoomIn(readSettings().appearance.fontSize) },
+          });
+          break;
+        case "view.zoom-out":
+          update({
+            appearance: { fontSize: zoomOut(readSettings().appearance.fontSize) },
+          });
+          break;
+        case "view.zoom-reset":
+          update({ appearance: { fontSize: zoomReset() } });
+          break;
         case "file.new":
           create();
           break;
@@ -274,6 +293,16 @@ export default function App() {
       onMenuAction("toggle-typewriter-mode", () =>
         update({ editor: { typewriterMode: !settings.editor.typewriterMode } }),
       ),
+      // 「源码模式」之前也是**注册了却没人处理**的菜单项——
+      // 命令面板里有「源码模式」这条命令（走意图总线），
+      // 原生菜单这边却断着：点了没反应。
+      // 现在两条入口落到**同一个意图**。
+      onMenuAction("toggle-source-mode", () => emitIntent({ type: "view.source" })),
+      // 「放大 / 缩小 / 实际大小」同理：菜单项与加速键（⌘= / ⌘- / ⌘0）
+      // 早就有了，行为却是空的。接到意图总线上，与命令面板同源。
+      onMenuAction("zoom-in", () => emitIntent({ type: "view.zoom-in" })),
+      onMenuAction("zoom-out", () => emitIntent({ type: "view.zoom-out" })),
+      onMenuAction("zoom-reset", () => emitIntent({ type: "view.zoom-reset" })),
       onMenuAction("check-update", () => void runUpdateCheck()),
       // 「Markdown 语法参考」与「快捷键一览」之前也是**注册了但没人处理**
       // 的菜单项——点了没反应。现在一个给语法速查表，一个给键位表。

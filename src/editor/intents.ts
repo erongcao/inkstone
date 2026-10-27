@@ -24,6 +24,17 @@ export type Intent =
   | { type: "view.source" }
   | { type: "view.toggle-focus-mode" }
   | { type: "view.toggle-typewriter-mode" }
+  /**
+   * 缩放：放大 / 缩小 / 实际大小。
+   *
+   * 改的是 `appearance.fontSize`（也就是 `--ink-font-size`），
+   * 与设置面板里「外观 → 字号」是同一个设置——
+   * 所以原生菜单的三个菜单项、命令面板的三条命令、快捷键表里的三行，
+   * 落到的是**同一件事**。
+   */
+  | { type: "view.zoom-in" }
+  | { type: "view.zoom-out" }
+  | { type: "view.zoom-reset" }
   | { type: "file.new" }
   | { type: "file.save" }
   /**

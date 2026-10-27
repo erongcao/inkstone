@@ -354,6 +354,49 @@ export function builtinCommands(): InkstoneCommand[] {
         return true;
       },
     },
+    /*
+     * 缩放三条：与原生菜单的「放大 / 缩小 / 实际大小」是**同一个动作**。
+     *
+     * 之前原生菜单那三个菜单项注册了却没人处理（点了没反应），
+     * 命令面板里也没有对应的条目——于是这个功能**整条链路都是断的**。
+     * 现在两条入口都落到意图总线的同一个意图上。
+     *
+     * 实际改的是 `appearance.fontSize`（即 `--ink-font-size`），
+     * 与设置面板里的「外观 → 字号」是同一个设置。
+     */
+    {
+      id: "view.zoom-in",
+      label: "放大",
+      category: "视图",
+      surfaces: ["palette"],
+      keywords: "zoom in fangda 放大 缩放 字号 大",
+      run: () => {
+        emitIntent({ type: "view.zoom-in" });
+        return true;
+      },
+    },
+    {
+      id: "view.zoom-out",
+      label: "缩小",
+      category: "视图",
+      surfaces: ["palette"],
+      keywords: "zoom out suoxiao 缩小 缩放 字号 小",
+      run: () => {
+        emitIntent({ type: "view.zoom-out" });
+        return true;
+      },
+    },
+    {
+      id: "view.zoom-reset",
+      label: "实际大小",
+      category: "视图",
+      surfaces: ["palette"],
+      keywords: "zoom reset shiji 实际大小 重置 缩放 字号",
+      run: () => {
+        emitIntent({ type: "view.zoom-reset" });
+        return true;
+      },
+    },
 
     /* ── 文件（只在命令面板） ── */
     {

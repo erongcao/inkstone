@@ -38,6 +38,19 @@ export function dispatchMenuAction(action: MenuAction): void {
 }
 
 /**
+ * 当前**有人处理**的菜单动作 id。
+ *
+ * 「菜单项建出来了，前端没人处理」是个**静默**的洞：
+ * 点了没反应，也没有任何报错。把注册表摊开看一眼，
+ * 就能立刻看出哪个 id 没人接。
+ *
+ * 给测试与诊断用，不参与业务逻辑。
+ */
+export function subscribedMenuActions(): MenuAction[] {
+  return [...handlers.entries()].filter(([, set]) => set.size > 0).map(([id]) => id);
+}
+
+/**
  * 在 Tauri 环境中挂载原生菜单监听。
  * 在浏览器里（pnpm dev）为空操作，前端开发不受影响。
  */
