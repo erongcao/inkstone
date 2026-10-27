@@ -2961,17 +2961,37 @@ Word / Google Docs 的上下标**不一定**用 `<sub>` / `<sup>` 标签，
 而 `*` 是活跃字符 → `canWrapSubSup` 拒绝 →
 「既是粗体又是上标」的内容**不转**（转了会变成一对比看得见的星号）。
 
-### 已知缺口：Word 私有的 `mso-vert-align`
+### 已知缺口：Word 私有的 `mso-vert-align` —— **已核实，这条不成立**（2026-10-28）
 
-Word 的 HTML 里还有一种写法是 `mso-vert-align: super`（`-ms-` 私有属性）。
-本轮**没有**覆盖它——手上没有真机 Word 可以验证它到底写成什么，
-而写一条没核实过的规则正是本项目反复踩的坑（「看起来能跑，其实没跑」）。
-等哪天真机 Word 复制一段带上下标的文字，看一眼剪贴板里是什么，再补这一条。
+这条曾记在 AGENTS.md 里：「Word 的 HTML 里还有一种写法是
+`mso-vert-align: super`（`-ms-` 私有属性），本轮没有覆盖它——
+手上没有真机 Word 可以验证它到底写成什么」。
 
-**2026-10-28 更新**：真机 Word 的剪贴板拿到了（见下一节），
-但那次复制的段落**不含上下标**，所以这条缺口**仍然开着**——
-只是现在知道 Word 的 HTML 长什么样了（见下节），
-下一次只要复制一段带上下标的文字就能对上了。
+**2026-10-28 用真机 Word 15 核实了：现代 Word 不这么写。**
+
+用 AppleScript 驱动本机的 Word 造一个带上下标的文档
+（`set superscript of font object of r to true`），
+再走**真实用户路径**（选中 + ⌘C）复制到剪贴板，剪贴板里的 `public.html` 是：
+
+```html
+<p class=MsoNormal><span lang=EN-US>H<sup>2</sup>O<sub><o:p></o:p></sub></span></p>
+```
+
+**Word 写的是语义标签 `<sup>` / `<sub>`**——我们早就支持（`subSup` 规则），
+转换结果是 `H^2^O`。
+
+所以：
+- `mso-vert-align` 那条**推测出来的**缺口，对现代 Word **不成立**；
+- 真正需要覆盖的是**行内样式**那条路
+  （`vertical-align: super` / `text-position: super`），
+  而 `styledSpan` 规则**早就覆盖**了；
+- 按本项目「不写没核实过的规则」的纪律，**不加** `mso-vert-align` 规则——
+  没有证据支持它，反而多一条要维护的分支。
+
+（`mso-vert-align` 可能是更老版本 Word 的「Web 页」保存格式的写法。
+如果哪天遇到真的这么写的来源，再按实测补。）
+
+真机样本留在 `tests/fixtures/word-superscript.html`。
 
 ## 真机 Word 的剪贴板：开头多出 8 个空格（2026-10-28）
 
@@ -3041,6 +3061,136 @@ body 里的 `mso-` 行内样式与 `<o:p>` 标记；
 
 `tests/paste.test.ts` 里 6 条新测试，其中 **5 条在旧实现下会红**——
 写完一定要**故意退回旧实现跑一遍**确认它们不是假绿。
+
+## Word 的表格：整张表在导出时消失（2026-10-28）
+
+继续用真机 Word 造样本（表格 + 粗体/斜体），又挖出一个
+**内容丢失**级别的破口。
+
+### 症状
+
+从 Word 复制一张表粘进 Inkstone，源码里留下的是**一坨裸 HTML**：
+
+```
+<table class="MsoNormalTable" border="0" cellspacing="0" cellpadding="0" style="border-collapse:collapse;…">
+```
+
+编辑器里显示的是字面标签（实时预览不渲染 HTML 块），
+而**导出时整张表消失**——连单元格里的字都没了。
+
+### 根因是三层叠在一起
+
+1. **`turndown-plugin-gfm` 明确不转没有表头的表格**：
+
+   ```js
+   // Only convert tables with a heading row.
+   // Tables with no heading row are kept using `keep` (see below).
+   turndownService.keep(node => node.nodeName === 'TABLE' && !isHeadingRow(node.rows[0]))
+   ```
+
+   而 **Word 导出的表格全是 `<td>`，一个 `<th>` 都没有**（实测 Word 15）——
+   于是每张 Word 表格必然命中「原样保留」。
+
+2. **GFM 表格必须有表头行**——没有「无表头表格」这种东西。
+
+3. **我们的导出管线会丢弃 html 节点**：`remark-rehype` 默认丢掉 mdast 的
+   `html` 节点（没开 `allowDangerousHtml`）→ 裸 HTML 在导出结果里**整块消失**。
+
+第 3 条让这个洞从「源码难看」升级成「**内容丢失**」。
+
+### 修法：转换前把首行提升成表头
+
+在 DOM 预处理里（和「只取 body」同一层）把**没有表头行的表格的首行
+提升成 `<th>`**，GFM 插件自己的规则就能正常工作。
+
+插件的判据（**实测自 `turndown-plugin-gfm` 源码**，不是猜的）：
+
+```js
+// isHeadingRow(tr)
+parentNode.nodeName === 'THEAD' ||
+(parentNode.firstChild === tr &&
+ (parentNode.nodeName === 'TABLE' || isFirstTbody(parentNode)) &&
+ every.call(tr.childNodes, n => n.nodeName === 'TH'))
+
+// isFirstTbody(element)
+element.nodeName === 'TBODY' &&
+(!previousSibling || (previousSibling.nodeName === 'THEAD' && 空白))
+```
+
+四处细节，**少一处规则就不认**：
+
+| 做法 | 为什么 |
+|---|---|
+| 首行的 `<td>` 全换成 `<th>` | 满足「每一个 childNode 都是 TH」 |
+| 清掉行内的**空白文本节点** | 混进空白文本节点，上面的判定就不成立；插件拼表头分隔行时还会对每个 childNode 调 `getAttribute`，文本节点留在那儿会直接抛异常 |
+| 行必须是父元素的**第一个子节点** | 插件要求 `parentNode.firstChild === tr` |
+| `<tbody>` 必须是 `<table>` 的**第一个子节点** | 否则 `previousSibling` 不是空，`isFirstTbody` 不成立 |
+
+还有一条：Word 的单元格内容用 `<p class=MsoNormal>` 包着，
+而 `<p>` 的替换规则带 `\n\n` → **整行被拆散**。
+所以还要把单元格里的块级包装（`<p>` / `<div>`）拆开。
+
+### 第二轮又挖出三个洞：`<caption>`、空白、多个段落
+
+上面那版修完，插件的判据还有三个地方能把它绕过去：
+
+1. **`<caption>` 会让整张表失效**。
+   `<caption>` 正好占在 `<tbody>` 前面 → `tbody.previousSibling` 不是空 →
+   `isFirstTbody` 不成立 → 整张表退回裸 HTML → 导出时**连标题一起消失**。
+   修法：把 `<caption>` 的文字**提到表格外面**变成一段文字，表格本身才保得住。
+
+2. **空白文本节点**。
+   turndown 自己会做空白塌缩（`collapseWhitespace`），大部分空白它能清掉；
+   但它的规则是「前面有文本、且前面那个文本不是以空格结尾时，
+   **保留**当前空白的前导空格」——
+   所以 `<td>甲</td>\n    <td>乙</td>` 里那个换行缩进**会活下来**，
+   混进 `<tr>` 的 childNodes，`every(childNode === TH)` 当场不成立。
+   表格层级的空白（`<table>` 与 `<tbody>` 之间）turndown 能清掉
+   （`<table>` 是块级元素，进它之前 `prevText` 会被清空），
+   但那属于 turndown 的**内部策略**——位置那两条仍然自己清一遍，
+   判据不依赖别人哪天改了实现。
+
+3. **一个单元格里多个段落**。
+   GFM 单元格没有段落概念，直接拆开会粘成「甲乙」。
+   补一个空格（「甲 乙」）——**不能用 `<br>`**：
+   导出管线的 remark-rehype 默认丢弃 html 节点，
+   屏幕上一行、导出里没这一行，又成了两边不一致。
+
+新增 5 条测试，**全部在修复前会红**（退回旧实现验过）。
+
+### 语义选择：为什么是「第一行当表头」
+
+GFM 没有「无表头表格」，只有两种做法：
+
+| 做法 | 问题 |
+|---|---|
+| 空表头行（`|  |  |` + `|---|---|` + 全部数据行） | 编辑器里多一行空表头，看起来像坏了；中文技术写作里极少见 |
+| **第一行当表头** | 纯数据网格的话，第一行会被「提升」成表头（显示为粗体） |
+
+选后者：**多数 Word 表格的第一行本来就是表头**
+（只是 Word 用「加粗 / 底纹」表示，不用 `<th>`），
+提升成表头正好还原用户的本意；这也是绝大多数 HTML → Markdown 转换器的做法。
+
+### 一个顺带核实的事实：`<b>` 是真的
+
+转换出来每格都是 `**甲**`，一度怀疑是 Word 的伪影。
+实测排除：造一个表格，**一个单元格显式加粗、一个显式不加粗**，
+再看导出的 HTML——
+
+```html
+<td><p class=MsoNormal><b style='mso-bidi-font-weight:normal'>显式粗体…</b></p></td>
+<td><p class=MsoNormal>显式不加粗…</p></td>
+```
+
+不加粗的单元格**没有** `<b>` → `<b>` 是**真实格式**
+（Word 表格样式的默认加粗），忠实转成 `**` 是对的。
+
+### 真机样本
+
+`tests/fixtures/word-table.html` —— 真机 Word 15 导出的表格
+（保留 `mso-bidi-font-weight`、`<p class=MsoNormal>`、`<td>` 之间的换行缩进）。
+`tests/paste.test.ts` 里 5 条新测试，**3 条在修复前会红**；
+再加上第二轮挖出的 `<caption>` / 空白 / 多段落，**共 10 条，8 条会红**。
 
 ## 屏幕与导出的四个破口（2026-10-27）
 
@@ -3575,8 +3725,27 @@ M3 全部完成（2026-10-23）。M4（导出）进行中（2026-10-25）：
 - 测试：`tests/fixtures/word-clipboard.html` 是真机 Word 的剪贴板 HTML
   （结构原样保留，可见文字与本机路径都换成占位），
   6 条新测试里 **5 条在旧实现下会红**（写完故意退回旧实现验过）
-- 顺带纠正一条**之前记错**的：Word 私有的 `mso-vert-align` 缺口**仍然开着**
-  ——这次复制的段落不含上下标，只是现在知道 Word 的 HTML 长什么样了
+- 顺带纠正一条**之前记错**的：「Word 可能写 `mso-vert-align: super`」是**推测**——
+  真机 Word 15 实测写的是语义标签 `<sup>` / `<sub>`（我们早就能转，
+  转换结果 `H^2^O`）。按「不写没核实过的规则」的纪律**不加**那条规则，只订正记录
+
+**Word 粘贴的表格修掉了（2026-10-28）**：
+
+- 用 AppleScript 驱动**本机的真机 Word** 造样本（上下标、表格、粗体/斜体），
+  走**真实用户路径**（选中 + ⌘C）取剪贴板
+- 又挖出一个**内容丢失**级别的破口：Word 的表格全是 `<td>`，
+  而 GFM 插件**只转有表头行的表格**（其余原样保留成 HTML）→
+  源码里一坨裸 HTML，导出时 `remark-rehype` 丢弃 html 节点 → **整张表消失**
+- 修法：转换前把无表头表格的首行提升成 `<th>`，
+  并清掉行内空白文本节点、拆掉单元格里的 `<p>` 包装
+- **第二轮又挖出三个洞**：`<caption>` 会让整张表失效（标题一起消失）、
+  turndown 的空白塌缩救不了「单元格之间」的空白、
+  一个单元格里多个段落会粘成「甲乙」
+- 插件的判据是**读源码抄下来的**，不是猜的
+  （`isHeadingRow` + `isFirstTbody`，见上文那一节）
+- 顺带核实：Word 单元格里的 `<b>` 是**真实格式**（显式不加粗的单元格没有 `<b>`）
+- fixture：`tests/fixtures/word-table.html`（真机导出的表格，保留 `mso-` 细节）
+  与 `word-superscript.html`；10 条新测试里 **8 条在修复前会红**
 
 **死菜单项已修完（2026-10-28）**：
 
