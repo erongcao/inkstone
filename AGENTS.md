@@ -2746,6 +2746,15 @@ mark 只盖住文字那么宽，底色到文字末尾就断了，提示块看起
 - 提示块规则的一处已知分歧：文档里若有 `[!NOTE]: https://…` 这样的链接定义，
   mdast 会把 `[!NOTE]` 解析成 linkReference（上游插件不认），
   编辑器侧仍会认 → 记在 `src/editor/render/alert.ts` 的文件头
+- `tests/incremental-parse.test.ts` 里那条「大文档下增量解析显著快于全量解析」
+  的基准**名不副实**：
+  - 增量路径是 `state.update({changes}).state` × 10，但每次都从**同一个 base state**
+    出发（结果没赋回去），所以测的是「base + 1 处改动」，不是「连续 10 次编辑」
+  - 全量路径是 `parseSyntax(mutated)` × 10，只解析，**不含**状态更新与装饰器重算
+  - 两条路径**不是同类对比**
+  断言本身是方向性的（`incremental <= full`），所以它一直绿着。
+  本轮只修了里面的 lint 错误（去掉多余的 `.state`），**没有改它的语义**——
+  要真做成增量基准，得把两条路径改成同类对比，是独立工作量。
 - lezer 的 `Subscript` / `Superscript` 节点**不解转义**——
   内容里的 `\~` 在编辑器里显示成 `\~`（反斜杠可见），
   而 mdast 侧转义已解开，导出是 `~`。
@@ -2773,6 +2782,20 @@ mark 只盖住文字那么宽，底色到文字末尾就断了，提示块看起
 
 **教训**：`noUnusedLocals` 这类规则只在**被包含的范围**内生效。
 「闸门全绿」不等于「全绿」——先确认闸门**覆盖了什么**。
+
+### 同一个盲区还有第二个：lint 也没覆盖 `tests/`
+
+`pnpm lint` 原来是 `eslint src --max-warnings 0`——
+命令行只给了 `src`，所以测试代码**从来没被 lint 过**。
+
+改成 `eslint src tests` 后只暴露 **1 处**：
+`tests/incremental-parse.test.ts` 里一个纯表达式语句
+（`state.update({...}).state;` —— 取了 `.state` 却不用）。
+另 1 处是 `importOriginal<typeof import("…")>()` 这种
+「`import()` 类型注解」，改成 `import type * as FsModule from "…"`。
+
+**两道闸门的覆盖范围现在是对齐的**：`tsconfig.json` 的 `include` 有 `tests`，
+`eslint` 的 `files` 也有 `tests`，`prettier` 的 glob 本来就覆盖全仓。
 
 ## 下标 / 上标：remark 侧只能自己写（2026-10-27）
 

@@ -9,6 +9,7 @@
 
 import { describe, expect, it, beforeEach, vi } from "vitest";
 import { render, screen, fireEvent, cleanup, act } from "@testing-library/react";
+import type * as FsModule from "../src/ipc/fs";
 import { SAMPLE_ROOT, isUnder } from "../src/ipc/fs";
 import {
   childrenOf,
@@ -39,7 +40,7 @@ const held = vi.hoisted(() => ({ paths: new Set<string>() }));
 const release = vi.hoisted(() => ({ paths: new Map<string, () => void>() }));
 
 vi.mock("../src/ipc/fs", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../src/ipc/fs")>();
+  const actual = await importOriginal<typeof FsModule>();
   return {
     ...actual,
     async listDirectory(path: string) {

@@ -185,7 +185,7 @@ describe("增量语法树", () => {
     // 增量路径
     const t0 = performance.now();
     for (let i = 0; i < 10; i++) {
-      state.update({ changes: change }).state;
+      state.update({ changes: change });
     }
     const incremental = (performance.now() - t0) / 10;
 
