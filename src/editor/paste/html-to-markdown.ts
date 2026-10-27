@@ -16,6 +16,7 @@
 
 import TurndownService from "turndown";
 import { gfm } from "turndown-plugin-gfm";
+import { canWrapSubSup } from "@/parser/subsup";
 
 /**
  * 不该进文档的标签。
@@ -116,6 +117,17 @@ function createService(): TurndownService {
       if (/font-weight\s*:\s*(bold|bolder|[6-9]00)/i.test(style)) out = `**${out}**`;
       if (/font-style\s*:\s*italic/i.test(style)) out = `*${out}*`;
       if (/text-decoration\s*:[^;]*line-through/i.test(style)) out = `~~${out}~~`;
+      // 上下标也有用行内样式表达的来源（`vertical-align: super`），
+      // 与 `<sup>` / `<sub>` 标签是同一个意思、同一条判据。
+      //
+      // 放在最后：此时 `out` 可能已经裹上了 `**…**`，
+      // 而 `*` 是 Markdown 活跃字符 → `canWrapSubSup` 会拒绝，
+      // 于是「既是粗体又是上标」的内容**不转**（转了会变成一对比看得见的星号）。
+      if (/(?:vertical-align|text-position)\s*:\s*super/i.test(style)) {
+        out = canWrapSubSup(out) ? `^${out}^` : out;
+      } else if (/(?:vertical-align|text-position)\s*:\s*sub/i.test(style)) {
+        out = canWrapSubSup(out) ? `~${out}~` : out;
+      }
       return out;
     },
   });
@@ -124,6 +136,29 @@ function createService(): TurndownService {
   td.addRule("markHighlight", {
     filter: ["mark"],
     replacement: (content) => `==${content}==`,
+  });
+
+  // ── <sub> / <sup> → 下标 / 上标（Pandoc 风格）────────────────
+  // turndown 默认**没有**这两个标签的规则，会把它们整个丢掉只留内容——
+  // 从网页或 Word 粘贴过来的上下标就那么没了（实测 `H<sub>2</sub>O` → `H2O`）。
+  //
+  // 转的前提是：包出来的 `~…~` / `^…^` **必须能被自己的解析器认出来**。
+  // 认不出来（比如内容里有空格）就不能包——否则编辑器里会出现一对
+  // 看得见的波浪号，而导出时又不一样（架构约束 C：屏幕与导出必须一致）。
+  // 判据见 `src/parser/subsup.ts` 的 `canWrapSubSup`（与解析规则同源）。
+  //
+  // 认不出来时退回**纯内容**：内容里的 Markdown 语法（粗体、链接……）
+  // 仍然能正常解析，比包进一个认不出来的标记里强。
+  //
+  // 不按设置里的「下标 / 上标」开关分叉：粘贴的是外部内容，
+  // 而开关管的是**本项目文档**的解析口径——与 `<mark>` → `==…==` 同理。
+  td.addRule("subSup", {
+    filter: ["sub", "sup"],
+    replacement: (content, node) => {
+      const marker = node.nodeName === "SUP" ? "^" : "~";
+      if (!canWrapSubSup(content)) return content;
+      return `${marker}${content}${marker}`;
+    },
   });
 
   return td;

@@ -95,6 +95,41 @@ describe("htmlToMarkdown：HTML → Markdown", () => {
     expect(htmlToMarkdown("<p><mark>高亮</mark></p>")).toBe("==高亮==");
   });
 
+  it("sub / sup 转成下标 / 上标语法", () => {
+    expect(htmlToMarkdown("<p>H<sub>2</sub>O</p>")).toBe("H~2~O");
+    expect(htmlToMarkdown("<p>x<sup>2</sup></p>")).toBe("x^2^");
+    expect(htmlToMarkdown("<p><sub>中</sub></p>")).toBe("~中~");
+  });
+
+  it("认不出来的 sub / sup 退回纯内容，不产出看得见的标记", () => {
+    // 规则 ④：内容里有空白 → `~a b~` 不会被识别成下标
+    expect(htmlToMarkdown("<p><sub>a b</sub></p>")).toBe("a b");
+    // 内容自带标记 → 会提前闭合（`~a~b~` → 下标 a + 文本 b~）
+    expect(htmlToMarkdown("<p><sub>a~b</sub></p>")).toBe("a~b");
+    expect(htmlToMarkdown("<p><sup>a^b</sup></p>")).toBe("a^b");
+    // 内容是 Markdown 语法 → 包进去会变成字面文本，留着更好
+    expect(htmlToMarkdown("<p><sub><em>x</em></sub></p>")).toBe("*x*");
+    // 空内容
+    expect(htmlToMarkdown("<p><sub></sub></p>")).toBe("");
+  });
+
+  it("行内样式表达的上下标（Word / Google Docs 的另一种写法）", () => {
+    expect(htmlToMarkdown('<p>H<span style="vertical-align: sub">2</span>O</p>')).toBe("H~2~O");
+    expect(htmlToMarkdown('<p>x<span style="vertical-align: super">2</span></p>')).toBe("x^2^");
+    // `text-position` 是 CSS2 的写法（LibreOffice 用它）
+    expect(htmlToMarkdown('<p>x<span style="text-position: super">2</span></p>')).toBe("x^2^");
+    // 认不出来的内容不转
+    expect(htmlToMarkdown('<p><span style="vertical-align: sub">a b</span></p>')).toBe("a b");
+    // 别的 vertical-align 值不是上下标
+    expect(htmlToMarkdown('<p><span style="vertical-align: middle">x</span></p>')).toBe("x");
+  });
+
+  it("既是粗体又是上标时不转（转了会变成一对比看得见的星号）", () => {
+    expect(
+      htmlToMarkdown('<p><span style="font-weight:bold; vertical-align: super">x</span></p>'),
+    ).toBe("**x**");
+  });
+
   it("表格转成 GFM 表格", () => {
     const html = "<table><thead><tr><th>列一</th><th>列二</th></tr></thead><tbody><tr><td>甲</td><td>乙</td></tr></tbody></table>";
     const md = htmlToMarkdown(html);
@@ -288,5 +323,29 @@ describe("markdownPaste 扩展：真实 DOM 事件", () => {
     // 只插入了一次，没有出现「纯文本纯文本」
     expect(view.state.doc.toString()).toBe("纯文本");
     expect(event.defaultPrevented).toBe(true);
+  });
+
+  it("粘贴带 <sub> / <sup> 的网页内容，转成下标 / 上标语法", () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const view = new EditorView({
+      state: EditorState.create({ doc: "", extensions: [markdownPaste()] }),
+      parent: host,
+    });
+    views.push(view);
+
+    const event = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", {
+      value: {
+        getData: (type: string) => {
+          if (type === "text/html") return "<p>H<sub>2</sub>O 与 x<sup>2</sup></p>";
+          if (type === "text/plain") return "H2O 与 x2";
+          return "";
+        },
+      },
+    });
+    view.contentDOM.dispatchEvent(event);
+
+    expect(view.state.doc.toString()).toBe("H~2~O 与 x^2^");
   });
 });

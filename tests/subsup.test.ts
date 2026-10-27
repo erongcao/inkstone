@@ -26,6 +26,7 @@
 import { describe, expect, it } from "vitest";
 import type { Node, Parent } from "mdast";
 import { parseMarkdown, roundTrip } from "@/parser/markdown";
+import { canWrapSubSup } from "@/parser/subsup";
 import { markdownToHtml } from "@/parser/html";
 import { parseSyntax } from "@/editor/live-preview/syntax";
 import { buildLivePreviewDecorations } from "@/editor/live-preview/decorations";
@@ -223,6 +224,78 @@ describe("下标 / 上标：两层判据必须一致（架构约束 C）", () =>
       expect(lezerHas(source, "Superscript")).toBe(remarkHas(source, "superscript"));
     });
   }
+});
+
+/* ═══════════════════════════════════════════════════════════ */
+
+/**
+ * `canWrapSubSup` 与解析器必须对得上。
+ *
+ * 这条判据被**粘贴**时的 `<sub>` / `<sup>` 转换使用
+ * （见 `src/editor/paste/html-to-markdown.ts`）：
+ * 它说「能包」的内容，包成 `~…~` 之后**必须真的被解析成下标**，
+ * 而且内容一字不差——否则编辑器里会出现一对看得见的波浪号，
+ * 而导出时又认不出来（架构约束 C）。
+ *
+ * 判据本身是**保守**的（宁可少转，也不要转出认不出来的语法），
+ * 所以这里只断言一个方向：**判据说能包，解析器就必须认**。
+ */
+const WRAPPABLE_CONTENTS: string[] = [
+  "2",
+  "a",
+  "x",
+  "中文",
+  "a-b",
+  "a.b",
+  "a,b",
+  "a:b",
+  "50%",
+  "H2O",
+];
+
+describe("canWrapSubSup：与解析器一致（粘贴转换的前提）", () => {
+  for (const content of WRAPPABLE_CONTENTS) {
+    it(`「${content}」包起来之后真的被认成下标 / 上标，内容一字不差`, () => {
+      const cases = [
+        { marker: "~", nodeType: "subscript", lezerType: "Subscript" },
+        { marker: "^", nodeType: "superscript", lezerType: "Superscript" },
+      ] as const;
+
+      for (const c of cases) {
+        expect(canWrapSubSup(content)).toBe(true);
+
+        const source = `${c.marker}${content}${c.marker}`;
+        const nodes = nodesOfType(parseMarkdown(source) as unknown as Node, c.nodeType);
+        expect(nodes).toHaveLength(1);
+        const text = (nodes[0] as Parent).children
+          .map((child) => (child as { value?: string }).value ?? "")
+          .join("");
+        expect(text).toBe(content);
+        // lezer 侧也要是同一个结论
+        expect(lezerHas(source, c.lezerType)).toBe(true);
+      }
+    });
+  }
+
+  it("认不出来的内容一律不包（宁可少转，也不要转出认不出来的语法）", () => {
+    const notWrappable = [
+      "", // ①
+      "a b", // ② 规则 ④
+      "a\tb",
+      "a\\b", // ③ 规则 ③
+      "a~b", // ⑤ 标记本身
+      "a^b",
+      "**x**", // ④ Markdown 活跃字符
+      "*x*",
+      "[x](y)",
+      "`x`",
+      "a<b",
+      "x|y",
+    ];
+    for (const content of notWrappable) {
+      expect(canWrapSubSup(content)).toBe(false);
+    }
+  });
 });
 
 /* ═══════════════════════════════════════════════════════════ */

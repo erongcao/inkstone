@@ -157,6 +157,15 @@
 - **往返无损**：内容里的 `~` / `^` 序列化成 `\~` / `\^`，
   否则 `~a~b~` 回去会被解析成「下标 a」+「文本 b~」
 - 包体代价 **+2.5 KB**（0.031%）——micromark 核心本来就在包里
+- **粘贴时也认**：turndown 默认**没有** `<sub>` / `<sup>` 规则，
+  会丢掉标签只留内容（实测 `H<sub>2</sub>O` → `H2O`）——
+  从网页或 Word 复制过来的上下标在粘贴时就没了。
+  现在转成 `~…~` / `^…^`；
+  但**只在转出来的语法自己认得出来时**才转（判据 `canWrapSubSup`，
+  与解析规则同源），认不出来就退回纯内容——
+  否则用户会在编辑器里看到一对看得见的波浪号，而导出时又认不出来
+- **上下标的另一种来源也覆盖**：`<span style="vertical-align: super">`
+  （Word / Google Docs 不一定用 `<sup>` 标签），用同一条判据
 
 ### 修复
 
@@ -166,6 +175,9 @@
   `ensureSyntaxTree` 把 Language 当位置传（靠 NaN 比较碰巧退化成了「解析整篇」）、
   `Range` 从没导出的模块里 import、`fontSize` 写进了错误的设置分节、
   `dataset` 用在 `Element` 上、调用上游插件的姿势不对
+- **`tests/` 也从来没被 lint 过**：同一个盲区的另一半。
+  现在 `eslint src tests --max-warnings 0`，两处问题（纯表达式语句、
+  `importOriginal` 的泛型写法）一并修掉
 - **Windows 打包挂在 WiX**：MSI 数据库的代码页是 1252，装不下中文——
   文件关联的中文描述被写进每个扩展名的 `<ProgId Description>`，7 个扩展名 7 处报错。
   描述改为英文，并新增 `pnpm bundle:check` 闸门（判据是「能被 Windows-1252 编码」）
