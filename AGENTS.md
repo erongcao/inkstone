@@ -3441,6 +3441,51 @@ mdast 在这一层的类型是不精确的。
 所以遍历里有一处显式转换并写明原因，
 而不是把整个遍历写成 `any`（转换只发生在两处，遍历逻辑本身仍受类型检查）。
 
+## 第七个破口：导出的明暗模式取的是设置里的原始值（2026-10-28）
+
+默认配置是 `colorMode: "auto"` + 跟随系统。
+而导出取的是**原始值**：
+
+```ts
+mode: settings.appearance.colorMode,   // ← 可能是 "auto"
+```
+
+`buildStyles` 里 `options.mode === "dark" ? "dark" : "light"` —
+`"auto"` 于是被判成**亮色**。
+
+结果：**系统是暗色时，编辑器是暗的、导出是亮的**。
+同一份文档两种外观，而这恰恰是**默认配置**。
+
+### 修法
+
+导出改读 `<html>` 上的 `data-mode`——那是 `useThemeRuntime` 写的，
+就是**屏幕上那个**模式。
+
+这个读法提到主题层（`src/theme/themes.ts` 的 `currentColorMode()`），
+因为它有三个消费方：主题运行时、mermaid 渲染器（图表的配色要跟模式走）、
+导出链路。三个地方各读一次，早晚分叉。
+
+### 顺带记一笔：`followSystemAppearance` 这个开关是**空转**的
+
+`resolveColorMode(colorMode, followSystem, systemPrefersDark)` 里：
+
+```ts
+if (followSystem && colorMode === "auto") return systemPrefersDark ? "dark" : "light";
+return colorMode === "auto" ? (systemPrefersDark ? "dark" : "light") : colorMode;
+```
+
+两个 `"auto"` 分支**结果完全一样**——所以 `followSystem` 这个参数
+无论传什么都不影响结果。设置面板里那个「跟随系统外观」复选框
+因此**点不点都没区别**。
+
+这是「死开关」的**隐蔽版本**：值确实被读了（所以覆盖度守卫抓不到），
+但读了不用。
+
+它该是什么语义，是个**产品决定**，本轮没动：
+候选是「关掉后系统切换时应用不再跟随」（那需要 `useThemeRuntime`
+里的 `useSystemPrefersDark` 订阅也听它的），
+或者干脆把这个开关去掉——「明暗模式」下拉里的「跟随系统」已经覆盖了。
+
 ## 「装饰器局部重建」：先量收益，再决定做不做（2026-10-27）
 
 M2 留的最后一个性能项。这轮**没有**做，原因是量完之后发现
