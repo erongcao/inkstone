@@ -123,6 +123,27 @@ export const INLINE_MARKERS: InlineMarkerSpec[] = [
     feature: "highlight",
   },
   {
+    // 下标 `~…~`。
+    //
+    // lezer 自带的 `Subscript` 节点只有两个 `SubscriptMark` 子节点，
+    // 内容不是子节点（是节点范围减去标记）——
+    // 而 `analyze` 的通用分支正好按「首个标记之后 → 末个标记之前」算内容区间，
+    // 所以这里不用额外处理。
+    nodeType: "Subscript",
+    markType: "SubscriptMark",
+    contentType: "SubscriptMark",
+    contentClass: "cm-md-subscript",
+    feature: "subscriptSuperscript",
+  },
+  {
+    // 上标 `^…^`。同上。
+    nodeType: "Superscript",
+    markType: "SuperscriptMark",
+    contentType: "SuperscriptMark",
+    contentClass: "cm-md-superscript",
+    feature: "subscriptSuperscript",
+  },
+  {
     nodeType: "Link",
     markType: "LinkMark",
     contentType: "LinkMark",

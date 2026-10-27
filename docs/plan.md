@@ -91,6 +91,8 @@
 | **行内高亮** | `mdast-util-highlight-mark` + `micromark-extension-highlight-mark` | 1.2.2 / 1.2.0 | MIT | 事实标准（各 400 万+ 月下载） |
 | **提示块（GitHub Alerts）** | `remark-github-blockquote-alert` | 2.1.0 | MIT | 事实标准（336 万+ 月下载） |
 | **GFM 可拆装** | `micromark-extension-gfm-*` + `mdast-util-gfm-*`（各 5 个） | 2.x | MIT | 本就是 `remark-gfm` 的传递依赖，提升为直接依赖（`downloaded 0`） |
+| **下标 / 上标** | **自研 micromark 扩展**（`src/parser/subsup.ts`） | — | 本项目 MIT | 生态里没有能用的现成包（三个候选全不行，见 AGENTS.md） |
+| **自研扩展的类型与工具** | `micromark-util-symbol` / `micromark-util-character` / `micromark-util-types` / `mdast-util-from-markdown` / `mdast-util-to-markdown` | 2.0.1 / 2.1.1 / 2.0.3 / 2.1.0 / 2.2.0 | MIT | 都是既有传递依赖，提升为直接依赖（`downloaded 0`） |
 
 > **GFM 子扩展的已知性质**（2026-10-26 实测）：它们本来就是 `remark-gfm` 的
 > **传递依赖**，早就在 pnpm store 里。提升为直接依赖只为让 import 路径合法化
@@ -99,6 +101,11 @@
 > （实测前端产物 +12.9 KB，那 12.9 KB 是提示块插件与本轮自己的代码）。
 > 挂载顺序必须**原样照抄** `remark-gfm`（自动链接 → 脚注 → 删除线 → 表格 → 任务列表）——
 > micromark 的 text 构造按顺序叠加，换顺序会改变某些输入的判定。
+
+> **下标 / 上标的包体代价**（2026-10-27 实测）：前端产物
+> **8,403,577 → 8,406,184 bytes（+2,607 ≈ 2.5 KB，0.031%）**。
+> 自研的 micromark 扩展几乎不涨包体——micromark 核心本来就在包里，
+> 新增的 5 个依赖全是传递依赖提升（`downloaded 0`）。
 
 > **行内高亮的两个包的已知代价**（2026-10-26 实测）：`micromark-extension-highlight-mark`
 > 的**运行时**文件 `lib/index.js` 里 `import { ok as assert } from "uvu/assert"`
@@ -983,7 +990,8 @@ GitHub Alerts / 脚注 / RTL / 插件系统 / 主题市场 / 图片图床 / EPUB
 | D7 | **是否现在就装 Rust** | 先装 / 先用 Electron 起步 / 用 Wails | **先装 Rust**（`brew install rustup`，约 1.5GB）。若您觉得这一步麻烦，Electron 是零摩擦替代 |
 | D8 | **语法高亮库** | Shiki / Prism / highlight.js | ✅ **已定：highlight.js `lib/core`**（2026-10-22）。原计划 Shiki → 先试 Prism → 换 highlight.js。**Shiki 出局**：要 wasm + 异步 `createHighlighter`，编辑器里每敲一个字符都要重排高亮，异步会抖。**Prism 出局**（实测翻车）：语言组件是副作用式注册到**全局** `Prism`，rollup 生产构建改变模块执行顺序后「注册在一个实例、读取在另一个实例」，`Prism.highlight` **静默降级成纯文本不报错**（dev 正常、preview 产物无 token）——发布阻断级缺陷。**highlight.js** 的 `lib/core` 是干净单例，`registerLanguage` 显式注册，语言模块是纯函数，不碰全局，三处行为一致；生产产物已实证。代价：raw 比 Prism 等价集多 97 KB（172.2 → 269.3 KB / gzip ≈ +40 KB），判断为「买正确性，值得」。详见 §2.5 与 AGENTS.md |
 | D9 | **行内公式定界符** | 单 `$` 开 / 单 `$` 关 / 加启发式（中文、空白） | ✅ **已定：默认开 + 用上游 `singleDollarTextMath` 做设置项**（2026-10-22）。**调研**：Typora / VS Code / MarkText / Obsidian / GitHub 六个商业编辑器全部默认开单 `$`（其中 Typora、VS Code、MarkText 有开关，Obsidian 与 GitHub 没有）。`$` 与货币的冲突是公认的老大难。**为什么不用启发式方案**：`remark-math` 把选项原样透传给 `micromark-extension-math@3.1.0`，后者有 `singleDollarTextMath` 一等选项，官方描述就是「reducing interference with regular dollar signs in text」——所以这是**语义层的开关**，编辑器与导出天生一致，不破红线 C；自己加中文/空白启发式反而会让编辑器认一套、remark 认另一套。**关键性质**：关掉后 `$$x^2$$` 在行内**仍然**是行内公式，所以关掉不等于失去行内公式。详见 AGENTS.md「行内公式定界符」 |
-| D10 | **Markdown 扩展开关怎么接线** | 一次性全接 / 挑几个接 / 全部置灰 / 分期 | ✅ **已定：机制 + 8 个开关真正生效，其余按「能不能落地」分类处理**（2026-10-26，用户拍板）。**范围**：表格 / 任务列表 / 脚注 / 高亮 / front matter / 行内公式 / 块级公式 / mermaid 八个开关真正生效，`githubAlerts` 用上游包（`remark-github-blockquote-alert`，MIT），`mhchem` 做成真开关（关掉时 `\ce{…}` 降级成字面文本）。**两个开关置灰并写明原因**：`autoNumberEquations`（代码里没有编号功能）与 `subscriptSuperscript`（编辑器认得、导出不认，两层不一致会破红线 C）。**关键约束**：GFM 拆开是**零成本**的——10 个子扩展本就是 `remark-gfm` 的传递依赖，提升为直接依赖（`downloaded 0`）；但 **lezer 侧必须用 `remove` 摘掉**而不是「不装」，因为 `markdownLanguage.parser` 里**已经**含 GFM，而 lezer 的 `configure` 是加法。详见 AGENTS.md「Markdown 扩展开关：13 个复选框，11 个真接线」 |
+| D10 | **Markdown 扩展开关怎么接线** | 一次性全接 / 挑几个接 / 全部置灰 / 分期 | ✅ **已定：机制 + 8 个开关真正生效，其余按「能不能落地」分类处理**（2026-10-26，用户拍板）。**范围**：表格 / 任务列表 / 脚注 / 高亮 / front matter / 行内公式 / 块级公式 / mermaid 八个开关真正生效，`githubAlerts` 用上游包（`remark-github-blockquote-alert`，MIT），`mhchem` 做成真开关（关掉时 `\ce{…}` 降级成字面文本）。**两个开关置灰并写明原因**：`autoNumberEquations`（代码里没有编号功能）与 `subscriptSuperscript`（编辑器认得、导出不认，两层不一致会破红线 C）。**关键约束**：GFM 拆开是**零成本**的——10 个子扩展本就是 `remark-gfm` 的传递依赖，提升为直接依赖（`downloaded 0`）；但 **lezer 侧必须用 `remove` 摘掉**而不是「不装」，因为 `markdownLanguage.parser` 里**已经**含 GFM，而 lezer 的 `configure` 是加法。详见 AGENTS.md「Markdown 扩展开关：13 个复选框，12 个真接线」 |
+| D11 | **下标 / 上标的 remark 侧解析规则** | 用现成包 / 自研 micromark 扩展 / 只开 lezer 那一半 | ✅ **已定：自研 micromark 扩展**（2026-10-27）。**为什么不能只开一半**：lezer 侧一直有现成的 `Subscript` / `Superscript`，但 remark 侧没有对应规则，只开一半会破红线 C（屏幕上是下标、导出是字面文本）。**为什么不能用现成包**：查过 `remark-sub@1.0.1`（正则写的是下划线，而且把 text 节点改成 html 节点，**往返必丢**）、`remark-supersub@1.0.0`（纯文本扫描，不判空白也不判成对）、`remark-sub-super@1.0.21`（remark 9 时代的老 API，装上跑不起来）——三个都不行。**代价**：多一份要自己维护的解析实现（约 380 行）；**换来**：规则与 lezer 侧逐条对齐（29 组两层对拍用例钉住），且包体只涨 2.5 KB。详见 AGENTS.md「下标 / 上标：remark 侧只能自己写」 |
 
 ---
 

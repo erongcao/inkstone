@@ -62,6 +62,27 @@
 }
 
 /*
+ * 下标 / 上标。
+ *
+ * 用 `vertical-align` 而不是 `<sub>` / `<sup>` 标签——
+ * Live Preview 里这些都是**装饰器**加的 class，不是真实的 HTML 标签，
+ * 所以只能靠 CSS 还原语义。`font-size: smaller` 是浏览器对
+ * `<sub>` / `<sup>` 的默认处理，照抄它的观感。
+ *
+ * `vertical-align` 会把行高撑开一点，所以给一个负的 margin 补回来，
+ * 免得下标那一行看起来比上下行高。
+ */
+.cm-md-subscript {
+  vertical-align: sub;
+  font-size: smaller;
+}
+
+.cm-md-superscript {
+  vertical-align: super;
+  font-size: smaller;
+}
+
+/*
  * `==高亮==` 的内容底色。
  *
  * 用高亮笔的黄而不是强调色的蓝——`==` 在 Typora / Obsidian 里都是黄色荧光笔，

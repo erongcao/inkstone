@@ -25,6 +25,7 @@ import remarkMath from "remark-math";
 import remarkFrontmatter from "remark-frontmatter";
 import remarkStringify from "remark-stringify";
 import { remarkHighlightMark } from "./highlight";
+import { remarkSubSup } from "./subsup";
 import { remarkGfmParts } from "./gfm";
 import { restoreDisabledMath } from "./math-off";
 import {
@@ -82,6 +83,19 @@ function buildProcessor(features: MarkdownFeatures) {
   // 必须挂在 remarkStringify 之前——序列化器要知道这个节点该怎么写回去。
   if (features.highlight) {
     processor.use(remarkHighlightMark);
+  }
+
+  // 下标 `~…~` 与上标 `^…^`（Pandoc 风格）。
+  //
+  // remark 侧是**自研**的 micromark 扩展（见 subsup.ts）——
+  // 生态里没有能用的现成包（查过 remark-sub / remark-supersub /
+  // remark-sub-super，三个都不行，理由写在那份文件的头部）。
+  //
+  // lezer 侧用的是 `@lezer/markdown` 自带的 `Subscript` / `Superscript`，
+  // 两边的规则**逐条对齐**（规格表在 subsup.ts 的文件头），
+  // 这才不破「解析规则唯一」那条红线。
+  if (features.subscriptSuperscript) {
+    processor.use(remarkSubSup);
   }
 
   return processor.use(remarkStringify, {

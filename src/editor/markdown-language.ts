@@ -113,6 +113,7 @@ const base = markdownLanguage.parser as MarkdownParser;
  * | `Table` | `features.tables` |
  * | `TaskList` | `features.taskLists` |
  * | `Highlight` | `features.highlight` |
+ * | `Subscript` / `Superscript` | `features.subscriptSuperscript` |
  * | `Strikethrough` / `Autolink` | 始终开启（没有开关） |
  *
  * ## 关键：`base` **已经自带 GFM**，所以「关掉」要用 `remove`
@@ -143,15 +144,21 @@ const base = markdownLanguage.parser as MarkdownParser;
  * `languageDataProp`（注释 token 靠它）——那些定义在
  * `@codemirror/lang-markdown` 的模块作用域里，**没有导出**，拿不到。
  *
- * 顺带一提：`Subscript` / `Superscript` / `Emoji` 也一直在 `base` 里。
- * 它们**没有对应的设置开关**（下标/上标那个开关是许愿，见 features.ts），
- * 而且项目里也没有任何渲染器消费这两个节点——所以保持原样，不动。
+ * 顺带一提：`Emoji` 也一直在 `base` 里。它没有对应的设置开关，
+ * 而且项目里也没有任何渲染器消费这个节点——所以保持原样，不动。
  */
 function buildParser(features: MarkdownFeatures): MarkdownParser {
   // 先摘掉要关掉的（解析器名 = 扩展里 `parseBlock` / `parseInline` 的 `name`）。
   const remove: string[] = [];
   if (!features.tables) remove.push("Table");
   if (!features.taskLists) remove.push("TaskList");
+  // 下标 / 上标：lezer 自带的 `Subscript` / `Superscript` 是 Pandoc 风格
+  // （单标记、内容不含空白），与 remark 侧自研的扩展逐条对齐
+  // （规格表见 `src/parser/subsup.ts` 的文件头）。
+  if (!features.subscriptSuperscript) {
+    remove.push("Subscript");
+    remove.push("Superscript");
+  }
 
   // 再把「自己加的」那份挂上去——`Highlight` 不在 `base` 里，是 Inkstone 自己的扩展。
   const config: MarkdownConfig = { remove };

@@ -90,6 +90,8 @@ export const SYNTAX_GROUPS: SyntaxGroup[] = [
       { text: "***粗斜体***" },
       { text: "~~删除线~~" },
       { text: "==高亮==", feature: "highlight" },
+      { text: "H~2~O", feature: "subscriptSuperscript" },
+      { text: "x^2^", feature: "subscriptSuperscript" },
     ],
   },
   {

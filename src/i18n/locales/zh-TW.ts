@@ -111,6 +111,8 @@ export const zhTW: Record<string, string> = {
   上移: "上移",
   下标: "下標",
   "下标 / 上标": "下標 / 上標",
+  "`~文字~` 与 `^文字^`（Pandoc 风格，内容里不能有空格）":
+    "`~文字~` 與 `^文字^`（Pandoc 風格，內容裡不能有空格）",
   下移: "下移",
   "下面是 Inkstone 支持的 Markdown 语法。": "以下是 Inkstone 支援的 Markdown 語法。",
   "不会把磁盘上的改动抹掉——自动保存会一直暂停，直到你自己决定怎么存。":
@@ -314,8 +316,6 @@ export const zhTW: Record<string, string> = {
   提炼要点: "提煉要點",
   "还没实现：代码里目前没有公式编号这个功能。":
     "尚未實作：程式碼裡目前沒有公式編號這個功能。",
-  "还没实现：编辑器认得下标与上标，导出还不认，两边会对不上。":
-    "尚未實作：編輯器認得下標與上標，匯出還不認，兩邊會對不上。",
   提示块: "提示區塊",
   "GitHub 风格的提示块，NOTE / TIP / IMPORTANT / WARNING / CAUTION 五种。":
     "GitHub 風格的提示區塊，NOTE / TIP / IMPORTANT / WARNING / CAUTION 五種。",

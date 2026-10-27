@@ -36,19 +36,18 @@
  * 三层同时关 → 用户看到的是「这段语法不被识别，显示为字面文本」，
  * 导出也是字面文本。**屏幕与导出必须一致**（架构约束 C）。
  *
- * ## 为什么不把 `autoNumberEquations` 与 `subscriptSuperscript` 放进来
+ * ## 为什么不把 `autoNumberEquations` 放进来
  *
- * 这两个开关对应的东西**还不存在**：
+ * `autoNumberEquations`（公式自动编号）对应的东西**还不存在**：
+ * 代码里根本没有编号功能，它的默认值是 `false`——它是个**许愿**。
  *
- * - `autoNumberEquations`（公式自动编号）：代码里根本没有编号功能，
- *   它的默认值是 `false`——它是个**许愿**。
- * - `subscriptSuperscript`（下标 / 上标）：lezer 侧**有**现成扩展
- *   （`@lezer/markdown` 导出了 `Subscript` / `Superscript`），
- *   但 remark 侧没有对应的解析规则。只开一半会破「解析规则唯一」那条红线，
- *   所以两条一起等（见 `tests/format-commands.test.ts` 的 `KNOWN_PENDING`）。
+ * （`subscriptSuperscript` 曾经也在这个名单里——那是因为 remark 侧
+ * 没有对应的解析规则，只开 lezer 那一半会破「解析规则唯一」那条红线。
+ * 现在 remark 侧补上了自研的 micromark 扩展，见 `subsup.ts`，
+ * 所以它已经是真正的开关了。）
  *
- * 把它们放进这个类型，等于给「还没实现的功能」发一张通行证。
- * 不放，设置面板里就把它们**置灰**并写明原因。
+ * 把 `autoNumberEquations` 放进这个类型，等于给「还没实现的功能」发一张通行证。
+ * 不放，设置面板里就把它**置灰**并写明原因。
  */
 
 import type { MarkdownSettings } from "@/settings/schema";
@@ -87,6 +86,14 @@ export interface MarkdownFeatures {
   tables: boolean;
   /** GFM 任务列表 */
   taskLists: boolean;
+  /**
+   * 下标 `~…~` 与上标 `^…^`（Pandoc 风格）。
+   *
+   * lezer 侧用 `@lezer/markdown` 自带的 `Subscript` / `Superscript`，
+   * remark 侧是本项目自研的 micromark 扩展（`subsup.ts`）——
+   * 两边的规则逐条对齐，规格写在那份文件的表里。
+   */
+  subscriptSuperscript: boolean;
 }
 
 /** 全部开启——`parseMarkdown()` 不传选项时的行为 */
@@ -102,6 +109,7 @@ export const DEFAULT_FEATURES: MarkdownFeatures = Object.freeze({
   frontMatter: true,
   tables: true,
   taskLists: true,
+  subscriptSuperscript: true,
 });
 
 /** 开关名（用于缓存键与测试断言） */
@@ -110,8 +118,8 @@ export const FEATURE_NAMES = Object.keys(DEFAULT_FEATURES) as (keyof MarkdownFea
 /**
  * 从设置派生出一份完整的功能开关。
  *
- * 设置里多出来的字段（`autoNumberEquations` / `subscriptSuperscript`）
- * **故意不读**——它们对应的功能还不存在，读取它们等于假装支持。
+ * 设置里多出来的字段（`autoNumberEquations`）**故意不读**——
+ * 它对应的功能还不存在，读取它等于假装支持。
  */
 export function featuresFromSettings(settings: MarkdownSettings): MarkdownFeatures {
   return {
@@ -126,6 +134,7 @@ export function featuresFromSettings(settings: MarkdownSettings): MarkdownFeatur
     frontMatter: settings.frontMatter,
     tables: settings.tables,
     taskLists: settings.taskLists,
+    subscriptSuperscript: settings.subscriptSuperscript,
   };
 }
 

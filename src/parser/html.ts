@@ -25,6 +25,7 @@ import { parseMarkdown, type MarkdownAst, type ParseOptions } from "./markdown";
 import { resolveFeatures } from "./features";
 import { applyAlerts } from "./alerts";
 import { highlightHastHandlers } from "./highlight";
+import { subSupHastHandlers } from "./subsup";
 import { rehypeMath, katexStylesheet, type HastNode } from "./rehype-math";
 
 /**
@@ -60,9 +61,12 @@ function buildHtmlProcessor(): HtmlPipeline {
       // 这里若用默认值，导出会把 `~x~` 变成删除线，而编辑器里它是普通文本。
       .use(remarkGfm, { singleTilde: false })
       .use(remarkMath)
-      // `highlight` 节点 → `<mark>`。handler 挂在 remarkRehype 的选项上——
+      // `highlight` 节点 → `<mark>`；`subscript` / `superscript` → `<sub>` / `<sup>`。
+      // handler 挂在 remarkRehype 的选项上——
       // 那是 mdast-util-to-hast 唯一开放的扩展入口。
-      .use(remarkRehype, { handlers: highlightHastHandlers })
+      .use(remarkRehype, {
+        handlers: { ...highlightHastHandlers, ...subSupHastHandlers },
+      })
       .use(rehypeStringify, { allowDangerousHtml: true }) as unknown as HtmlPipeline
   );
 }

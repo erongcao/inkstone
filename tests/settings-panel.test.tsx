@@ -7,8 +7,7 @@
  *
  *   - **真的接了线的**：表格、任务列表、脚注、高亮、公式……
  *     勾上就生效，关掉就不认那个语法（见 `tests/features.test.ts`）。
- *   - **还没做的**：`autoNumberEquations`（公式自动编号）与
- *     `subscriptSuperscript`（下标 / 上标）。
+ *   - **还没做的**：`autoNumberEquations`（公式自动编号）。
  *
  * 第二类必须**置灰并写明原因**。
  *
@@ -16,10 +15,13 @@
  * 他不知道是程序坏了，还是这个功能本来就没做。
  * 写清楚了，他才好决定是等还是绕开。
  *
- * 为什么不能「假装能做」：这两个开关对应的功能**确实不存在**
- * （`autoNumberEquations` 的默认值是 `false`，代码里压根没有编号逻辑；
- * `subscriptSuperscript` 是编辑器认得、导出不认，两边会不一致）。
+ * 为什么不能「假装能做」：这个开关对应的功能**确实不存在**
+ * （`autoNumberEquations` 的默认值是 `false`，代码里压根没有编号逻辑）。
  * 勾上去却不生效，就是「设置里的参数不接到请求上」——**摆设**。
+ *
+ * （下标 / 上标以前也在「还没做」那一类——它等的是 remark 侧的解析规则。
+ * 现在 remark 侧补上了自研的 micromark 扩展，见 `src/parser/subsup.ts`，
+ * 所以它是真开关了。）
  */
 
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
@@ -59,11 +61,11 @@ describe("设置面板：Markdown 分区", () => {
     expect(markdownToggles(container)).toHaveLength(13);
   });
 
-  it("还没做的两个开关是置灰的", () => {
+  it("还没做的那个开关是置灰的", () => {
     const { container } = render(<SettingsPanel onClose={() => {}} initialSection="markdown" />);
     const toggles = markdownToggles(container);
     const pending = toggles.filter((t) => t.disabled).map((t) => t.label);
-    expect(pending).toEqual(["公式自动编号", "下标 / 上标"]);
+    expect(pending).toEqual(["公式自动编号"]);
   });
 
   it("置灰的开关写明了原因（不是默默点不动）", () => {
@@ -80,7 +82,14 @@ describe("设置面板：Markdown 分区", () => {
     const enabled = markdownToggles(container)
       .filter((t) => !t.disabled)
       .map((t) => t.label);
-    for (const label of ["表格", "任务列表", "脚注", "行内高亮 ==…==", "Mermaid 图表"]) {
+    for (const label of [
+      "表格",
+      "任务列表",
+      "脚注",
+      "行内高亮 ==…==",
+      "Mermaid 图表",
+      "下标 / 上标",
+    ]) {
       expect(enabled).toContain(label);
     }
   });

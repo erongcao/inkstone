@@ -2510,7 +2510,7 @@ lezer 侧照抄 `@lezer/markdown` 的 GFM `Strikethrough`——
 
 → **2026-10-26 已实施**，三个设计问题都拍板了，详见下一节。
 
-## Markdown 扩展开关：13 个复选框，11 个真接线（2026-10-26）
+## Markdown 扩展开关：13 个复选框，12 个真接线（2026-10-26 建立 / 2026-10-27 补齐最后两个）
 
 上一节记的那个「摆设开关」，本轮全部接上线了。
 
@@ -2519,20 +2519,24 @@ lezer 侧照抄 `@lezer/markdown` 的 GFM `Strikethrough`——
 `settings.markdown` 是 **13 个**字段，不是 12 个——
 本轮实现时逐一核对过（`autoNumberEquations` / `subscriptSuperscript` 也在里面）。
 
-13 个里有 **11 个**进了 `src/parser/features.ts` 的开关模型（真的接线），
-另外 **2 个**对应���功能**还不存在**，设置面板里**置灰并写明原因**：
+13 个里有 **12 个**进了 `src/parser/features.ts` 的开关模型（真的接线），
+剩下 **1 个**对应的功能**还不存在**，设置面板里**置灰并写明原因**：
 
 | 置灰的开关 | 为什么没做 |
 |---|---|
 | `autoNumberEquations`（公式自动编号） | 代码里**根本没有**编号功能。它的默认值是 `false`——它是个**许愿** |
-| `subscriptSuperscript`（下标 / 上标） | lezer 侧**有**现成扩展（`@lezer/markdown` 导出了 `Subscript` / `Superscript`），但 remark 侧没有对应的解析规则。只开一半会破「解析规则唯一」那条红线，所以两条一起等 |
+
+
+（2026-10-27 更新：`subscriptSuperscript` 当初也在「置灰」名单里，
+因为 remark 侧没有对应的解析规则。现在 remark 侧补上了自研的 micromark 扩展，
+它也变成真开关了——见后文「下标 / 上标」那节。）
 
 把它们放进 `MarkdownFeatures` 等于给「还没实现的功能」发一张通行证。
 不放，设置面板里就置灰——**置灰比许愿诚实**。
 
 ### 唯一真相源：`src/parser/features.ts`
 
-一份 `MarkdownFeatures`（11 个字段），四处派生：
+一份 `MarkdownFeatures`（12 个字段），四处派生：
 
 ```
 settings.markdown ──featuresFromSettings──┐
@@ -2542,8 +2546,8 @@ settings.markdown ──featuresFromSettings──┐
                                           └──────────────────┴──► 导出与剪贴板
 ```
 
-`featuresKey` 是 11 个 0/1 拼成的字符串——解析器与语法分析器都按它缓存，
-所以最多 2¹¹ 种组合，而且**同一组合永远命中同一个缓存**。
+`featuresKey` 是 12 个 0/1 拼成的字符串——解析器与语法分析器都按它缓存，
+所以最多 2¹² 种组合，而且**同一组合永远命中同一个缓存**。
 
 ### 三个层次，「不生效」的样子不一样
 
@@ -2739,13 +2743,117 @@ mark 只盖住文字那么宽，底色到文字末尾就断了，提示块看起
 
 ### 已知缺口
 
-- `tests/` **不在 `tsconfig.json` 的 include 范围**里 →
-  `pnpm typecheck` **不检查测试代码**。实测有约 35 处既有类型错误在那儿。
-  补这一项是独立的工作量（本轮只顺手修了自己新写的文件里的 3 处）。
-- `~下标~` / `^上标^` 两个格式命令仍不生效（与第二轮一致，KNOWN_PENDING 钉着）
 - 提示块规则的一处已知分歧：文档里若有 `[!NOTE]: https://…` 这样的链接定义，
   mdast 会把 `[!NOTE]` 解析成 linkReference（上游插件不认），
   编辑器侧仍会认 → 记在 `src/editor/render/alert.ts` 的文件头
+- lezer 的 `Subscript` / `Superscript` 节点**不解转义**——
+  内容里的 `\~` 在编辑器里显示成 `\~`（反斜杠可见），
+  而 mdast 侧转义已解开，导出是 `~`。
+  这是 lezer 的固有行为，**普通文本里的转义也一样**（`\*` 显示成 `\*`），
+  不是本功能引入的偏差；要改得连普通转义一起改，是独立工作量。
+
+## `tests/` 纳入类型检查：一个藏了 36 处问题的盲区（2026-10-27）
+
+`tsconfig.json` 的 `include` 原来只覆盖 `src`——
+`pnpm typecheck` 报「全绿」时，**测试代码从来没被类型检查过**。
+
+实测把 `tests` 加进 `include` 之后，暴露 36 处错误，分布在 18 个文件。
+其中有几处是**真 bug**，被测试的「绿」掩盖了很久：
+
+| 位置 | 问题 | 为什么测试还是绿的 |
+|---|---|---|
+| `mermaid.test.ts` / `table-edit.test.ts` | `ensureSyntaxTree(state, gfmMarkdownLanguage, 10_000)` —— 第二个参数是**位置**，不是 Language | 靠「`Language >= number` 恒为 false」这个巧合退化成「解析整篇」，结果碰巧是对的 |
+| `image.test.ts` | `import type { Range } from "@codemirror/view"` —— 该符号声明了但没导出 | 整个文件根本没用到它 |
+| `settings.test.ts` | `updateSettings({ editor: { fontSize: 18 } })` —— `fontSize` 在 `appearance` 分节 | 写进 `editor` 会往持久化内容里塞一个 schema 里没有的键 |
+| `table-toolbar.test.ts` | `querySelector(...)?.dataset` —— `Element` 没有 `dataset` | 运行时那个元素确实是 `HTMLElement` |
+| `alerts.test.ts` | `remarkAlert()(tree)` —— 上游把插件标成 `Plugin`（`this: Processor`），运行时返回的是纯 transformer | 运行时能跑，只是类型不对 |
+
+其余是类型收窄（mdast 的 `Point.offset` 是可选的、`Parent` 才有 `children`）
+与未使用变量（含 `deferred` / `parkAtEnd` 这类重构后遗留的死代码）。
+
+**教训**：`noUnusedLocals` 这类规则只在**被包含的范围**内生效。
+「闸门全绿」不等于「全绿」——先确认闸门**覆盖了什么**。
+
+## 下标 / 上标：remark 侧只能自己写（2026-10-27）
+
+`~下标~` 与 `^上标^`（Pandoc 风格）在设置面板里躺了很久，一直是**置灰**的：
+lezer 侧有现成扩展，remark 侧没有对应解析规则，
+只开一半会破「解析规则唯一」那条红线（屏幕上是下标、导出却是字面文本，
+或者反过来）。
+
+### 生态里没有能用的现成包
+
+查过三个，三个都不行：
+
+| 包 | 为什么不能用 |
+|---|---|
+| `remark-sub@1.0.1` | 正则写的是 `_` 而不是 `~`（名字与实现对不上）；而且把命中的 text 节点整个改成 `html` 节点，**往返必然丢原文** |
+| `remark-supersub@1.0.0` | `split(/\^/)` 文本扫描，不判空白也不判成对闭合，`^a b^` 会被它当成上标 |
+| `remark-sub-super@1.0.21` | remark 9 时代的老 API（`this.Parser.prototype.inlineTokenizers`），remark 11 早没了 |
+
+所以语义层这一半只能自己写：`src/parser/subsup.ts`（约 380 行）。
+
+### 规则是一份**写下来的规格**，不是各写一套碰运气
+
+lezer 侧的判定在 `@lezer/markdown` 的 `parseSubSuper` 里，
+本项目的 tokenizer **逐条照抄**它，规格写在那份文件的文件头：
+
+| # | 规则 | 例子 |
+|---|---|---|
+| ① | 开标记后紧跟同一个标记 → 不认（那是删除线 `~~`） | `~~x~~` 是删除线 |
+| ② | 必须有闭合标记，且在同一行内 | `~x` 不是下标 |
+| ③ | `\` 后的字符被转义，不当作闭合标记 | `~\~x~` 的内容是 `~x` |
+| ④ | 内容里不能有空白 | `~a b~` 不是下标 |
+
+`tests/subsup.test.ts` 里有 29 组**两层对拍**用例
+（lezer 与 remark 对同一段文字必须给出同样的结论），
+这是红线③的可执行版本。
+
+### micromark 侧的三个实现要点
+
+1. **挂在 `text` 的码点表上**，与 GFM 删除线（也挂 `~`）同一个位置。
+   micromark 合并扩展时**后挂的 construct 插到前面**，
+   所以要用 `add: "after"` 才能排在删除线之后（与 lezer 的注册顺序一致）。
+2. **内容不做嵌套解析**。lezer 的 `parseSubSuper` 是**字符级**的：
+   `~a*b*c~` 在 lezer 眼里是一个 Subscript，内容 `a*b*c`。
+   本项目的 tokenizer 同样按字符消费，不走 micromark 的行内解析，
+   也不挂 `insideSpan`（那是「自定义 construct 的内容区要再解析一遍」的机制，
+   挂上会允许嵌套下标，与 lezer 不一致）。
+3. **转义自己处理**。micromark 的 `characterEscape` 是个**独立 construct**：
+   交给它，我的 tokenizer 就得结束，「内容」也就断了。
+   所以自己消费 `\` + 下一个字符，但**产出标准的 token 名**
+   （`characterEscape` / `escapeMarker` / `characterEscapeValue`），
+   mdast 侧就不用写任何自定义 handler。
+
+### 往返靠 `unsafe` 兜住
+
+内容里的 `~`（或 `^`）必须转义，否则 `~a~b~` 序列化回去会被解析成
+「下标 a」+「文本 b~」，结构就不等价了。
+`subSupToMarkdown` 里那两条 `unsafe` 规则就是干这个的
+（跟 `mdast-util-highlight-mark` 把 `=` 标成 unsafe 同一回事）。
+
+### 包体代价：+2.5 KB
+
+前端产物实测 **8,403,577 → 8,406,184 bytes（+2,607 ≈ 2.5 KB，0.031%）**。
+自研的 micromark 扩展几乎不增加包体——micromark 核心本来就在包里。
+
+新增的 5 个依赖全是**传递依赖提升为直接依赖**（`pnpm add` 报 `downloaded 0`），
+许可证都是 MIT：`micromark-util-symbol` / `micromark-util-character` /
+`micromark-util-types` / `mdast-util-from-markdown` / `mdast-util-to-markdown`。
+
+### 一个类型陷阱：`.d.ts` 里没有顶层 import 就会**替换**整个模块
+
+`src/types/subsup.d.ts` 里写 `declare module "mdast" { … }`，
+如果那个文件**没有顶层 import/export**，TypeScript 会把它当成
+**ambient module declaration**——整个 `mdast` 模块被这份声明**替换**，
+于是 `Node` / `Parent` / `Root` 全部消失：
+
+```
+error TS2305: Module '"mdast"' has no exported member 'Node'.
+```
+
+加一行 `import type { PhrasingContent } from "mdast";` 就变成「模块增强」了。
+`mdast-util-highlight-mark` 的 `.d.ts` 也是这么写的（它有顶层 import）。
 
 ## 当前状态
 

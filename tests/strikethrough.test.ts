@@ -14,6 +14,14 @@
  *
  * 而且 Typora 的 `~x~` 是**下标**不是删除线——
  * 把单波浪号当删除线本身就与 Typora 不兼容。
+ *
+ * ## 单波浪号现在是什么
+ *
+ * 单 `~` 现在被识别成**下标**（Pandoc 风格，见 `src/parser/subsup.ts`），
+ * 导出是 `<sub>` 不是 `<del>`。
+ *
+ * 本文件的断言只钉一件事：**它不是删除线**。
+ * 下标本身的行为由 `tests/subsup.test.ts` 管。
  */
 
 import { describe, expect, it } from "vitest";
@@ -34,13 +42,14 @@ describe("删除线：只认成对的 ~~", () => {
     expect(childTypes("~~删除~~")).toEqual(["delete"]);
   });
 
-  it("`~单波浪~` 不是删除线（是普通文本）", () => {
-    expect(childTypes("~单波浪~")).toEqual(["text"]);
+  it("`~单波浪~` 不是删除线（是下标）", () => {
+    expect(childTypes("~单波浪~")).not.toContain("delete");
+    expect(childTypes("~单波浪~")).toEqual(["subscript"]);
   });
 
   it("`~x~` 不被当成删除线，导出也不会出现 <del>", () => {
     expect(markdownToHtml("~单波浪~")).not.toContain("<del>");
-    expect(markdownToHtml("~单波浪~")).toContain("~单波浪~");
+    expect(markdownToHtml("~单波浪~")).toContain("<sub>单波浪</sub>");
   });
 
   it("`~~x~~` 导出仍是 <del>", () => {
@@ -50,6 +59,7 @@ describe("删除线：只认成对的 ~~", () => {
   it("化学式 H~2~O 不会被吃掉波浪号", () => {
     const html = markdownToHtml("H~2~O 是水。");
     expect(html).not.toContain("<del>");
-    expect(html).toContain("H~2~O");
+    // 单波浪号是下标，导出成 <sub>2</sub>——波浪号没被当成删除线吃掉。
+    expect(html).toContain("<sub>2</sub>");
   });
 });

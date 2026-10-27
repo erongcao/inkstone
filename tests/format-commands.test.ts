@@ -30,17 +30,13 @@ import "@/editor/commands/builtin";
  * 每一条都要写清为什么没做——
  * 否则这份清单会变成垃圾桶，最后谁都往里塞。
  *
- * 这两条的共同点：`~x~` 与 `^x^` 是 Typora 的 P1 功能，
- * 而 Inkstone 的 lezer 侧**其实已经有现成扩展**
- * （`@lezer/markdown` 导出了 `Subscript` / `Superscript`），
- * 但 remark 侧没有对应的解析规则——
- * 只开一半就会破「解析规则唯一」那条红线
- * （编辑器认一套、导出认另一套），所以两条一起等。
+ * （下标 / 上标曾经也在这份清单里：它们等的是 remark 侧的解析规则——
+ * lezer 侧一直有现成的 `Subscript` / `Superscript` 扩展，
+ * 只开一半会破「解析规则唯一」那条红线。
+ * 现在 remark 侧补上了自研的 micromark 扩展，见 `src/parser/subsup.ts`，
+ * 两条都移出去了。）
  */
-const KNOWN_PENDING = new Map<string, string>([
-  ["format.sub", "lezer 侧有 Subscript 扩展，remark 侧还没有对应解析规则"],
-  ["format.super", "lezer 侧有 Superscript 扩展，remark 侧还没有对应解析规则"],
-]);
+const KNOWN_PENDING = new Map<string, string>([]);
 
 /** 取段落里直接子节点的类型 */
 function childTypes(source: string): string[] {

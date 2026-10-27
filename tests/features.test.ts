@@ -95,12 +95,14 @@ describe("开关模型本身", () => {
     expect(Object.values(DEFAULT_FEATURES).every((v) => v === true)).toBe(true);
   });
 
-  it("开关名与设置里的字段一一对应（11 个）", () => {
-    // 13 个复选框里有 2 个是「许愿」（autoNumberEquations / subscriptSuperscript），
-    // 它们对应的功能还不存在，所以**不进**这个模型（见 features.ts 的说明）。
-    expect(FEATURE_NAMES).toHaveLength(11);
+  it("开关名与设置里的字段一一对应（12 个）", () => {
+    // 13 个复选框里有 1 个是「许愿」（autoNumberEquations），
+    // 它对应的功能还不存在，所以**不进**这个模型（见 features.ts 的说明）。
+    expect(FEATURE_NAMES).toHaveLength(12);
     expect(FEATURE_NAMES).not.toContain("autoNumberEquations");
-    expect(FEATURE_NAMES).not.toContain("subscriptSuperscript");
+    // 下标 / 上标以前也在「许愿」名单里（remark 侧没有解析规则），
+    // 现在 remark 侧补上了自研的 micromark 扩展，所以是真开关了。
+    expect(FEATURE_NAMES).toContain("subscriptSuperscript");
   });
 
   it("resolveFeatures 只认已知键，垃圾键进不来", () => {

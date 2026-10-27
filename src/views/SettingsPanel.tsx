@@ -323,7 +323,7 @@ function MarkdownSection({ settings, patch }: { settings: Settings; patch: Patch
      * 一个点不动的复选框，用户只会当成 bug；
      * 写清楚了「这个功能还没做、为什么没做」，用户才知道该等还是该绕开。
      *
-     * 这两个开关对应的功能**确实还不存在**——
+     * 这类开关对应的功能**确实还不存在**——
      * 它们不在 `parser/features.ts` 的开关模型里
      * （那个模型只收「真的会生效」的开关）。
      */
@@ -349,7 +349,7 @@ function MarkdownSection({ settings, patch }: { settings: Settings; patch: Patch
     {
       key: "subscriptSuperscript",
       label: t("下标 / 上标"),
-      pending: t("还没实现：编辑器认得下标与上标，导出还不认，两边会对不上。"),
+      hint: t("`~文字~` 与 `^文字^`（Pandoc 风格，内容里不能有空格）"),
     },
     { key: "frontMatter", label: "YAML front matter" },
     { key: "tables", label: t("表格") },

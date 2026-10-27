@@ -186,6 +186,8 @@ export const en: Record<string, string> = {
   区分大小写: "Match case",
   协议: "Protocol",
   "单 $ 也当行内公式": "Treat a single $ as inline math",
+  "`~文字~` 与 `^文字^`（Pandoc 风格，内容里不能有空格）":
+    "`~text~` and `^text^` (Pandoc style — the content cannot contain spaces)",
   "单独一行三个短横线就是分隔线。":
     "Three dashes on a line of their own make a horizontal rule.",
   "原文在等待期间被改过了，直接替换会覆盖你刚写的内容。请重新跑一次。":
@@ -327,8 +329,6 @@ export const en: Record<string, string> = {
   提炼要点: "Key points",
   "还没实现：代码里目前没有公式编号这个功能。":
     "Not implemented yet — there is no equation-numbering feature in the code.",
-  "还没实现：编辑器认得下标与上标，导出还不认，两边会对不上。":
-    "Not implemented yet — the editor recognises sub/superscript but export does not, so the two would disagree.",
   提示块: "Alerts",
   "GitHub 风格的提示块，NOTE / TIP / IMPORTANT / WARNING / CAUTION 五种。":
     "GitHub-style alerts — NOTE / TIP / IMPORTANT / WARNING / CAUTION.",

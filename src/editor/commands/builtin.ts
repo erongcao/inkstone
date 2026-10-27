@@ -157,6 +157,7 @@ export const FORMAT_SPECS: FormatSpec[] = [
     marker: "~",
     placeholder: "下标",
     keywords: "subscript xiabiao",
+    feature: "subscriptSuperscript",
   },
   {
     id: "super",
@@ -164,6 +165,7 @@ export const FORMAT_SPECS: FormatSpec[] = [
     marker: "^",
     placeholder: "上标",
     keywords: "superscript shangbiao",
+    feature: "subscriptSuperscript",
   },
 ];
 
