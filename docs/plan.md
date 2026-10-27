@@ -1,8 +1,14 @@
 # Inkstone — 开源 Markdown 编辑器 · 项目计划书 v0.1
 
-> 状态：**待评审** ｜ 目标平台：macOS 优先 → Windows / Linux
+> 状态：**M0–M4 已完成，M5 跨平台收尾中**（2026-10-28）
+> ｜ 目标平台：macOS 优先 → Windows / Linux
 > 对标：Typora（Live Preview 混合编辑 + 文件管理 + 导出管线）
 > 调研基线：Typora 官方支持站全量文档（见 `docs/typora-feature-inventory.md`）
+
+> **本文件是 2026-10 立项时的计划书**，不是当前状态的说明书。
+> 当前的实现状态、踩过的坑与实测数据在 [`../AGENTS.md`](../AGENTS.md) 里，
+> 里程碑进展见 [`../CHANGELOG.md`](../CHANGELOG.md)。
+> 下面表格里的实测数字是**立项当时**的快照，已经过时——以 AGENTS.md 为准。
 
 ---
 
@@ -21,7 +27,7 @@
 
 | 交付项 | 状态 | 实测 |
 | --- | --- | --- |
-| Tauri 2 + React 19 + Vite 8 + TS 5.9 工程骨架 | ✅ | 应用包 **4.24 MiB**（Electron 方案约 200 MB） |
+| Tauri 2 + React 19 + Vite 8 + TS 5.9 工程骨架 | ✅ | 应用包立项时 **4.24 MiB**（Electron 方案约 200 MB）；加上 mermaid / katex 等按需 chunk 后，2026-10-25 实测 macOS 包 **9.2 MB** |
 | 主题系统（CSS 变量令牌层 + 亮暗双模式 + 用户自定义 CSS） | ✅ | 3 套内置主题 |
 | 设置面板（外观/编辑/Markdown/导出/通用，深合并持久化） | ✅ | 组件测试覆盖 |
 | Markdown 解析层（remark + GFM + YAML + 数学 + 脚注） | ✅ | mdast 为唯一语义来源 |
@@ -30,16 +36,16 @@
 | 文件打开/保存（原子写入）/另存为 | ✅ | 写临时文件 + rename |
 | `.md` 文件关联 + 从 Finder 打开 | ✅ | Info.plist `CFBundleDocumentTypes` 已注册，端到端验证通过 |
 | 最近文件记录（M3 前置） | ✅ | `recent-files.txt` 写入验证通过 |
-| 依赖许可证白名单扫描 | ✅ | 1828 条（去重 675）零违规 |
+| 依赖许可证白名单扫描 | ✅ | 立项时 1828 条（去重 675）；当前 **2542 条（去重 1127）**零违规 |
 | CI（lint/test/build/打包 × 4 平台） | ✅ | `.github/workflows/ci.yml` |
-| 组件交互测试（jsdom） | ✅ | **152 个测试全绿** |
+| 组件交互测试（jsdom） | ✅ | 立项时 152 个；当前 **64 个文件 / 1374 个测试全绿** |
 | **编辑内核选型 spike** | ✅ | **实测推翻原定 Milkdown，改用 CodeMirror 6**；**2026-10-21 用户正式拍板**（见 §2.3） |
 | **Live Preview 装饰器** | ✅ | 行内标记隐藏/展开、块级标记弱化、标题层级渲染，浏览器内实测通过 |
 | **源码模式 ↔ 混合模式** | ✅ | 同一 EditorView 切装饰器，**光标位置精确保留**（实测） |
 | **三种标记符显示策略** | ✅ | `live` / `dimmed` / `source`，共用同一份文档，切换零漂移 |
 | **中文输入法（真机验证）** | ✅ | **用户 2026-10-21 在真机确认中文输入无问题**——M1 最后一个架构级阻塞项解除 |
 | **自动配对** | ✅ | 三档（off/basic/markdown），运行时可切；规则对齐 Typora 官方文档 + 官方视频逐帧 |
-| **复制粘贴（HTML → Markdown）** | ✅ | turndown 7.22.4（MIT）+ 样式净化；Markdown 原样保留；32 个用例 |
+| **复制粘贴（HTML → Markdown）** | ✅ | turndown 7.22.4（MIT）+ 样式净化；Markdown 原样保留；立项时 32 个用例，当前 **59 个** |
 | **剪贴板（复制为 HTML / 粘贴为纯文本）** | ✅ | ⌘C 同时写 text/plain + text/html；内部复制粘贴逐字节无损（自定义 MIME）；一次性纯文本粘贴标志 |
 | **解析性能基准** | ✅ | remark 1000 行 p95 = 10.96ms 超标；lezer = 1.05ms |
 
