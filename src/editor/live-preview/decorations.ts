@@ -341,8 +341,37 @@ export function buildLivePreviewDecorations(
         return;
       }
 
-      // ---- 2. 块级标记：标题的 #、列表符号、引用符号 → 弱化显示 ----
-      // 光标进入所在块（标题 / 列表项 / 引用）时，标记恢复醒目
+      // ---- 1b. 转义：藏掉反斜杠，只留被转义的字符 ----
+      //
+      // lezer 的 `Escape` 节点覆盖「反斜杠 + 被转义的字符」（`\*` / `\\`）。
+      // 语义层（remark）那边转义是**解开**的：`\*` 的正文就是 `*`。
+      // 编辑器若照原文显示 `\*`，就成了「屏幕上是反斜杠、导出是星号」——
+      // 架构约束 C（屏幕与导出必须一致）的一个实际破口。
+      //
+      // 所以这里藏掉**反斜杠**（被转义的字符照常显示），
+      // 光标进入该转义时恢复原文——和行内标记一个规矩
+      // （左开右闭：`shouldReveal`）。
+      //
+      // 行内代码里**不**处理：CommonMark 的代码跨度不解析转义，
+      // lezer 那边也确实不产出 `Escape` 节点（`InlineCode` 里是字面文本），
+      // 所以这里天然不会碰到它。
+      if (name === "Escape") {
+        const backslash = ref.from;
+        // 保险起见再查一次首字符是不是反斜杠——
+        // 万一上游改了 `Escape` 的范围形状，这里不会误藏别的东西
+        if (source[backslash] === "\\" && backslash + 1 <= ref.to) {
+          if (mode === "dimmed") {
+            inlineDecos.push(
+              Decoration.mark({ class: "cm-md-marker" }).range(backslash, backslash + 1),
+            );
+          } else if (!shouldReveal(ref.node, cursor)) {
+            inlineDecos.push(hiddenMarker().range(backslash, backslash + 1));
+          }
+        }
+        return;
+      }
+
+      // ---- 2. 块级标记：标题的 #、列表符号、引用符号 → 弱化显示 ----      // 光标进入所在块（标题 / 列表项 / 引用）时，标记恢复醒目
       const blockClass = BLOCK_MARKERS[name];
       if (blockClass) {
         const parent = ref.node.parent;

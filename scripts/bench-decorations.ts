@@ -75,7 +75,16 @@ function buildLargeDoc(lines: number): string {
 
 console.log("\n=== Live Preview 装饰器管线分步基准 ===\n");
 
-for (const lines of [500, 1500, 4000]) {
+/** 收集「局部重建」要用的数据，最后一并汇报 */
+const summary: {
+  lines: number;
+  kb: number;
+  keystroke: number;
+  decoCost: number;
+  incremental: number;
+}[] = [];
+
+for (const lines of [500, 1500, 4000, 8000]) {
   const doc = buildLargeDoc(lines);
   const state = EditorState.create({ doc, selection: { anchor: 0 } });
   const text = state.doc.toString();
@@ -156,6 +165,49 @@ for (const lines of [500, 1500, 4000]) {
     const lp = next.field(livePreviewField);
     buildLivePreviewDecorations(lp.source, lp.cursor, "live", lp.tree);
   });
+
+  // 收集「局部重建」的收益上限要用到的两个数：
+  //   keystroke —— 增量路径一次击键的总成本
+  //   decoCost   —— 其中「重建全部装饰器」占掉多少
+  //              （局部重建理想情况下能省掉这一块的 99%）
+  const keystroke = bench("  [增量] 复测（取样用）", 30, () => {
+    const next = incrState.update({ changes: { from: at, insert: "X" } }).state;
+    const lp = next.field(livePreviewField);
+    buildLivePreviewDecorations(lp.source, lp.cursor, "live", lp.tree);
+  });
+  const decoCost = bench("  [增量] 其中：重建全部装饰器", 30, () => {
+    const lp = incrState.field(livePreviewField);
+    buildLivePreviewDecorations(lp.source, lp.cursor, "live", lp.tree);
+  });
+  summary.push({
+    lines,
+    kb: Buffer.byteLength(doc) / 1024,
+    keystroke,
+    decoCost,
+    incremental: keystroke,
+  });
+}
+
+console.log("\n=== 「装饰器局部重建」的收益上限 ===");
+console.log("  （理想化假设：只重建变动的那一个块，装饰器成本降到 1%）\n");
+console.log(
+  "  " +
+    "规模".padEnd(16) +
+    "一次击键".padEnd(12) +
+    "其中装饰器".padEnd(14) +
+    "局部重建后".padEnd(14) +
+    "占 16ms 预算",
+);
+for (const row of summary) {
+  const ideal = row.keystroke - row.decoCost * 0.99;
+  console.log(
+    "  " +
+      `${row.lines} 行 / ${row.kb.toFixed(0)} KB`.padEnd(14) +
+      `${row.keystroke.toFixed(2)}ms`.padEnd(13) +
+      `${row.decoCost.toFixed(2)}ms`.padEnd(15) +
+      `${ideal.toFixed(2)}ms`.padEnd(15) +
+      `${((row.keystroke / 16) * 100).toFixed(0)}% → ${((ideal / 16) * 100).toFixed(0)}%`,
+  );
 }
 
 console.log("\n=== 结论参考 ===");

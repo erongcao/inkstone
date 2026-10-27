@@ -88,6 +88,14 @@ const AGREEMENT_CASES: string[] = [
   "> [!NOTE]",
   "普通段落",
   "> 引用\n>\n> [!NOTE]\n> 第二段",
+  // 链接定义：mdast 会把 `[!NOTE]` 解析成 linkReference（不是 text），
+  // 上游插件不认——我们也不能认
+  "> [!NOTE]\n> 内容\n\n[!NOTE]: https://example.com",
+  "> [!note]\n> 内容\n\n[!NOTE]: https://example.com",
+  // 定义在**后面**也一样（mdast 是整篇收集定义的）
+  "> [!TIP]\n> 内容\n\n[tip]: https://example.com",
+  // 定义存在但类型对不上 → 不影响
+  "> [!NOTE]\n> 内容\n\n[other]: https://example.com",
 ];
 
 /** 编辑器侧扫出来的提示块 */

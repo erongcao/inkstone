@@ -30,14 +30,61 @@
  * 两种写法在真实文档里结论一致（`**[!NOTE]**` 两边都不认），
  * `tests/alerts.test.ts` 里有逐条对拍断言钉住这个结论。
  *
- * **已知的一处分歧**：如果文档里恰好有 `[!NOTE]: https://…` 这样的
- * 链接定义，mdast 会把 `[!NOTE]` 解析成 linkReference 节点
- * （不是文本），上游插件于是**不认**它；我们这边仍会认。
- * 这个组合在真实文档里几乎不会出现，先记在这里。
+ * **链接定义造成的那处分歧（已修）**：如果文档里恰好有 `[!NOTE]: https://…`
+ * 这样的链接定义，mdast 会把 `[!NOTE]` 解析成 linkReference 节点
+ * （不是文本），上游插件于是**不认**它；我们这边原先按原文扫，照认——
+ * 屏幕上是彩色提示块、导出却是普通引用块。
+ * 现在会先收集文档里的链接定义标签，命中就跳过该段落
+ * （与上游的「第一个子节点必须是 text 节点」对齐）。
  */
 
 import type { Tree, SyntaxNode } from "@lezer/common";
 import { matchAlert, type AlertType } from "@/parser/alerts";
+
+/**
+ * 链接标签的归一化——与 micromark 的 `normalizeIdentifier` 对齐：
+ * 折叠空白 + 转小写。
+ *
+ * 必须一致：mdast 是拿**归一化后**的标签去查定义表的，
+ * 我们这边要是按原文比，大小写不同就查不到。
+ */
+function normalizeLabel(text: string): string {
+  return text
+    .replace(/^\[/, "")
+    .replace(/\]$/, "")
+    .replace(/[\t\n\r ]+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+/**
+ * 收集文档里所有**链接引用定义**的标签（`[!NOTE]: https://…`）。
+ *
+ * ## 为什么需要它
+ *
+ * mdast 会把**用到的** `[!NOTE]` 解析成 `linkReference` 节点——
+ * 前提是文档里**有**对应的定义。
+ * 那不是 text 节点，而上游插件的规则是
+ * 「段落的第一个子节点必须是 text 节点」，于是它**不认**这个提示块。
+ *
+ * 我们这边按**原文**扫，不看节点类型，于是会认——
+ * 结果是屏幕上一个彩色提示块、导出却是个普通引用块（架构约束 C 的破口）。
+ *
+ * 没有定义的 `[!NOTE]` 不受影响：mdast 把它当**普通文本**，
+ * 上游照认，我们照认。
+ */
+function collectDefinitionLabels(tree: Tree, source: string): Set<string> {
+  const labels = new Set<string>();
+  tree.iterate({
+    enter: (ref) => {
+      if (ref.type.name !== "LinkReference") return;
+      const label = ref.node.getChild("LinkLabel");
+      if (!label) return;
+      labels.add(normalizeLabel(source.slice(label.from, label.to)));
+    },
+  });
+  return labels;
+}
 
 /** 一个提示块 */
 export interface AlertBlock {
@@ -92,6 +139,9 @@ function childParagraphs(block: SyntaxNode): SyntaxNode[] {
  */
 export function findAlerts(tree: Tree, source: string): AlertBlock[] {
   const out: AlertBlock[] = [];
+  // 有链接定义的标签：mdast 那边会把用法解析成 linkReference（不是 text），
+  // 上游插件因此不认——我们也得不认。
+  const definitionLabels = collectDefinitionLabels(tree, source);
 
   tree.iterate({
     enter: (ref) => {
@@ -106,6 +156,10 @@ export function findAlerts(tree: Tree, source: string): AlertBlock[] {
         const firstLine = source.slice(paragraph.from, end);
         const match = matchAlert(firstLine);
         if (match) {
+          // 这个标签有链接定义 → mdast 那边是 linkReference 节点（不是 text），
+          // 上游插件会跳过这个段落——我们也跳过，继续看下一段。
+          const label = normalizeLabel(firstLine.slice(0, match.length));
+          if (definitionLabels.has(label)) continue;
           hit = { paragraph, type: match.type, length: match.length };
           break;
         }

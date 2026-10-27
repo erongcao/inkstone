@@ -168,38 +168,64 @@ describe("增量语法树", () => {
     expect(snapshot(state.field(livePreviewField).tree)).toEqual(original);
   });
 
-  it("大文档下增量解析显著快于全量解析", () => {
+  it("大文档下，维护增量树比每次全量重解析便宜", () => {
     // 用语料拼一份大文档
     const big = Array.from({ length: 40 }, (_, i) =>
       BASE_DOC.replace("# 标题", `# 第 ${i + 1} 节`),
     ).join("\n\n---\n\n");
 
-    const state = EditorState.create({
+    /**
+     * 编辑位置**从后往前**排。
+     *
+     * 两条路径要跑**同一串编辑**，位置必须对两边都成立——
+     * 从后往前插，先插的不会让后面的位置偏移，
+     * 于是「增量路径的第 i 次编辑」与「全量路径的第 i 次编辑」改的是同一处。
+     */
+    const edits = Array.from({ length: 10 }, (_, i) => {
+      const at = Math.floor((big.length * (10 - i)) / 11);
+      return { from: at, insert: "X" };
+    });
+
+    // ── 增量路径 ──────────────────────────────────────────────
+    // 状态里挂着 livePreviewField：每次编辑后它用 TreeFragment 增量重解析。
+    // 装饰器也要重算——只测解析是**半个账**，
+    // 而真实的一次击键成本里，装饰器重算占大头。
+    let incr = EditorState.create({
       doc: big,
       extensions: [livePreviewField],
     });
-
-    const at = Math.floor(big.length / 2);
-    const change = { from: at, insert: "X" };
-
-    // 增量路径
     const t0 = performance.now();
-    for (let i = 0; i < 10; i++) {
-      state.update({ changes: change });
+    for (const change of edits) {
+      incr = incr.update({ changes: change }).state;
+      buildLivePreviewDecorations(
+        incr.doc.toString(),
+        incr.selection.main.head,
+        "live",
+        incr.field(livePreviewField).tree,
+      );
     }
-    const incremental = (performance.now() - t0) / 10;
+    const incremental = performance.now() - t0;
 
-    // 全量路径
-    const mutated = big.slice(0, at) + "X" + big.slice(at);
+    // ── 全量路径 ──────────────────────────────────────────────
+    // 同样的编辑、同样的装饰器重算，唯一的区别是树从哪来：
+    // 每次都从零把整篇重新解析一遍。
+    let full = EditorState.create({ doc: big });
     const t1 = performance.now();
-    for (let i = 0; i < 10; i++) {
-      parseSyntax(mutated);
+    for (const change of edits) {
+      full = full.update({ changes: change }).state;
+      const tree = parseSyntax(full.doc.toString());
+      buildLivePreviewDecorations(
+        full.doc.toString(),
+        full.selection.main.head,
+        "live",
+        tree,
+      );
     }
-    const full = (performance.now() - t1) / 10;
+    const fullCost = performance.now() - t1;
 
     // 只断言「增量不快于全量」这个方向性结论，
     // 不写死具体倍数——CI 机器性能差异大，写死倍数会变成 flaky 测试。
-    expect(incremental).toBeLessThanOrEqual(full);
+    expect(incremental).toBeLessThanOrEqual(fullCost);
   });
 });
 
