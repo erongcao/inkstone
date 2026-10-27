@@ -27,6 +27,7 @@ import {
   shortcutConflict,
 } from "@/export/items";
 import { formatShortcut } from "@/shortcuts";
+import { NOT_IMPLEMENTED_SETTINGS } from "@/settings/coverage";
 import type { ExportItemSetting, ExportVariableSetting } from "@/settings/schema";
 import { AiSection } from "./AiSettingsSection";
 import { t } from "@/i18n";
@@ -300,16 +301,26 @@ function EditorSection({ settings, patch }: { settings: Settings; patch: PatchFn
         </select>
       </label>
 
-      {toggles.map(({ key, label }) => (
-        <label key={key} className="field field--inline">
-          <span>{label}</span>
-          <input
-            type="checkbox"
-            checked={e[key]}
-            onChange={(ev) => patch("editor", { [key]: ev.target.checked })}
-          />
-        </label>
-      ))}
+      {toggles.map(({ key, label }) => {
+        // 「还没接线」的设置项：置灰 + 写明原因（见 src/settings/coverage.ts）
+        const pending = NOT_IMPLEMENTED_SETTINGS[`editor.${key}`];
+        return (
+          <label
+            key={key}
+            className={`field field--inline${pending ? " field--pending" : ""}`}
+          >
+            <span>{label}</span>
+            <input
+              type="checkbox"
+              data-setting-key={`editor.${key}`}
+              checked={e[key]}
+              disabled={pending !== undefined}
+              onChange={(ev) => patch("editor", { [key]: ev.target.checked })}
+            />
+            {pending && <p className="field__note">{t(pending)}</p>}
+          </label>
+        );
+      })}
     </section>
   );
 }
@@ -321,7 +332,8 @@ function MarkdownSection({ settings, patch }: { settings: Settings; patch: Patch
     label: string;
     hint?: string;
     /**
-     * 还没实现的功能：置灰并写明原因。
+     * 「还没接线」的开关不在这里声明——它们由
+     * `NOT_IMPLEMENTED_SETTINGS` 统一登记（见 `src/settings/coverage.ts`）。
      *
      * 为什么要写明原因，而不是默默置灰：
      * 一个点不动的复选框，用户只会当成 bug；
@@ -331,7 +343,6 @@ function MarkdownSection({ settings, patch }: { settings: Settings; patch: Patch
      * 它们不在 `parser/features.ts` 的开关模型里
      * （那个模型只收「真的会生效」的开关）。
      */
-    pending?: string;
   }[] = [
     { key: "inlineMath", label: t("行内数学 $…$") },
     {
@@ -340,11 +351,7 @@ function MarkdownSection({ settings, patch }: { settings: Settings; patch: Patch
       hint: t("关掉后「价格 $5 到 $10 元」不再被误判成公式；$$x^2$$ 在行内仍可用"),
     },
     { key: "blockMath", label: t("数学块 $$…$$") },
-    {
-      key: "autoNumberEquations",
-      label: t("公式自动编号"),
-      pending: t("还没实现：代码里目前没有公式编号这个功能。"),
-    },
+    { key: "autoNumberEquations", label: t("公式自动编号") },
     { key: "mhchem", label: t("化学扩展 mhchem") },
     { key: "mermaid", label: t("Mermaid 图表") },
     { key: "githubAlerts", label: "GitHub Alerts" },
@@ -362,22 +369,27 @@ function MarkdownSection({ settings, patch }: { settings: Settings; patch: Patch
   return (
     <section className="settings-group">
       <h3>Markdown</h3>
-      {toggles.map(({ key, label, hint, pending }) => (
-        <label
-          key={key}
-          className={`field field--inline${pending ? " field--pending" : ""}`}
-          title={hint}
-        >
-          <span>{label}</span>
-          <input
-            type="checkbox"
-            checked={m[key]}
-            disabled={pending !== undefined}
-            onChange={(ev) => patch("markdown", { [key]: ev.target.checked })}
-          />
-          {pending && <p className="field__note">{pending}</p>}
-        </label>
-      ))}
+      {toggles.map(({ key, label, hint }) => {
+        // 「还没接线」的设置项：置灰 + 写明原因（见 src/settings/coverage.ts）
+        const pending = NOT_IMPLEMENTED_SETTINGS[`markdown.${key}`];
+        return (
+          <label
+            key={key}
+            className={`field field--inline${pending ? " field--pending" : ""}`}
+            title={hint}
+          >
+            <span>{label}</span>
+            <input
+              type="checkbox"
+              data-setting-key={`markdown.${key}`}
+              checked={m[key]}
+              disabled={pending !== undefined}
+              onChange={(ev) => patch("markdown", { [key]: ev.target.checked })}
+            />
+            {pending && <p className="field__note">{t(pending)}</p>}
+          </label>
+        );
+      })}
     </section>
   );
 }
@@ -846,6 +858,7 @@ function GeneralSection({ settings, patch }: { settings: Settings; patch: PatchF
         <span>{t("自动保存")}</span>
         <input
           type="checkbox"
+          data-setting-key="general.autoSave"
           checked={g.autoSave}
           onChange={(e) => patch("general", { autoSave: e.target.checked })}
         />
@@ -864,18 +877,23 @@ function GeneralSection({ settings, patch }: { settings: Settings; patch: PatchF
         <span>{t("启动时恢复上次会话")}</span>
         <input
           type="checkbox"
+          data-setting-key="general.restoreSession"
           checked={g.restoreSession}
           onChange={(e) => patch("general", { restoreSession: e.target.checked })}
         />
       </label>
-      <label className="field field--inline">
-        <span>{t("发送匿名使用统计")}</span>
-        <input
-          type="checkbox"
-          checked={g.sendAnonymousStats}
-          onChange={(e) => patch("general", { sendAnonymousStats: e.target.checked })}
-        />
-      </label>
+      {/*
+        这里原来有一个「发送匿名使用统计」的复选框。
+        它被删掉了，原因是它**许了一个不会兑现的承诺**：
+        全项目没有任何遥测代码（没有 analytics / telemetry / 崩溃上报），
+        那个开关点开点关都不会有任何事发生。
+
+        与其留一个永远无效的开关，不如直接说清楚事实。
+        真要加遥测时，把开关和实现**一起**加回来。
+      */}
+      <p className="field__note">
+        {t("本应用不收集任何使用数据：既没有遥测，也没有崩溃上报。")}
+      </p>
     </section>
   );
 }

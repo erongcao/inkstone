@@ -196,7 +196,6 @@ export const en: Record<string, string> = {
   "发现新版本 {latest}（当前 {current}）":
     "Version {latest} is available (you're on {current}).",
   发现未保存的改动: "Found unsaved changes",
-  发送匿名使用统计: "Send anonymous usage statistics",
   取消: "Cancel",
   取消勾选: "Uncheck",
   取消这一列的对齐设置: "Clear this column's alignment",
@@ -329,6 +328,18 @@ export const en: Record<string, string> = {
   提炼要点: "Key points",
   "还没实现：代码里目前没有公式编号这个功能。":
     "Not implemented yet — there is no equation-numbering feature in the code.",
+  "还没实现：输入时把直引号转成弯引号这类处理还没接入。":
+    "Not implemented yet — turning straight quotes into curly quotes while typing is not wired up.",
+  "还没实现：严格模式要同时改 remark 与 lezer 两侧的解析规则。":
+    "Not implemented yet — strict mode has to change the parsing rules on both the remark and the lezer side.",
+  "还没实现：段落首行缩进还没接入渲染层。":
+    "Not implemented yet — first-line indent is not wired into the rendering layer.",
+  "还没实现：段落续行缩进还没接入渲染层。":
+    "Not implemented yet — continuation-line indent is not wired into the rendering layer.",
+  "还没实现：这个开关没有接到编辑器上（CodeMirror 6 不自带拼写检查）。":
+    "Not implemented yet — this switch is not wired to the editor (CodeMirror 6 has no spell checking of its own).",
+  "本应用不收集任何使用数据：既没有遥测，也没有崩溃上报。":
+    "This app collects no usage data: no telemetry, no crash reporting.",
   提示块: "Alerts",
   "GitHub 风格的提示块，NOTE / TIP / IMPORTANT / WARNING / CAUTION 五种。":
     "GitHub-style alerts — NOTE / TIP / IMPORTANT / WARNING / CAUTION.",

@@ -245,8 +245,16 @@ export interface GeneralSettings {
   autoSaveInterval: number;
   /** 启动时恢复上次未保存的草稿 */
   restoreSession: boolean;
-  /** 发送匿名使用统计（默认关闭） */
-  sendAnonymousStats: boolean;
+  /*
+   * 这里原来有一个 `sendAnonymousStats`（发送匿名使用统计）。
+   *
+   * 它被删掉了，不是「还没接线」，而是**永远不会接线**：
+   * 本应用不收集任何使用数据（没有遥测、没有崩溃上报）。
+   * 一个永远不会兑现的隐私开关比没有这个开关更误导人——
+   * 用户会以为自己已经做了选择，而实际上那个选择没有任何意义。
+   *
+   * 真要加遥测时，开关和实现一起加回来。
+   */
 }
 
 /** AI 端点的协议 */
@@ -303,8 +311,14 @@ export interface AiSettings {
   rewriteSystemPrompt: string;
   /** 总结类的系统提示词 */
   summarizeSystemPrompt: string;
-  /** 问答类的系统提示词 */
-  chatSystemPrompt: string;
+  /*
+   * 这里原来有一个 `chatSystemPrompt`（问答类的系统提示词）。
+   *
+   * 删掉它是因为**问答模式这个功能不存在**：
+   * `src/ai/chat.ts` 是传输层（改写、总结都走它），
+   * 并没有一个「用户提问 → AI 回答」的交互模式。
+   * 留着一个给不存在的功能用的提示词，就是留着一个没人能改、也没人看的字段。
+   */
   /** 单次请求的最大输出 token */
   maxOutputTokens: number;
   /** 温度（仅在端点能力位允许时生效） */
@@ -380,7 +394,6 @@ export const DEFAULT_SETTINGS: Settings = {
     autoSave: true,
     autoSaveInterval: 2000,
     restoreSession: true,
-    sendAnonymousStats: false,
   },
   ai: {
     enabled: false,
@@ -394,9 +407,6 @@ export const DEFAULT_SETTINGS: Settings = {
     summarizeSystemPrompt:
       "你是一位中文写作助手。请对用户给的 Markdown 文档做摘要，" +
       "只输出 Markdown 本身，不要解释。",
-    chatSystemPrompt:
-      "你是一位中文笔记助手。只能依据用户提供的笔记内容回答，" +
-      "不要编造。引用了哪些笔记就明确说是哪几篇。",
     maxOutputTokens: 4096,
     temperature: 0.7,
   },
