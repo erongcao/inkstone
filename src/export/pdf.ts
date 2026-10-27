@@ -41,6 +41,7 @@ import type { ExportResult } from "./service";
 import { readSettings } from "@/settings/store";
 import { isBrowserFallback } from "@/ipc/export";
 import { t } from "@/i18n";
+import { currentColorMode } from "@/theme/themes";
 
 /**
  * 生成打印用的 HTML。
@@ -54,7 +55,7 @@ export function buildPrintHtml(context: ExportContext): string {
   const html = exportToHtml(context.content, {
     title: context.title,
     theme: settings.appearance.theme,
-    mode: settings.appearance.colorMode,
+    mode: currentColorMode(),
     outline: [],
     includeOutline: false,
     // 自定义 CSS 也要进导出——编辑器里有、导出里没有就是「屏幕与导出不一致」

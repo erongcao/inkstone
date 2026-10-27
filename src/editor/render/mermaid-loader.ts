@@ -101,14 +101,12 @@ function notify(): void {
 /**
  * 当前明暗模式。
  *
- * 直接读 `<html>` 上的 `data-mode`——那是 `useThemeRuntime` 写的，
- * 它才是唯一同时管住 CSS 变量与 mermaid 主题的地方。
- * 在这里另存一份状态只会和主题系统分叉。
+ * 实现在主题层（`src/theme/themes.ts`）——那里才是主题系统的所在地，
+ * 导出链路也要用同一个（见那里的说明）。
  */
-export function currentMode(): "light" | "dark" {
-  return document.documentElement.dataset.mode === "dark" ? "dark" : "light";
-}
+import { currentColorMode } from "@/theme/themes";
 
+export { currentColorMode as currentMode };
 /**
  * 缓存键的分隔符。
  *
@@ -224,7 +222,7 @@ function describeError(error: unknown): string {
 export function renderDiagram(code: string): DiagramResult | null {
   const trimmed = code.trim();
   if (!trimmed) return null;
-  const key = cacheKey(trimmed, currentMode());
+  const key = cacheKey(trimmed, currentColorMode());
 
   const cached = cache.get(key);
   if (cached) return cached;

@@ -1,5 +1,23 @@
 /**
- * 自定义 CSS 要一路走到导出产物里。
+ * 导出产物要与**屏幕上看到的一致**（架构约束 C）。
+ *
+ * 这两条破口的形状一样：设置里的东西在编辑器里生效，
+ * 导出链路却**没有带上**——于是同一个文档两套样子。
+ *
+ * - **自定义 CSS**：编辑器里它是最后注入的那张样式表，能覆盖任何东西；
+ *   导出链路曾经完全不带它（`HtmlExportOptions` 里压根没这个字段）。
+ * - **明暗模式**：导出取的是设置里的**原始值** `colorMode`，
+ *   而那个值可能是 `"auto"`——于是默认配置（`auto` + 跟随系统）下，
+ *   **系统是暗色时编辑器是暗的、导出是亮的**。
+ *
+ * ## 为什么单测全绿
+ *
+ * `exportToHtml(content, options)` 的选项里压根没有 `customCss`，
+ * 而 `mode` 参数是个**普通字符串**——测「选项有没有带上」
+ * 就像测「驾照上有没有驾照」。
+ *
+ * 这类破口只有走完整条链路才看得出来：
+ * 设置 → `exportDocument` → `exportToHtml` → 产物。
  *
  * ## 为什么这条要单独测
  *
@@ -77,5 +95,50 @@ describe("自定义 CSS 进导出产物", () => {
     expect(at).toBeLessThan(headEnd);
     // 它后面不该再有别的 <style>——那才是「排在最后」
     expect(capture.html.slice(at, headEnd)).not.toContain("<style>");
+  });
+});
+
+describe("明暗模式：导出要与屏幕上的一致", () => {
+  /*
+   * 默认配置是 `colorMode: "auto"` + 跟随系统。
+   * 系统是暗色时，编辑器是暗的——而导出曾经取原始值 `"auto"`，
+   * 在 `buildStyles` 里被判成 `"light"`。
+   * 于是**默认配置**下同一份文档就有两种外观。
+   *
+   * 修法：导出读 `<html>` 上的 `data-mode`（`useThemeRuntime` 写的），
+   * 那就是**屏幕上那个**模式。
+   */
+  beforeEach(() => {
+    document.documentElement.dataset.mode = "light";
+  });
+
+  it("设置是 auto、屏幕是暗色时，导出也是暗色", async () => {
+    document.documentElement.dataset.mode = "dark";
+    updateSettings({ appearance: { colorMode: "auto" } });
+    setDocumentContent("# 标题");
+
+    await exportDocument("html");
+
+    expect(capture.html).toContain('data-mode="dark"');
+  });
+
+  it("屏幕是亮色时，导出也是亮色", async () => {
+    document.documentElement.dataset.mode = "light";
+    updateSettings({ appearance: { colorMode: "auto" } });
+    setDocumentContent("# 标题");
+
+    await exportDocument("html");
+
+    expect(capture.html).toContain('data-mode="light"');
+  });
+
+  it("屏幕是暗色时，用的是暗色那套颜色令牌", async () => {
+    document.documentElement.dataset.mode = "dark";
+    setDocumentContent("# 标题");
+
+    await exportDocument("html");
+
+    // 暗色令牌里的背景色是深色，亮色那套是纯白
+    expect(capture.html).toContain("#0d1117");
   });
 });

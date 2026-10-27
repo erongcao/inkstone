@@ -48,6 +48,28 @@ export const THEME_STYLESHEETS: Record<string, () => Promise<unknown>> = {
 };
 
 /**
+ * 当前**实际生效**的明暗模式。
+ *
+ * 直接读 `<html>` 上的 `data-mode`——那是 `useThemeRuntime` 写的，
+ * 它才是唯一同时管住 CSS 变量与 mermaid 主题的地方。
+ * 在这里另存一份状态只会和主题系统分叉。
+ *
+ * ## 为什么导出链路也要用它
+ *
+ * 导出原来的明暗模式取的是**设置里的原始值**
+ * （`settings.appearance.colorMode`），而那个值可能是 `"auto"`。
+ * 于是默认配置（`colorMode: "auto"` + 跟随系统）下，
+ * **系统是暗色时：编辑器是暗的、导出是亮的**——
+ * 同一份文档两种外观，正是架构约束 C 要避免的。
+ *
+ * 读 `data-mode` 就没这个问题：它就是**屏幕上那个**模式。
+ */
+export function currentColorMode(): "light" | "dark" {
+  if (typeof document === "undefined") return "light";
+  return document.documentElement.dataset.mode === "dark" ? "dark" : "light";
+}
+
+/**
  * 解析最终生效的明暗模式。
  * followSystem + auto 时跟随系统，否则取 colorMode。
  */

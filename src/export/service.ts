@@ -44,6 +44,7 @@ import { readSettings } from "@/settings/store";
 import { buildIndexFromTree } from "@/editor/document-index";
 import { ensureMathRenderer } from "@/editor/render/math-loader";
 import { t } from "@/i18n";
+import { currentColorMode } from "@/theme/themes";
 
 /** 导出结果 */
 export interface ExportResult {
@@ -326,7 +327,7 @@ export async function exportDocument(formatId: string): Promise<ExportResult> {
       const html = exportToHtml(context.content, {
         title: context.title,
         theme: settings.appearance.theme,
-        mode: settings.appearance.colorMode,
+        mode: currentColorMode(),
         outline: index.outline,
         includeOutline,
         extraHead: settings.export.htmlExtraHead,
