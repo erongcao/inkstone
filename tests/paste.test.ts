@@ -16,6 +16,7 @@ import { EditorView } from "@codemirror/view";
 import { htmlToMarkdown } from "@/editor/paste/html-to-markdown";
 import { looksLikeMarkdown } from "@/editor/paste/detect";
 import { handlePaste, markdownPaste } from "@/editor/paste";
+import { markdownToHtml } from "@/parser/html";
 
 const FIXTURES = resolve(dirname(fileURLToPath(import.meta.url)), "fixtures");
 
@@ -271,6 +272,160 @@ describe("htmlToMarkdown：Word 导出的整份 HTML", () => {
     const md = htmlToMarkdown(html);
     expect(md.startsWith(" ")).toBe(false);
     expect(md).toContain("![图](a.png)");
+  });
+});
+
+describe("htmlToMarkdown：真机 Word 的表格", () => {
+  /*
+   * `tests/fixtures/word-table.html` 是**真机 Word 15 导出的表格**：
+   * 单元格内容用 `<p class=MsoNormal>` 包着、每个单元格都套了
+   * `<b style='mso-bidi-font-weight:normal'>`（Word 表格样式的默认加粗），
+   * `<td>` 之间还有换行缩进。
+   *
+   * 修的是一个**内容丢失**级别的破口：
+   * turndown 的 GFM 插件对「首行不是表头」的表格**原样保留成 HTML**，
+   * 而 Word 的表格全是 `<td>`——于是每张 Word 表格都会以裸 HTML 进文档，
+   * 导出时又被 remark-rehype 丢掉（它默认丢弃 html 节点）→ **整张表消失**。
+   */
+  const word = readFileSync(resolve(FIXTURES, "word-table.html"), "utf-8");
+
+  it("转成 GFM 表格，不是裸 HTML", () => {
+    const md = htmlToMarkdown(word);
+
+    expect(md).toContain("| **甲** | **乙** | **丙** |");
+    expect(md).toContain("| --- | --- | --- |");
+    expect(md).toContain("| **1** | **2** | **3** |");
+    // 关键：不能留下任何 HTML 标签
+    expect(md).not.toContain("<table");
+    expect(md).not.toContain("MsoNormal");
+    expect(md).not.toContain("<td");
+  });
+
+  it("导出时表格不会整块消失", () => {
+    /*
+     * 这是这个破口最严重的一面：
+     * 裸 HTML 进文档后，编辑区显示的是字面标签，
+     * 而导出管线（remark-rehype 默认丢弃 html 节点）会让它**整个消失**。
+     *
+     * 转成 Markdown 表格之后，两边才一致（架构约束 C）。
+     */
+    const md = htmlToMarkdown(word);
+    const exported = markdownToHtml(md);
+
+    expect(exported).toContain("<table");
+    expect(exported).toContain("甲");
+    expect(exported).toContain("丙");
+    expect(exported).toContain("1");
+  });
+
+  it("单元格里的块级包装（<p>）不会把行拆散", () => {
+    const md = htmlToMarkdown(word);
+    // 每一行都必须是一整行，不能被 <p> 的换行拆开
+    for (const line of md.split("\n")) {
+      expect(line.trim()).not.toBe("");
+      expect(line.startsWith("|")).toBe(true);
+    }
+  });
+
+  it("真机 Word 的上下标：Word 15 写的是 <sup>/<sub>，不是 mso-vert-align", () => {
+    /*
+     * `tests/fixtures/word-superscript.html` 是**真机 Word 15** 复制出来的：
+     * `<p class=MsoNormal><span lang=EN-US>H<sup>2</sup>O<sub><o:p></o:p></sub></span></p>`
+     *
+     * 之前 AGENTS.md 里记着一个「已知缺口」：Word 可能会写
+     * `mso-vert-align: super`。**实测证明现代 Word 不这么写**——
+     * 它写的是语义标签 `<sup>` / `<sub>`，我们早就支持。
+     */
+    const html = readFileSync(resolve(FIXTURES, "word-superscript.html"), "utf-8");
+    expect(htmlToMarkdown(html)).toBe("H^2^O");
+  });
+
+  it("本来就有表头（<th>）的表格不受影响", () => {
+    const md = htmlToMarkdown(
+      "<table><tr><th>列一</th><th>列二</th></tr><tr><td>甲</td><td>乙</td></tr></table>",
+    );
+    expect(md).toContain("| 列一 | 列二 |");
+    expect(md).toContain("| --- | --- |");
+    expect(md).toContain("| 甲 | 乙 |");
+  });
+});
+
+describe("htmlToMarkdown：GFM 表格插件的判据漏洞", () => {
+  /*
+   * `turndown-plugin-gfm` 判「首行是不是表头」的判据比看上去严：
+   *
+   *   parentNode.firstChild === tr
+   *   && (parentNode 是 TABLE || 是「第一个 TBODY」)
+   *   && tr.childNodes 全是 TH
+   *
+   * 「第一个 TBODY」又要求它**没有 previousSibling**（或前一个是被清空的 THEAD）。
+   * 于是三样东西会让整张表退回裸 HTML、导出时**整块消失**：
+   *
+   *   1. `<caption>` 挡在 `<tbody>` 前面；
+   *   2. `<table>` 与 `<tbody>` 之间的空白文本节点；
+   *   3. `<tbody>` 与 `<tr>` 之间的空白文本节点。
+   *
+   * 这三条都是**结构**问题，与内容无关，所以都要用测试钉住。
+   */
+
+  it("带 <caption> 的表格仍然转成 GFM 表格，标题提到表格外面", () => {
+    const md = htmlToMarkdown(
+      "<table><caption>化验单</caption><tr><td>甲</td><td>乙</td></tr>" +
+        "<tr><td>1</td><td>2</td></tr></table>",
+    );
+
+    expect(md).not.toContain("<table");
+    expect(md).not.toContain("<caption");
+    expect(md).toContain("化验单");
+    expect(md).toContain("| 甲 | 乙 |");
+    expect(md).toContain("| 1 | 2 |");
+  });
+
+  it("带 <caption> 的表格导出时不会整块消失", () => {
+    const md = htmlToMarkdown(
+      "<table><caption>化验单</caption><tr><td>甲</td></tr><tr><td>1</td></tr></table>",
+    );
+    const exported = markdownToHtml(md);
+
+    expect(exported).toContain("<table");
+    expect(exported).toContain("甲");
+    expect(exported).toContain("化验单");
+  });
+
+  it("<table> 与 <tbody> 之间的空白文本节点不破坏表格", () => {
+    const md = htmlToMarkdown(
+      "<table>\n  <tbody>\n    <tr><td>甲</td><td>乙</td></tr>\n" +
+        "    <tr><td>1</td><td>2</td></tr>\n  </tbody>\n</table>",
+    );
+
+    expect(md).not.toContain("<table");
+    expect(md).toContain("| 甲 | 乙 |");
+    expect(md).toContain("| 1 | 2 |");
+  });
+
+  it("<tbody> 与 <tr> 之间的空白文本节点不破坏表格", () => {
+    const md = htmlToMarkdown(
+      "<table><tbody>\n  <tr><td>甲</td><td>乙</td></tr>\n" +
+        "  <tr><td>1</td><td>2</td></tr>\n</tbody></table>",
+    );
+
+    expect(md).not.toContain("<table");
+    expect(md).toContain("| 甲 | 乙 |");
+  });
+
+  it("表格单元格里多个段落不会被拆散成多行", () => {
+    const md = htmlToMarkdown(
+      "<table><tr><td><p>甲</p><p>乙</p></td><td>丙</td></tr>" +
+        "<tr><td>1</td><td>2</td></tr></table>",
+    );
+
+    // 每一行都必须是一整行
+    for (const line of md.split("\n")) {
+      expect(line.trim()).not.toBe("");
+      expect(line.startsWith("|")).toBe(true);
+    }
+    // 多个段落之间补空格，而不是直接粘成「甲乙」
+    expect(md).toContain("甲 乙");
   });
 });
 

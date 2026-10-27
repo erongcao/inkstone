@@ -220,9 +220,215 @@ function extractContent(html: string): HTMLElement | string {
     const body = doc.body;
     if (!body) return html;
     trimEdgeBlankText(body);
+    promoteTableHeaders(body);
     return body;
   } catch {
     return html;
+  }
+}
+
+/**
+ * 把**没有表头行**的表格的第一行提升成表头。
+ *
+ * ## 为什么必须做
+ *
+ * `turndown-plugin-gfm` 对表格有一条硬性规定：
+ *
+ * ```js
+ * // Only convert tables with a heading row.
+ * // Tables with no heading row are kept using `keep` (see below).
+ * turndownService.keep(node => node.nodeName === 'TABLE' && !isHeadingRow(node.rows[0]))
+ * ```
+ *
+ * 也就是说：**首行不是表头的表格会被原样保留成 HTML**。
+ * 而 **Word 导出的表格全是 `<td>`，一个 `<th>` 都没有**（实测 Word 15）——
+ * 于是每张 Word 表格都会以裸 HTML 进文档。
+ *
+ * 后果不只是「源码难看」：
+ *
+ * - 编辑器的实时预览**不渲染 HTML 块** → 用户看到的是字面的
+ *   `<table class="MsoNormalTable" …>` 标签；
+ * - 导出时 `remark-rehype` **默认丢弃 html 节点**
+ *   （没开 `allowDangerousHtml`）→ **整张表在导出结果里消失**。
+ *
+ * 那是**内容丢失**，比「屏幕与导出不一致」还严重。
+ *
+ * ## 语义选择：为什么是「第一行当表头」
+ *
+ * GFM 表格**必须有表头行**，没有「无表头表格」这种东西。
+ * 两种做法：
+ *
+ * | 做法 | 问题 |
+ * |---|---|
+ * | 空表头行（`|  |  |` + `|---|---|` + 全部数据行） | 编辑器里多一行空表头，看起来像坏了；中文技术写作里极少见 |
+ * | **第一行当表头** | 纯数据网格的话，第一行会被「提升」成表头（显示为粗体） |
+ *
+ * 选后者，理由是**多数 Word 表格的第一行本来就是表头**
+ * （只是 Word 用「加粗 / 底纹」表示，不用 `<th>`），
+ * 提升成表头正好还原了用户的本意；而且这是绝大多数
+ * HTML → Markdown 转换器的做法。
+ *
+ * ## 四处细节（少一处，GFM 的规则就不认）
+ *
+ * 插件的 `isHeadingRow` 判据（实测自 `turndown-plugin-gfm` 源码）：
+ *
+ * ```js
+ * parentNode.nodeName === 'THEAD' ||
+ * (parentNode.firstChild === tr &&
+ *  (parentNode.nodeName === 'TABLE' || isFirstTbody(parentNode)) &&
+ *  every.call(tr.childNodes, n => n.nodeName === 'TH'))
+ * ```
+ *
+ * 而 `isFirstTbody` 看的又是 **previousSibling**（空白文本节点也算 sibling）：
+ *
+ * ```js
+ * element.nodeName === 'TBODY' &&
+ * (!previousSibling || (previousSibling.nodeName === 'THEAD' && 空白))
+ * ```
+ *
+ * 于是有四个地方必须动手：
+ *
+ * 1. 首行的 `<td>` 全部换成 `<th>`（`every` 要求每个 childNode 都是 TH）；
+ * 2. 行内的**空白文本节点**要清掉——混进去 `every` 就不成立；
+ *    插件拼表头分隔行时还会对每个 childNode 调 `getAttribute`，
+ *    文本节点留在那儿会直接抛异常；
+ * 3. 行必须是 `<tbody>` 的**第一个子节点**（`firstChild === tr`）；
+ * 4. `<tbody>` 必须是 `<table>` 的**第一个子节点**
+ *    （否则 `previousSibling` 不是空，`isFirstTbody` 不成立）。
+ *
+ * 另外 `<caption>` 会挡在 `<tbody>` 前面，让第 4 条失效——
+ * 那样整张表又会变回裸 HTML、导出时消失，所以标题要被**提到表格外面**。
+ *
+ * ### 为什么第 2 条不能交给 turndown
+ *
+ * turndown 自己会做空白塌缩（`collapseWhitespace`），大部分空白它能清掉。
+ * 但它的规则是「**前面有文本、且前面那个文本不是以空格结尾**时，
+ * 保留当前空白的前导空格」——所以：
+ *
+ * ```html
+ * <tr><td>甲</td>
+ *     <td>乙</td></tr>
+ * ```
+ *
+ * `甲` 后面那个换行缩进**会活下来**，混在 `<tr>` 的 childNodes 里，
+ * `every(childNode === TH)` 当场不成立。
+ *
+ * 表格层级的空白（`<table>` 与 `<tbody>` 之间、`<tbody>` 与 `<tr>` 之间）
+ * turndown 能清掉，因为 `<table>` 是块级元素、进它之前 `prevText` 会被清空。
+ * 但那属于 turndown 的**内部策略**——第 3、4 条这里仍然自己清一遍，
+ * 判据就不依赖别人哪天改了实现。
+ */
+function promoteTableHeaders(body: HTMLElement): void {
+  for (const table of Array.from(body.querySelectorAll("table"))) {
+    // ── 0. 标题提到表格外面 ────────────────────────────────────
+    hoistCaption(table);
+
+    // ── 1. 首行提升成表头 ──────────────────────────────────────
+    const firstRow = table.rows?.[0];
+    if (firstRow) {
+      // 已经有表头的表格不用管——GFM 插件本来就能转
+      const hasHeader = Array.from(firstRow.cells).some((cell) => cell.nodeName === "TH");
+      if (!hasHeader) {
+        for (const cell of Array.from(firstRow.cells)) {
+          const th = cell.ownerDocument.createElement("th");
+          th.innerHTML = cell.innerHTML;
+          cell.replaceWith(th);
+        }
+      }
+    }
+
+    // ── 2. 每一行：清空白节点 + 拆单元格里的块级包装 ───────────
+    for (const row of Array.from(table.rows)) {
+      // 行内的空白文本节点要清掉：GFM 插件判表头看 `tr.childNodes`
+      // 是不是全是 TH，拼单元格时也按 childNodes 的**下标**决定
+      // 首格要不要 `|` 前缀——混进空白节点，两头都不对。
+      removeBlankTextNodes(row);
+      unwrapCellBlocks(row);
+    }
+
+    // ── 3. 位置：行要落在 tbody 首位，tbody 要落在 table 首位 ────
+    if (firstRow) {
+      const rowParent = firstRow.parentElement;
+      if (rowParent) removeLeadingBlankTextNodes(rowParent);
+    }
+    removeLeadingBlankTextNodes(table);
+  }
+}
+
+/**
+ * 把 `<caption>` 的文字**提到表格外面**。
+ *
+ * GFM 插件判「首行是不是表头」时会看 tbody 有没有 `previousSibling`——
+ * `<caption>` 正好占了那个位置，于是整张表退回裸 HTML，
+ * 导出时又被 remark-rehype 丢掉 → **整张表连同标题一起消失**。
+ *
+ * 所以标题先变成表格前面的一段文字，表格本身才保得住。
+ */
+function hoistCaption(table: HTMLTableElement): void {
+  const caption = table.caption;
+  if (!caption) return;
+  const text = (caption.textContent ?? "").trim();
+  const parent = table.parentNode;
+  if (parent && text) {
+    const paragraph = table.ownerDocument.createElement("p");
+    paragraph.textContent = text;
+    parent.insertBefore(paragraph, table);
+  }
+  caption.remove();
+}
+
+/**
+ * 拆掉单元格里的**块级包装**。
+ *
+ * GFM 表格的单元格只能是一行。Word 的单元格内容是
+ * `<td><p class=MsoNormal>…</p></td>`——`<p>` 的替换规则带 `\n\n`，
+ * 于是整行被拆成好几段（实测输出成一堆 `|` 和空行）。
+ *
+ * 拆法是把 `<p>` / `<div>` 这类块级包装**换成它的内容**，
+ * 单元格就只剩行内元素，交给 GFM 插件自己的规则处理。
+ *
+ * 一个单元格里有**多个**段落时，它们之间补一个空格：
+ * GFM 单元格没有段落概念，直接拼起来会变成「甲乙」，
+ * 而 `<br>` 更不能用——导出管线的 remark-rehype 默认丢弃 html 节点，
+ * 屏幕上一行、导出里没这一行，又成了两边不一致。
+ */
+function unwrapCellBlocks(row: HTMLTableRowElement): void {
+  for (const cell of Array.from(row.cells)) {
+    let wroteContent = false;
+    for (const block of Array.from(cell.children)) {
+      if (!BLOCK_WRAPPERS.has(block.nodeName)) continue;
+      const hasText = (block.textContent ?? "").trim() !== "";
+      if (wroteContent && hasText) {
+        cell.insertBefore(cell.ownerDocument.createTextNode(" "), block);
+      }
+      // 把包装里的内容提到包装的位置
+      while (block.firstChild) {
+        cell.insertBefore(block.firstChild, block);
+      }
+      cell.removeChild(block);
+      if (hasText) wroteContent = true;
+    }
+    // 单元格里的换行（`<br>` 之类）也会破坏单行假设
+    for (const br of Array.from(cell.querySelectorAll("br"))) {
+      br.replaceWith(cell.ownerDocument.createTextNode(" "));
+    }
+  }
+}
+
+/** 单元格里的块级包装标签 */
+const BLOCK_WRAPPERS = new Set(["P", "DIV"]);
+
+/** 删掉元素里的全部空白文本节点 */
+function removeBlankTextNodes(element: Element): void {
+  for (const node of Array.from(element.childNodes)) {
+    if (isBlankText(node)) element.removeChild(node);
+  }
+}
+
+/** 删掉元素**开头**的空白文本节点（不影响结尾） */
+function removeLeadingBlankTextNodes(element: Element): void {
+  while (element.firstChild && isBlankText(element.firstChild)) {
+    element.removeChild(element.firstChild);
   }
 }
 
