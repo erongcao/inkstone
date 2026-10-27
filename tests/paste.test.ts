@@ -8,11 +8,16 @@
  */
 
 import { describe, expect, it, afterEach } from "vitest";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { htmlToMarkdown } from "@/editor/paste/html-to-markdown";
 import { looksLikeMarkdown } from "@/editor/paste/detect";
 import { handlePaste, markdownPaste } from "@/editor/paste";
+
+const FIXTURES = resolve(dirname(fileURLToPath(import.meta.url)), "fixtures");
 
 describe("looksLikeMarkdown：判断纯文本是不是已经是 Markdown", () => {
   it("识别标题", () => {
@@ -181,6 +186,94 @@ describe("htmlToMarkdown：样式净化", () => {
   });
 });
 
+describe("htmlToMarkdown：Word 导出的整份 HTML", () => {
+  /*
+   * `tests/fixtures/word-clipboard.html` 是**真机 Word 15 复制到剪贴板的 HTML**
+   * （结构原样保留：`<head>` 里的 meta / link / 条件注释 / 样式表，
+   * `<body>` 里的 `mso-` 行内样式、`<o:p>` 标记；
+   * 可见文字换成了中性占位文字，不含任何个人笔记内容）。
+   *
+   * 修的是一个**真实存在**的破口：整段 HTML 丢给 turndown 时，
+   * `<head>` 的样板会被摊平进根元素，而**元素之间的空白文本节点**
+   * 会被塌成一个个空格（实测开头多出 8 个空格）。
+   */
+  const word = readFileSync(resolve(FIXTURES, "word-clipboard.html"), "utf-8");
+
+  it("结果不以空白开头（head 的样板不会漏成缩进）", () => {
+    const md = htmlToMarkdown(word);
+    /*
+     * 这条不是洁癖：4 个以上的行首缩进在 Markdown 里是**缩进代码块**，
+     * 粘到行中间则是**行尾硬换行**（两个空格就够了）。
+     * 8 个空格粘在正文前面，用户会看到一个莫名其妙 indented 的开头。
+     */
+    expect(md.startsWith(" ")).toBe(false);
+    expect(md.startsWith("\n")).toBe(false);
+    expect(md.startsWith("\t")).toBe(false);
+  });
+
+  it("样式表的内容不会漏进结果", () => {
+    /*
+     * 这条**不是回归测试**（旧实现也过）——`<style>` 本来就被 `JUNK_TAGS` 剥掉了。
+     * 它钉的是「换成只取 body 之后，样式表更是连解析都不必」。
+     * （第一版对照脚本用裸 turndown 得出「CSS 会漏进结果」，
+     * 那是**测量假象**——项目的净化规则本来就挡得住。）
+     */
+    const md = htmlToMarkdown(word);
+    expect(md).not.toContain("Font Definitions");
+    expect(md).not.toContain("@font-face");
+    expect(md).not.toContain("mso-");
+  });
+
+  it("标题与加粗照常转换（head 被摘掉不影响正文）", () => {
+    const md = htmlToMarkdown(word);
+    expect(md).toContain("### ");
+    expect(md).toContain("**");
+    // 段落之间是空行，不是被空白撑开的一行
+    expect(md).not.toMatch(/[ \t]+\n/);
+  });
+
+  it("最小复现：head 里的 void 元素旁边的空白不会漏进结果", () => {
+    /*
+     * 这个 bug 的机制很小，单独钉一条：
+     * turndown 的 `blankRule` 本来会删掉纯空白的文本节点，
+     * 但**同层级有 void 元素时就不删**（`<meta>` / `<link>` / `<br>` / `<img>` 都是 void）。
+     * Word 的 head 里全是 void 元素 → head 里那些空白全被留下。
+     */
+    const html = [
+      "<html><head>",
+      '<meta http-equiv="Content-Type" content="text/html; charset=utf-8">',
+      '<meta name=ProgId content=Word.Document>',
+      '<link rel=File-List href="file:///C:/Temp/word/clip_filelist.xml">',
+      "<title>文档标题</title>",
+      "</head>",
+      '<body style="tab-interval:21.0pt">',
+      "<!--StartFragment-->",
+      "<p>正文</p>",
+      "</body></html>",
+    ].join("\n");
+
+    expect(htmlToMarkdown(html)).toBe("正文");
+  });
+
+  it("正文里有 img 时也不会漏出空白（body 里的 void 元素也一样）", () => {
+    const html = [
+      "<html><head>",
+      '<meta http-equiv=Content-Type content="text/html; charset=utf-8">',
+      '<meta name=Generator content="Microsoft Word 15">',
+      '<link rel=File-List href="file:///C:/Temp/word/clip_filelist.xml">',
+      "</head>",
+      "<body>",
+      '<p><img src="a.png" alt="图"></p>',
+      "<p>正文</p>",
+      "</body></html>",
+    ].join("\n");
+
+    const md = htmlToMarkdown(html);
+    expect(md.startsWith(" ")).toBe(false);
+    expect(md).toContain("![图](a.png)");
+  });
+});
+
 describe("handlePaste：端到端", () => {
   const views: EditorView[] = [];
 
@@ -237,6 +330,33 @@ describe("handlePaste：端到端", () => {
       }),
     );
     expect(view.state.doc.toString()).toBe("**粗体**");
+  });
+
+  it("真机 Word 的整份 HTML 粘进来，开头没有多余缩进", () => {
+    /*
+     * 走的是**真实路径**：剪贴板里同时有纯文本与 HTML
+     * （Word 复制时两个都给），而纯文本「看起来不像 Markdown」，
+     * 所以走 HTML 转换那条。
+     *
+     * 断言的重点是**文档第一行不能带缩进**：
+     * 4 个以上的行首缩进在 Markdown 里是缩进代码块，
+     * 用户粘进去会看到自己的内容变成了代码块。
+     */
+    const view = createEditor();
+    const word = readFileSync(resolve(FIXTURES, "word-clipboard.html"), "utf-8");
+
+    handlePaste(
+      view,
+      fakeEvent({
+        "text/plain": "标题 正文要点补充说明",
+        "text/html": word,
+      }),
+    );
+
+    const doc = view.state.doc.toString();
+    expect(doc.startsWith(" ")).toBe(false);
+    expect(doc.startsWith("\t")).toBe(false);
+    expect(doc.split("\n")[0]).toBe("### 标题 正文要点补充说明");
   });
 
   it("粘贴会替换当前选区", () => {

@@ -173,9 +173,77 @@ function createService(): TurndownService {
 export function htmlToMarkdown(html: string): string {
   if (!html || !html.trim()) return "";
   service ??= createService();
-  const markdown = service.turndown(html);
+  const markdown = service.turndown(extractContent(html));
   // 去掉首尾空行，粘贴时不应该多带空白
   return markdown.replace(/^\n+|\n+$/g, "");
+}
+
+/**
+ * 只取 HTML 的**正文**，把样板（`<head>`）与首尾空白节点摘掉。
+ *
+ * ## 为什么不能整段丢给 turndown
+ *
+ * turndown 是把输入包进 `<x-turndown>` 再用 DOM 解析器解析的，
+ * 而 **DOM 解析器会把 `<head>` 的内容摊平进这个元素**——
+ * 于是 Word 导出的那些 `<meta>` / `<link>` / 条件注释
+ * 全都成了根元素的子节点。
+ *
+ * 真正咬人的不是那些标签本身（`JUNK_TAGS` 已经剥了），
+ * 而是**它们之间的空白文本节点**：
+ *
+ * 1. 那些空白被 turndown 塌成**一个个空格**（一个文本节点 → 一个空格）；
+ * 2. turndown 的 `blankRule` 本来会删掉「纯空白」的文本节点，
+ *    但它有个例外——**同层级有 void 元素时就不删**
+ *    （`<meta>` / `<link>` / `<br>` / `<img>` 都是 void）。
+ *    Word 的 head 里全是 void 元素 → 空白全被留下。
+ *
+ * 结果是转换结果**开头多出 8 个空格**（实测 Word 15 的真实输出）。
+ * 那 8 个空格不是装饰：粘到行中间就是「行尾硬换行」，
+ * 粘到行首超过 4 个就是**缩进代码块**。
+ *
+ * ## 做法
+ *
+ * 用 `DOMParser` 自己解析一遍，**只把 `body` 交给 turndown**
+ * （turndown 支持直接吃 DOM 节点，仍是同一个 clone + 空白塌缩的流程）。
+ * 顺带把 body 首尾的空白文本节点摘掉——
+ * 这一步是必要的：正文里只要有 `<img>` / `<br>`，
+ * `blankRule` 依然会放过那些空白节点。
+ *
+ * `<head>` 里只有元信息（`<meta>` / `<link>` / `<title>` / 样式表 / 条件注释），
+ * **没有正文内容**，摘掉不丢东西。
+ */
+function extractContent(html: string): HTMLElement | string {
+  // DOMParser 在浏览器与 jsdom 里都有；万一没有就退回字符串路径
+  if (typeof DOMParser === "undefined") return html;
+  try {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const body = doc.body;
+    if (!body) return html;
+    trimEdgeBlankText(body);
+    return body;
+  } catch {
+    return html;
+  }
+}
+
+/** 空白文本节点（只含空白） */
+function isBlankText(node: Node): boolean {
+  return node.nodeType === 3 && (node.textContent ?? "").trim() === "";
+}
+
+/**
+ * 摘掉元素首尾的空白文本节点。
+ *
+ * 只动**首尾**，不动中间——中间那些空白是段落之间的分隔，
+ * 由 turndown 自己的 `join` 处理。
+ */
+function trimEdgeBlankText(element: Element): void {
+  while (element.firstChild && isBlankText(element.firstChild)) {
+    element.removeChild(element.firstChild);
+  }
+  while (element.lastChild && isBlankText(element.lastChild)) {
+    element.removeChild(element.lastChild);
+  }
 }
 
 /** 测试用：重置内部缓存的 turndown 实例 */
