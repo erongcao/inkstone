@@ -429,6 +429,103 @@ describe("htmlToMarkdown：GFM 表格插件的判据漏洞", () => {
   });
 });
 
+describe("htmlToMarkdown：单元格里的块级内容", () => {
+  /*
+   * GFM 表格的单元格**只能是一行**。
+   * 而 turndown 的块级规则全都带换行——段落 `\n\n`、列表 `\n`、
+   * 引用 `\n\n> `、代码块 `\n\n```\n…\n```\n\n`。
+   *
+   * 所以单元格里只要有**任何**块级元素，整行就被拆散。
+   * 「单元格里放一个列表」的实测输出（修复前）是：
+   *
+   * ```
+   * |
+   * - x
+   * - y
+   *
+   *  | z |
+   * | --- | --- |
+   * ```
+   *
+   * 表格直接报废：第一行是空的，分隔行还跑到了数据行后面。
+   *
+   * 修法是把块级元素**换成行内元素**（不是删掉——
+   * 删掉会连行内格式一起丢掉）。
+   */
+
+  /** 每一行都必须是一整行的表格行 */
+  function expectIntactTable(md: string): void {
+    const lines = md.split("\n").filter((line) => line.trim() !== "");
+    expect(lines.length).toBeGreaterThan(0);
+    for (const line of lines) {
+      expect(line.startsWith("|"), `这一行不是表格行：${JSON.stringify(line)}`).toBe(true);
+      expect(line.endsWith("|")).toBe(true);
+    }
+  }
+
+  it("单元格里放列表，表格不散架", () => {
+    const md = htmlToMarkdown(
+      "<table><tr><td><ul><li>x</li><li>y</li></ul></td><td>z</td></tr></table>",
+    );
+
+    expectIntactTable(md);
+    expect(md).toContain("| x, y | z |");
+    expect(md).toContain("| --- | --- |");
+  });
+
+  it("列表项的行内格式保留（压平不是删掉）", () => {
+    const md = htmlToMarkdown(
+      '<table><tr><td><ul><li><b>粗</b></li><li><a href="u">链</a></li></ul></td><td>z</td></tr></table>',
+    );
+
+    expectIntactTable(md);
+    expect(md).toContain("**粗**");
+    expect(md).toContain("[链](u)");
+  });
+
+  it("中文用顿号、英文用逗号", () => {
+    const cn = htmlToMarkdown("<table><tr><td><ul><li>甲</li><li>乙</li></ul></td></tr></table>");
+    expect(cn).toContain("甲、乙");
+
+    const en = htmlToMarkdown("<table><tr><td><ul><li>a</li><li>b</li></ul></td></tr></table>");
+    expect(en).toContain("a, b");
+  });
+
+  it("嵌套列表不会把父项和子项粘成「一级二级」", () => {
+    const md = htmlToMarkdown(
+      "<table><tr><td><ul><li>一级<ul><li>二级</li></ul></li><li>另一个</li></ul></td></tr></table>",
+    );
+
+    expectIntactTable(md);
+    expect(md).toContain("一级 二级");
+    expect(md).not.toContain("一级二级");
+  });
+
+  it("单元格里是引用、代码块、标题、分隔线，都不拆行", () => {
+    const cases = [
+      "<blockquote><p>引文</p></blockquote>",
+      "<pre><code>line1\nline2</code></pre>",
+      "<h3>小标题</h3>",
+      "<p>前</p><hr><p>后</p>",
+    ];
+
+    for (const content of cases) {
+      const md = htmlToMarkdown(`<table><tr><td>${content}</td><td>z</td></tr></table>`);
+      expectIntactTable(md);
+      expect(md).toContain("| --- | --- |");
+    }
+  });
+
+  it("单元格里是嵌套表格，不拆行", () => {
+    const md = htmlToMarkdown(
+      "<table><tr><td><table><tr><td>内</td></tr></table></td><td>z</td></tr></table>",
+    );
+
+    expectIntactTable(md);
+    expect(md).toContain("内");
+  });
+});
+
 describe("handlePaste：端到端", () => {
   const views: EditorView[] = [];
 

@@ -343,7 +343,7 @@ function promoteTableHeaders(body: HTMLElement): void {
       // 是不是全是 TH，拼单元格时也按 childNodes 的**下标**决定
       // 首格要不要 `|` 前缀——混进空白节点，两头都不对。
       removeBlankTextNodes(row);
-      unwrapCellBlocks(row);
+      flattenCellBlocks(row);
     }
 
     // ── 3. 位置：行要落在 tbody 首位，tbody 要落在 table 首位 ────
@@ -378,36 +378,76 @@ function hoistCaption(table: HTMLTableElement): void {
 }
 
 /**
- * 拆掉单元格里的**块级包装**。
+ * 把单元格里的**块级内容压成行内内容**。
  *
- * GFM 表格的单元格只能是一行。Word 的单元格内容是
- * `<td><p class=MsoNormal>…</p></td>`——`<p>` 的替换规则带 `\n\n`，
- * 于是整行被拆成好几段（实测输出成一堆 `|` 和空行）。
+ * ## 为什么
  *
- * 拆法是把 `<p>` / `<div>` 这类块级包装**换成它的内容**，
- * 单元格就只剩行内元素，交给 GFM 插件自己的规则处理。
+ * GFM 表格的单元格**只能是一行**。而 turndown 的块级规则全都带换行：
+ * 段落 `\n\n`、列表 `\n`、引用 `\n\n> `、代码块 `\n\n```\n…\n```\n\n`。
+ *
+ * 所以单元格里只要有**任何**块级元素，整行就被拆散。
+ * 最常见的是 Word 的 `<p class=MsoNormal>`（实测输出一堆 `|` 和空行）；
+ * 还有「单元格里放一个列表」——实测输出成：
+ *
+ * ```
+ * |
+ * - x
+ * - y
+ *
+ *  | z |
+ * | --- | --- |
+ * ```
+ *
+ * 表格直接报废：第一行是空的，分隔行还跑到了数据行后面。
+ *
+ * ## 怎么压
+ *
+ * 把块级元素**换成行内元素**，而不是删掉——
+ * 删掉会连行内格式（粗体、链接）一起丢掉：
+ *
+ * | 元素 | 处理 |
+ * |---|---|
+ * | `<p>` / `<div>` / 标题 / 引用 | 拆开，内容提到上一层（保留行内格式） |
+ * | `<li>` | 换成 `<span>`（列表项规则会加项目符号与换行） |
+ * | `<ul>` / `<ol>` | 各项之间插分隔符，整体换成行内内容 |
+ * | `<pre>` | 换成 `<span>`，并把代码里的换行换成空格 |
+ * | `<hr>` | 删掉（单元格里没有「分隔线」这个概念） |
  *
  * 一个单元格里有**多个**段落时，它们之间补一个空格：
  * GFM 单元格没有段落概念，直接拼起来会变成「甲乙」，
  * 而 `<br>` 更不能用——导出管线的 remark-rehype 默认丢弃 html 节点，
  * 屏幕上一行、导出里没这一行，又成了两边不一致。
  */
-function unwrapCellBlocks(row: HTMLTableRowElement): void {
+function flattenCellBlocks(row: HTMLTableRowElement): void {
   for (const cell of Array.from(row.cells)) {
-    let wroteContent = false;
-    for (const block of Array.from(cell.children)) {
-      if (!BLOCK_WRAPPERS.has(block.nodeName)) continue;
-      const hasText = (block.textContent ?? "").trim() !== "";
-      if (wroteContent && hasText) {
-        cell.insertBefore(cell.ownerDocument.createTextNode(" "), block);
+    // 从**最深**的元素开始处理：外层处理时，内层已经压成行内内容了
+    const descendants = Array.from(cell.querySelectorAll("*"));
+    for (let i = descendants.length - 1; i >= 0; i--) {
+      const node = descendants[i];
+      // 处理过程中节点可能已经被移走或替换掉了
+      if (!cell.contains(node)) continue;
+      if (!BLOCK_ELEMENTS.has(node.nodeName)) continue;
+
+      switch (node.nodeName) {
+        case "HR":
+          node.remove();
+          break;
+        case "UL":
+        case "OL":
+          flattenList(node);
+          break;
+        case "LI":
+          replaceWithInline(node);
+          break;
+        case "PRE":
+          flattenCodeBlock(node);
+          break;
+        default:
+          unwrapBlock(node);
+          break;
       }
-      // 把包装里的内容提到包装的位置
-      while (block.firstChild) {
-        cell.insertBefore(block.firstChild, block);
-      }
-      cell.removeChild(block);
-      if (hasText) wroteContent = true;
     }
+
     // 单元格里的换行（`<br>` 之类）也会破坏单行假设
     for (const br of Array.from(cell.querySelectorAll("br"))) {
       br.replaceWith(cell.ownerDocument.createTextNode(" "));
@@ -415,8 +455,167 @@ function unwrapCellBlocks(row: HTMLTableRowElement): void {
   }
 }
 
-/** 单元格里的块级包装标签 */
-const BLOCK_WRAPPERS = new Set(["P", "DIV"]);
+/**
+ * turndown 内部的块级元素清单。
+ *
+ * **抄自 `turndown/lib/turndown.cjs.js` 的 `blockElements`**——
+ * 规则是「这些元素的替换结果带换行」，所以判据必须跟它一致，
+ * 自己猜一份清单就会漏。
+ */
+const BLOCK_ELEMENTS = new Set([
+  "ADDRESS",
+  "ARTICLE",
+  "ASIDE",
+  "AUDIO",
+  "BLOCKQUOTE",
+  "BODY",
+  "CANVAS",
+  "CENTER",
+  "DD",
+  "DIR",
+  "DIV",
+  "DL",
+  "DT",
+  "FIELDSET",
+  "FIGCAPTION",
+  "FIGURE",
+  "FOOTER",
+  "FORM",
+  "FRAMESET",
+  "H1",
+  "H2",
+  "H3",
+  "H4",
+  "H5",
+  "H6",
+  "HEADER",
+  "HGROUP",
+  "HR",
+  "HTML",
+  "ISINDEX",
+  "LI",
+  "MAIN",
+  "MENU",
+  "NAV",
+  "NOFRAMES",
+  "NOSCRIPT",
+  "OL",
+  "OUTPUT",
+  "P",
+  "PRE",
+  "SECTION",
+  "TABLE",
+  "TBODY",
+  "TD",
+  "TFOOT",
+  "TH",
+  "THEAD",
+  "TR",
+  "UL",
+]);
+
+/**
+ * 把一个列表压成行内内容。
+ *
+ * 列表项已经先被换成了 `<span>`（见 `flattenCellBlocks`），
+ * 所以这里只需要把各项用分隔符连起来，再把整个列表换成行内内容。
+ */
+function flattenList(list: Element): void {
+  const doc = list.ownerDocument;
+  const parts: Node[] = [];
+  for (const child of Array.from(list.childNodes)) {
+    if (isBlankText(child)) continue;
+    parts.push(child);
+  }
+  if (parts.length === 0) {
+    list.remove();
+    return;
+  }
+
+  const text = parts.map((part) => part.textContent ?? "").join("");
+  const separator = separatorFor(text);
+
+  const fragment = doc.createDocumentFragment();
+  // 列表前面已经有内容时补一个空格——
+  // 「说明：」+ 列表不能变成「说明：甲」，
+  // 嵌套列表也不能把父项和子项粘成「一级二级」。
+  if (hasContentBefore(list)) {
+    fragment.append(doc.createTextNode(" "));
+  }
+  parts.forEach((part, index) => {
+    if (index > 0) fragment.append(doc.createTextNode(separator));
+    fragment.append(part);
+  });
+  list.replaceWith(fragment);
+}
+
+/**
+ * 列表压成一行时，项与项之间的分隔符。
+ *
+ * 中文内容用顿号「、」，其余用「, 」。
+ *
+ * 为什么按内容选：中文技术写作里顿号才是列举分隔符
+ * （「支持甲、乙、丙」），硬塞一个半角逗号会看着不像中文；
+ * 而英文内容反过来——顿号在英文里几乎不用。
+ */
+function separatorFor(text: string): string {
+  return /[一-鿿]/.test(text) ? "、" : ", ";
+}
+
+/** 把块级元素换成同内容的 `<span>`（去掉块级语义，保留行内格式） */
+function replaceWithInline(node: Element): void {
+  const span = node.ownerDocument.createElement("span");
+  while (node.firstChild) span.append(node.firstChild);
+  node.replaceWith(span);
+}
+
+/**
+ * 代码块 → 行内内容。
+ *
+ * `<pre>` 换成 `<span>` 后，里面的 `<code>` 走的是**行内代码**规则
+ * （不会加换行），但代码内容里的换行还在——那照样会拆行，
+ * 所以先把文本节点里的换行换成空格。
+ */
+function flattenCodeBlock(node: Element): void {
+  for (const text of Array.from(node.querySelectorAll("*"))) {
+    for (const child of Array.from(text.childNodes)) {
+      if (child.nodeType !== 3) continue;
+      const value = child.textContent ?? "";
+      if (!value.includes("\n")) continue;
+      child.textContent = value.replace(/\s*\n\s*/g, " ");
+    }
+  }
+  replaceWithInline(node);
+}
+
+/**
+ * 拆掉块级包装：把内容提到包装的位置。
+ *
+ * 多个块之间补一个空格——GFM 单元格没有段落概念，
+ * 直接拼起来会变成「甲乙」。
+ */
+function unwrapBlock(node: Element): void {
+  const parent = node.parentNode;
+  if (!parent) return;
+  const hasText = (node.textContent ?? "").trim() !== "";
+  if (hasText && hasContentBefore(node)) {
+    parent.insertBefore(node.ownerDocument.createTextNode(" "), node);
+  }
+  while (node.firstChild) {
+    parent.insertBefore(node.firstChild, node);
+  }
+  parent.removeChild(node);
+}
+
+/** 节点之前是否已经有内容（用来判断要不要补空格） */
+function hasContentBefore(node: Node): boolean {
+  let prev = node.previousSibling;
+  while (prev) {
+    if ((prev.textContent ?? "").trim() !== "") return true;
+    prev = prev.previousSibling;
+  }
+  return false;
+}
 
 /** 删掉元素里的全部空白文本节点 */
 function removeBlankTextNodes(element: Element): void {
