@@ -37,6 +37,7 @@ import { detectPandoc, type PandocInfo } from "@/ipc/export";
 import type { ExportResult } from "@/export/service";
 import { readSettings } from "@/settings/store";
 import { t } from "@/i18n";
+import { useEscapeToClose } from "./use-escape";
 
 interface Props {
   onClose: () => void;
@@ -50,6 +51,10 @@ interface Props {
 
 export function ExportPanel({ onClose, busy, result, onRun }: Props) {
   const [pandoc, setPandoc] = useState<PandocInfo | null>(null);
+
+  // Esc 关闭——但**导出进行中不关**：
+  // 关了面板，导出结果回来就没人接了（用户以为导失败了，其实文件已生成）。
+  useEscapeToClose(onClose, busy === null);
 
   // 面板一打开就探测 pandoc——
   // 否则用户要点一下才知道自己能不能导 Word

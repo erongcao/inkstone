@@ -30,6 +30,7 @@ import { formatShortcut } from "@/shortcuts";
 import type { ExportItemSetting, ExportVariableSetting } from "@/settings/schema";
 import { AiSection } from "./AiSettingsSection";
 import { t } from "@/i18n";
+import { useEscapeToClose } from "./use-escape";
 
 interface Props {
   onClose: () => void;
@@ -45,6 +46,9 @@ interface Props {
 export function SettingsPanel({ onClose, initialSection = "appearance" }: Props) {
   const [settings, update] = useSettings();
   const [section, setSection] = useState<SettingsSectionId>(initialSection);
+
+  // Esc 关闭
+  useEscapeToClose(onClose);
 
   const patch = <K extends keyof Settings>(key: K, value: DeepPartial<Settings[K]>) =>
     update({ [key]: value } as DeepPartial<Settings>);

@@ -27,6 +27,7 @@ import {
   type InkstoneCommand,
 } from "@/editor/commands";
 import { closePalette, setPaletteQuery, usePalette } from "@/editor/palette";
+import { useEscapeToClose } from "./use-escape";
 import { getActiveEditorView } from "@/editor/active-view";
 import { formatShortcut } from "@/shortcuts";
 import { loadVaultFiles, matchVaultFiles, type VaultFile } from "@/file-tree/quick-open";
@@ -203,6 +204,17 @@ export function CommandPalette() {
       ?.scrollIntoView({ block: "nearest" });
   }, [selected]);
 
+  /**
+   * Esc 关闭。
+   *
+   * 走的是全局的 Esc 栈（`use-escape.ts`），不是本组件的 `onKeyDown`——
+   * 那个 handler 只在焦点落在面板里时才收得到事件。
+   *
+   * `enabled` 传 `open`：命令面板是**常驻挂载**的（内部管 open），
+   * 只有开着的时候才入栈；一打开就压到栈顶，Esc 归它。
+   */
+  useEscapeToClose(closePalette, open);
+
   if (!open) return null;
 
   const activate = (index: number) => {
@@ -228,11 +240,8 @@ export function CommandPalette() {
   const itemCount = mode === "file" ? fileMatches.length : flat.length;
 
   const onKeyDown = (event: React.KeyboardEvent) => {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      closePalette();
-      return;
-    }
+    // Esc 不在这里处理——全局 Esc 栈接管（见上面的 useEscapeToClose）。
+    // 两处都处理的话，一次按键会把面板关两遍。
     if (event.key === "ArrowDown") {
       event.preventDefault();
       setSelected((index) => (itemCount ? (index + 1) % itemCount : 0));

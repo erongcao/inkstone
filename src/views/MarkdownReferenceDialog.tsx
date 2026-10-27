@@ -35,6 +35,7 @@ import { t } from "@/i18n";
 import { SYNTAX_GROUPS, filterSyntaxGroups } from "@/reference/markdown-syntax";
 import { useSettings } from "@/settings/store";
 import { featuresFromSettings } from "@/parser/features";
+import { useEscapeToClose } from "./use-escape";
 
 interface Props {
   onClose: () => void;
@@ -47,6 +48,9 @@ export function MarkdownReferenceDialog({ onClose }: Props) {
     () => filterSyntaxGroups(SYNTAX_GROUPS, featuresFromSettings(settings.markdown)),
     [settings.markdown],
   );
+
+  // Esc 关闭
+  useEscapeToClose(onClose);
 
   return (
     <div

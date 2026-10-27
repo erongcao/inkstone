@@ -17,6 +17,7 @@
 
 import { t } from "@/i18n";
 import type { UpdateCheck } from "@/ipc/update";
+import { useEscapeToClose } from "./use-escape";
 
 interface Props {
   /** 检查结果；还在查的时候是 null */
@@ -34,6 +35,9 @@ interface Props {
 export function UpdateDialog({ result, error, onOpen, onClose, onRetry }: Props) {
   const hasUpdate = result?.hasUpdate ?? false;
   const noRelease = result !== null && result.latest === "";
+
+  // Esc 关闭
+  useEscapeToClose(onClose);
 
   return (
     <div

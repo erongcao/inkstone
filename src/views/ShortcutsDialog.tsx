@@ -16,6 +16,7 @@
  */
 
 import { t } from "@/i18n";
+import { useEscapeToClose } from "./use-escape";
 import {
   MENU_CHROME,
   SHORTCUTS,
@@ -84,6 +85,9 @@ function scopeLabel(scope: ShortcutScope): string {
 export function ShortcutsDialog({ onClose }: Props) {
   const platform: Platform = currentPlatform();
   const groups = buildShortcutGroups();
+
+  // Esc 关闭
+  useEscapeToClose(onClose);
 
   return (
     <div
