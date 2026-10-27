@@ -59,6 +59,39 @@ describe("HTML 导出产出完整文档", () => {
   });
 });
 
+describe("自定义 CSS：编辑器里有，导出里也要有", () => {
+  /*
+   * 用户的「附加样式」是注入到文档根节点的那张样式表。
+   * 它在编辑器里**排在所有样式之后**，能覆盖任何东西。
+   *
+   * 之前导出完全不带它——于是同一个文档，
+   * 屏幕上是一套样式、导出出来是另一套，
+   * 那是架构约束 C（「屏幕与导出必须一致」）的破口。
+   */
+  const customCss = "p { line-height: 1.8; color: #b00; }";
+
+  it("自定义 CSS 进了导出文件", () => {
+    const html = exportToHtml("# 标题", { ...base, customCss });
+    expect(html).toContain(customCss);
+  });
+
+  it("自定义 CSS 排在 <head> 最后（与编辑器一致，能覆盖任何样式）", () => {
+    const html = exportToHtml("# 标题", { ...base, customCss });
+    const styleAt = html.lastIndexOf(customCss);
+    const headEndAt = html.indexOf("</head>");
+
+    expect(styleAt).toBeGreaterThan(-1);
+    expect(styleAt).toBeLessThan(headEndAt);
+    // 它后面不该再有别的 <style>（那才是「排最后」）
+    expect(html.slice(styleAt, headEndAt)).not.toContain("<style>");
+  });
+
+  it("没有自定义 CSS 时不产生多余的空 style 标签", () => {
+    const html = exportToHtml("# 标题", base);
+    expect(html).not.toContain("<style>\n\n</style>");
+  });
+});
+
 describe("代码高亮", () => {
   it("导出的代码块带 hljs class", () => {
     const html = exportToHtml("```js\nconst a = 1;\n```", base);

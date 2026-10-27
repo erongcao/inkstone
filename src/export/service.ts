@@ -331,6 +331,8 @@ export async function exportDocument(formatId: string): Promise<ExportResult> {
         includeOutline,
         extraHead: settings.export.htmlExtraHead,
         extraBody: settings.export.htmlExtraBody,
+        // 自定义 CSS 也要进导出——编辑器里有、导出里没有就是「屏幕与导出不一致」
+        customCss: settings.appearance.customCss,
         words: index.stats.words,
         chars: index.stats.chars,
       });

@@ -50,6 +50,16 @@ export interface HtmlExportOptions {
   extraHead?: string;
   /** 追加进 `<body>` 末尾的原始 HTML */
   extraBody?: string;
+  /**
+   * 用户自定义 CSS（设置里的「附加样式」）。
+   *
+   * 与编辑器一致：**排在 `<head>` 最后**，能覆盖导出文件里的任何样式
+   * （编辑器里它也是最后注入的那张样式表）。
+   *
+   * 原样注入——这是用户自己写的 CSS、进的是用户自己的文件，
+   * 与 `extraHead` / `extraBody` 同一套信任模型。
+   */
+  customCss?: string;
   /** 正文字数（用于页脚统计） */
   words?: number;
   /** 正文字符数 */
@@ -680,7 +690,7 @@ export function exportToHtml(source: string, options: HtmlExportOptions): string
 ${buildStyles(options)}
 </style>
 ${katexCss ? `<style>\n${katexCss}\n</style>` : ""}${mathWarning}${options.extraHead ?? ""}
-</head>
+${options.customCss?.trim() ? `<style>\n${options.customCss}\n</style>\n` : ""}</head>
 <body>
 ${outline}
 <article class="inkstone-doc">

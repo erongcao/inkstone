@@ -57,6 +57,8 @@ export function buildPrintHtml(context: ExportContext): string {
     mode: settings.appearance.colorMode,
     outline: [],
     includeOutline: false,
+    // 自定义 CSS 也要进导出——编辑器里有、导出里没有就是「屏幕与导出不一致」
+    customCss: settings.appearance.customCss,
     words: context.variables.words,
     chars: context.variables.chars,
   });
