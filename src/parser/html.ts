@@ -24,6 +24,7 @@ import rehypeStringify from "rehype-stringify";
 import { parseMarkdown, type MarkdownAst, type ParseOptions } from "./markdown";
 import { resolveFeatures } from "./features";
 import { applyAlerts } from "./alerts";
+import { applyImageSizes } from "./image-size";
 import { highlightHastHandlers } from "./highlight";
 import { subSupHastHandlers } from "./subsup";
 import { rehypeMath, katexStylesheet, type HastNode } from "./rehype-math";
@@ -114,6 +115,12 @@ export function htmlFromAst(tree: MarkdownAst, options: ParseOptions = {}): stri
   if (features.githubAlerts) {
     applyAlerts(tree);
   }
+
+  // 图片尺寸（`=WxH`）也要在 mdast → hast **之前**处理：
+  // 有空格那种写法 mdast 根本认不出它是图片（只是一段文本），
+  // 不在这里换成 image 节点，导出出来就是一串字面文本；
+  // 无空格那种的 url 带着尺寸，不剥掉的话导出的图片地址是坏的。
+  applyImageSizes(tree);
 
   // 第一步：mdast → hast。
   // 注意 `runSync` 返回的是**hast 树本身**（不是 VFile）——

@@ -23,7 +23,7 @@ import { TaskCheckboxWidget } from "./task-widget";
 import { blockRenderers } from "../render/registry";
 import { findInlineMath, renderInlineMath } from "../render/inline-math";
 import { findTaskItems } from "../render/task-list";
-import { findSizedImages, stripImageSize } from "../render/image-size";
+import { findSizedImages, stripImageSize } from "@/parser/image-size";
 import { overlapsAny } from "../render/scan";
 import { findFootnotes, EMPTY_FOOTNOTES, type FootnoteModel } from "../render/footnote";
 import { FootnoteRefWidget, FootnoteDefWidget } from "./footnote-widget";

@@ -17,7 +17,9 @@ import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { history } from "@codemirror/commands";
 import { livePreview } from "@/editor/live-preview";
-import { findSizedImages, stripImageSize } from "@/editor/render/image-size";
+import { findSizedImages, stripImageSize } from "@/parser/image-size";
+import { markdownToHtml } from "@/parser/html";
+import { roundTrip } from "@/parser/markdown";
 import { renderImage } from "@/editor/live-preview/image-widget";
 
 /* ═══════════════════════════════════════════════════════════ */
@@ -217,6 +219,66 @@ describe("尺寸进到渲染层", () => {
       const view = createEditor(doc);
       view.dispatch({ selection: { anchor: doc.length } });
       expect(view.dom.querySelector(".cm-md-image")).not.toBeNull();
+    }
+  });
+});
+
+describe("导出侧：尺寸也要进 <img>（屏幕与导出必须一致）", () => {
+  /*
+   * 导出链路原本**完全没处理**这个语法，于是两种写法都出事：
+   *
+   * | 写法 | 修复前的导出结果 | 后果 |
+   * |---|---|---|
+   * | 无空格 | `<img src="a.png=200x100">` | **图片地址坏了**（去找一个真叫这个名的文件） |
+   * | 有空格 | `![图](a.png =200x100)` 一串字面文本 | **图片整个没了** |
+   *
+   * 而编辑器两种都渲染成图——那就是「屏幕与导出不一致」（架构约束 C）。
+   */
+
+  it("无空格写法：地址被剥干净，尺寸变成 width/height", () => {
+    const html = markdownToHtml("![图](a.png=200x100)");
+    expect(html).toContain('src="a.png"');
+    expect(html).toContain('width="200"');
+    expect(html).toContain('height="100"');
+    // 地址里不该再带尺寸
+    expect(html).not.toContain("a.png=200x100");
+  });
+
+  it("有空格写法：导出成图，不是字面文本", () => {
+    const html = markdownToHtml("![图](a.png =200x100)");
+    expect(html).toContain('src="a.png"');
+    expect(html).toContain('width="200"');
+    expect(html).toContain('height="100"');
+    // 关键：不能剩下字面的 Markdown 源码
+    expect(html).not.toContain("![图]");
+  });
+
+  it("只给宽度时不猜高度（否则图会拉伸变形）", () => {
+    const html = markdownToHtml("![图](a.png=200)");
+    expect(html).toContain('width="200"');
+    expect(html).not.toContain("height=");
+  });
+
+  it("图片前后的文字保留", () => {
+    const html = markdownToHtml("前面 ![图](a.png =200x100) 后面");
+    expect(html).toContain("前面");
+    expect(html).toContain("后面");
+    expect(html).toContain('src="a.png"');
+  });
+
+  it("普通图片不受影响", () => {
+    const html = markdownToHtml("![图](a.png)");
+    expect(html).toContain('src="a.png"');
+    expect(html).not.toContain("width=");
+    expect(html).not.toContain("height=");
+  });
+
+  it("往返无损：尺寸仍然留在 Markdown 源码里（红线 1）", () => {
+    // 尺寸变换只发生在「mdast → HTML」这条链路上，
+    // 放进解析层的话往返就丢了尺寸。
+    for (const source of ["![图](a.png=200x100)", "![图](a.png =200x100)"]) {
+      const out = roundTrip(source);
+      expect(out).toContain("200x100");
     }
   });
 });
