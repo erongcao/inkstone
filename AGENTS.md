@@ -3341,6 +3341,52 @@ lezer 那边也确实不产出 `Escape` 节点（实测 `InlineCode` 里没有 `
 「两条路径要公平」只是第一步——**把共同的工作排除掉**才是关键。
 （第一版正因为把装饰器重算算进了两边，才从 12 倍的余量掉到 7%。）
 
+## 第五个破口：自定义 CSS 没进导出（2026-10-28）
+
+「屏幕与导出的四个破口」那节的四个，形状都是「**同一段文字**，
+编辑器与导出给出不同的解释」。
+
+第五个不是文字的解释问题，是**样式**的问题，形状却一样：
+同一个文档，屏幕上是一套样式、导出出来是另一套。
+
+### 症状
+
+设置里的「附加样式（注入到文档根节点）」在编辑器里**生效**——
+它是最后注入的那张样式表，能覆盖任何东西。
+但导出完全不带它：
+`HtmlExportOptions` 里没有这个字段，`exportDocument` 也没传。
+
+于是「我用自定义 CSS 排的版」只存在于编辑器里，
+导出的 HTML / PDF 是**默认样式**。
+
+### 为什么单测全绿
+
+`tests/export-html.test.ts` 测的是 `exportToHtml(content, options)`——
+而 `options` 里压根没有 `customCss` 这个字段，
+测「选项有没有带上自定义 CSS」就像测「驾照上有没有驾照」。
+
+**这类破口只有走完整条链路才看得出来**：
+设置 → `exportDocument` → `exportToHtml` → 产物。
+
+### 修法
+
+- `HtmlExportOptions` 加 `customCss?: string`
+- `exportDocument`（HTML 路）与 `buildPrintHtml`（PDF 路）都传
+  `settings.appearance.customCss`
+- 注入位置：`<head>` **最后**，与编辑器一致（编辑器里它也是最后注入的）
+
+原样注入——这是用户自己写的 CSS、进的是用户自己的文件，
+与 `htmlExtraHead` / `htmlExtraBody` 同一套信任模型。
+
+### 守卫
+
+`tests/export-custom-css.test.ts`（新文件，mock 掉 `writeTextFile` 捕获产物）
+走完整条链路断言：自定义 CSS 在产物里、且排在 `<head>` 最后。
+`tests/export-html.test.ts` 里补了三条针对 `exportToHtml` 本身的断言。
+
+**这正是「设置里的参数不接到请求上，就是摆设」那条原则**
+——它最早是为 AI 面板写的，在这里同样适用。
+
 ## 「装饰器局部重建」：先量收益，再决定做不做（2026-10-27）
 
 M2 留的最后一个性能项。这轮**没有**做，原因是量完之后发现
