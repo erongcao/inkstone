@@ -40,6 +40,7 @@
 | AI 助手（改写 / 总结，预览后接受、可撤销） | ✅ M3-2 |
 | HTML / PDF / pandoc 导出（DOCX EPUB ODT RTF LaTeX…） | ✅ M4 |
 | HTML 导出保留 Markdown 里的原始 HTML（`<div>` / `<img>` / `<details>`） | ✅ M4 |
+| 题注（图题 / 表题）与自动编号（`图 1-1`，编号只活在渲染结果里） | ✅ |
 | 导出项可自定义（增删、重排、重命名、绑定快捷键） | ✅ M4 |
 | 导出变量系统、YAML front matter 覆盖导出设置 | ✅ M4 |
 | 导出的主题与排版跟屏幕上完全一致（主题令牌由 CSS 生成） | ✅ M4 |
