@@ -463,6 +463,7 @@ export const en: Record<string, string> = {
   界面语言: "Interface language",
   "留空则用文档标题。支持": "Leave empty to use the document title. Supports",
   留空即放弃: "Leave empty to cancel",
+  "留空 = 跟随主题": "Leave empty to follow the theme",
   直接导出: "Direct export",
   "相对路径 / 锚点": "Relative path / anchor",
   看不懂这个快捷键: "Can't parse this shortcut",

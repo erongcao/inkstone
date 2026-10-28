@@ -9,6 +9,7 @@
 import { useCallback, useSyncExternalStore } from "react";
 import {
   DEFAULT_SETTINGS,
+  type AppearanceSettings,
   type DeepPartial,
   type EditorSettings,
   type Settings,
@@ -21,23 +22,65 @@ const STORAGE_KEY = "inkstone.settings.v1";
  *
  * v1 → v2：`editor.autoPair`（布尔）拆成 `editor.autoPairMode`（off/basic/markdown）。
  *
+ * v2 → v3：`appearance.fontFamily` / `appearance.monoFontFamily` 的**旧默认值**
+ * 改成「空 = 跟随主题」。
+ *
  * 必须显式迁移，不能指望 `mergeSettings`：
  *   - 深合并只做「按 key 覆盖」，旧的 `autoPair` key 不会被自动删掉，
  *     残留的布尔值会和新字段一起躺在 localStorage 里；
  *   - 而且布尔值 → 字符串的语义映射（true → markdown / false → off）
  *     只有迁移层知道该怎么做。
+ *
+ * ## 为什么要迁移字体那一项
+ *
+ * 旧默认值是**具体的字体栈**，不是「没设置」。
+ * 不迁移的话：老用户存着那个栈 → 迁移后仍然是「设置过的字体」→
+ * 主题声明的字体（学术主题的衬线体）对他们依然不生效，
+ * 而新装的用户是生效的——**同一版本里两拨人表现不一样**。
+ *
+ * 判据是「**恰好等于旧默认值**」：用户自己填了那个栈算他选过，
+ * 但那与默认值无从区分，所以按「没设过」处理——
+ * 后果只是他的学术主题变回衬线体，正是这个主题本来的样子。
  */
+
+/** 旧版的正文字体默认值（迁移判据） */
+const LEGACY_FONT_FAMILY =
+  '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif';
+
+/** 旧版的等宽字体默认值（迁移判据） */
+const LEGACY_MONO_FONT_FAMILY =
+  'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace';
+
 function migratePersisted(raw: DeepPartial<Settings>): DeepPartial<Settings> {
+  let result = raw;
+
+  // v1 → v2：autoPair 布尔 → autoPairMode
   const editor = raw.editor as
     (DeepPartial<EditorSettings> & { autoPair?: unknown }) | undefined;
-  if (!editor || editor.autoPair === undefined) return raw;
-
-  const { autoPair, ...rest } = editor;
-  const migrated: DeepPartial<EditorSettings> = { ...rest };
-  if (migrated.autoPairMode === undefined) {
-    migrated.autoPairMode = autoPair === true ? "markdown" : "off";
+  if (editor && editor.autoPair !== undefined) {
+    const { autoPair, ...rest } = editor;
+    const migrated: DeepPartial<EditorSettings> = { ...rest };
+    if (migrated.autoPairMode === undefined) {
+      migrated.autoPairMode = autoPair === true ? "markdown" : "off";
+    }
+    result = { ...result, editor: migrated };
   }
-  return { ...raw, editor: migrated };
+
+  // v2 → v3：旧默认字体 → 「没设过」
+  const appearance = raw.appearance as
+    (DeepPartial<AppearanceSettings> & { fontFamily?: unknown }) | undefined;
+  if (appearance) {
+    const migrated: Partial<AppearanceSettings> = { ...appearance };
+    if (migrated.fontFamily === LEGACY_FONT_FAMILY) {
+      migrated.fontFamily = "";
+    }
+    if (migrated.monoFontFamily === LEGACY_MONO_FONT_FAMILY) {
+      migrated.monoFontFamily = "";
+    }
+    result = { ...result, appearance: migrated };
+  }
+
+  return result;
 }
 
 /** 深度合并：用 partial 覆盖 defaults，保证新增设置项在旧配置文件上也有值 */
@@ -136,7 +179,11 @@ export function resetSettings(): void {
 
 /** 在 M2 之后由 Tauri 侧调用，用磁盘上的配置覆盖内存中的配置 */
 export function hydrateSettings(persisted: DeepPartial<Settings>): void {
-  state = mergeSettings(state, persisted);
+  // 磁盘上的配置同样可能是旧版本写的，所以**必须走迁移**。
+  // 漏掉这一步的话：走 localStorage 的用户拿的是迁移后的值，
+  // 走 Tauri store 的用户拿的是迁移前的值——同一版本两套行为，
+  // 而且只在打包版里复现（开发时用的是 localStorage 那条路）。
+  state = mergeSettings(state, migratePersisted(persisted));
   persist(state);
   emit();
 }

@@ -60,9 +60,25 @@ export interface AppearanceSettings {
   theme: string;
   /** 明暗模式；auto 表示跟随系统 */
   colorMode: ColorMode;
-  /** 正文排版字体族（CSS font-family 值） */
+  /**
+   * 正文排版字体族（CSS font-family 值）。
+   *
+   * **空串 = 跟随主题**。
+   *
+   * 为什么不是「默认填一个具体值」：填了值它就会被写成 `<html>` 上的
+   * inline style，而 inline style 的优先级**高于任何样式表规则**——
+   * 主题声明的字体（学术主题的衬线体）就永远轮不到。
+   *
+   * 空串时**不写**这个 inline style，主题的字体才生效。
+   */
   fontFamily: string;
-  /** 等宽字体族 */
+  /**
+   * 等宽字体族。
+   *
+   * **空串 = 跟随主题**，理由同 `fontFamily`。
+   * 内置主题的等宽字体都一样，所以这一项实际上没有差别——
+   * 但语义上跟 `fontFamily` 保持一致，少一条「为什么这个不一样」的疑问。
+   */
   monoFontFamily: string;
   /** 正文字号（px） */
   fontSize: number;
@@ -338,10 +354,11 @@ export const DEFAULT_SETTINGS: Settings = {
   appearance: {
     theme: "inkstone-light",
     colorMode: "auto",
-    fontFamily:
-      '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif',
-    monoFontFamily:
-      'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
+    // 字体留空 = 跟随主题（见 AppearanceSettings 的说明）。
+    // 内置主题的默认字体由 `src/styles/tokens.css` 的 `:root` 提供，
+    // 学术主题的衬线体由 `src/themes/academic.css` 提供。
+    fontFamily: "",
+    monoFontFamily: "",
     fontSize: 16,
     lineHeight: 1.6,
     contentWidth: 46,

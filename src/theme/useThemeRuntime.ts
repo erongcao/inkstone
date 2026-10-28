@@ -32,6 +32,21 @@ function useSystemPrefersDark(): boolean {
 /** 供用户在设置里选择的主题 CSS 注入点 */
 const CUSTOM_STYLE_ID = "inkstone-custom-css";
 
+/**
+ * 写一个「可空」的 CSS 变量。
+ *
+ * 值为空时**移除**这个 inline 声明，
+ * 让样式表里的同名规则（主题的字体）生效——
+ * 留着空声明等于明确地告诉浏览器「这个值我说了算」。
+ */
+function setOptional(root: HTMLElement, name: string, value: string): void {
+  if (value) {
+    root.style.setProperty(name, value);
+  } else {
+    root.style.removeProperty(name);
+  }
+}
+
 export function useThemeRuntime() {
   const [settings] = useSettings();
   const systemPrefersDark = useSystemPrefersDark();
@@ -61,8 +76,17 @@ export function useThemeRuntime() {
   const appearance = settings.appearance;
   useEffect(() => {
     const root = document.documentElement;
-    root.style.setProperty("--ink-font-family", appearance.fontFamily);
-    root.style.setProperty("--ink-mono-family", appearance.monoFontFamily);
+    // 字体：**空 = 跟随主题**。
+    //
+    // 为什么不能把空值也写上去：inline style 的优先级**高于任何样式表规则**，
+    // 哪怕值是空的（`setProperty(name, "")` 是「移除」而不是「设为空」，
+    // 但写成 `var(--x)` 之类的占位就等于明确地压过主题）。
+    //
+    // 之前这里无条件写死默认字体栈，于是主题声明的字体
+    // （学术主题的衬线体）**永远轮不到**——
+    // 主题切了，配色变了，字体没变，而没人觉得奇怪。
+    setOptional(root, "--ink-font-family", appearance.fontFamily);
+    setOptional(root, "--ink-mono-family", appearance.monoFontFamily);
     root.style.setProperty("--ink-font-size", `${appearance.fontSize}px`);
     root.style.setProperty("--ink-line-height", String(appearance.lineHeight));
     root.style.setProperty("--ink-content-width", `${appearance.contentWidth}rem`);

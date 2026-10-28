@@ -168,6 +168,7 @@ function AppearanceSection({ settings, patch }: { settings: Settings; patch: Pat
         <input
           type="text"
           value={a.fontFamily}
+          placeholder={t("留空 = 跟随主题")}
           onChange={(e) => patch("appearance", { fontFamily: e.target.value })}
         />
       </label>
@@ -176,6 +177,7 @@ function AppearanceSection({ settings, patch }: { settings: Settings; patch: Pat
         <input
           type="text"
           value={a.monoFontFamily}
+          placeholder={t("留空 = 跟随主题")}
           onChange={(e) => patch("appearance", { monoFontFamily: e.target.value })}
         />
       </label>
