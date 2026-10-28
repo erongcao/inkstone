@@ -107,7 +107,12 @@ describe("原始 HTML：导出保留、剪贴板丢弃", () => {
   });
 
   it("导出：<img> 这种没有文字的也不丢", () => {
-    const html = body(exportToHtml('<div align="center">\n<img src="logo.png" width="200">\n</div>\n', base));
+    const html = body(
+      exportToHtml(
+        '<div align="center">\n<img src="logo.png" width="200">\n</div>\n',
+        base,
+      ),
+    );
 
     expect(html).toContain('<img src="logo.png" width="200">');
   });
@@ -137,7 +142,9 @@ describe("走完整导出链路：写出去的那份文件里也有原始 HTML",
   });
 
   it("导出的文件保留 <img> 这类没有文字的内容", async () => {
-    setDocumentContent('<div align="center">\n<img src="logo.png" width="200">\n</div>\n');
+    setDocumentContent(
+      '<div align="center">\n<img src="logo.png" width="200">\n</div>\n',
+    );
 
     const result = await exportDocument("html");
 

@@ -259,23 +259,23 @@ describe("未闭合豁免不连累非围栏块", () => {
 
   it("文末的表格：光标在块尾时收起（否则永远渲染不出来）", () => {
     const source = "| a |\n| --- |\n| 1 |";
-    expect(isBlockExpanded(nonFence("table", 0, source.length), source.length, source)).toBe(
-      false,
-    );
+    expect(
+      isBlockExpanded(nonFence("table", 0, source.length), source.length, source),
+    ).toBe(false);
   });
 
   it("文末的公式块：一样收起", () => {
     const source = "$$\nx = 1\n$$";
-    expect(isBlockExpanded(nonFence("math", 0, source.length), source.length, source)).toBe(
-      false,
-    );
+    expect(
+      isBlockExpanded(nonFence("math", 0, source.length), source.length, source),
+    ).toBe(false);
   });
 
   it("文末的 mermaid：一样收起", () => {
     const source = "```mermaid\ngraph TD\n  A-->B\n```";
-    expect(isBlockExpanded(nonFence("mermaid", 0, source.length), source.length, source)).toBe(
-      false,
-    );
+    expect(
+      isBlockExpanded(nonFence("mermaid", 0, source.length), source.length, source),
+    ).toBe(false);
   });
 
   it("非围栏块的光标落在块内仍然展开（原有规则没被破坏）", () => {

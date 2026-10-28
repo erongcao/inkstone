@@ -73,7 +73,12 @@ describe("检查更新对话框", () => {
   it("还没有正式发布：给发布列表页", () => {
     render(
       <UpdateDialog
-        result={{ ...base, latest: "", hasUpdate: false, url: "https://github.com/erongcao/inkstone/releases" }}
+        result={{
+          ...base,
+          latest: "",
+          hasUpdate: false,
+          url: "https://github.com/erongcao/inkstone/releases",
+        }}
         error={null}
         onOpen={() => {}}
         onClose={() => {}}

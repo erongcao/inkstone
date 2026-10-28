@@ -85,7 +85,9 @@ describe("M2 综合验收：块级渲染", () => {
     expect(table!.querySelectorAll("thead th")).toHaveLength(2);
     expect(table!.querySelectorAll("tbody tr")).toHaveLength(2);
     // 分隔行的居中对齐要落到表头那一格
-    expect((table!.querySelectorAll("thead th")[1] as HTMLElement).style.textAlign).toBe("center");
+    expect((table!.querySelectorAll("thead th")[1] as HTMLElement).style.textAlign).toBe(
+      "center",
+    );
   });
 
   it("表格上方挂着工具栏，且预置了作用位置", () => {
@@ -106,7 +108,9 @@ describe("M2 综合验收：块级渲染", () => {
     expect(pre).not.toBeNull();
     expect(pre!.textContent).toContain("answer");
     // highlight.js 的 token class
-    expect(pre!.querySelector(".hljs-keyword, .hljs-title, .hljs-variable")).not.toBeNull();
+    expect(
+      pre!.querySelector(".hljs-keyword, .hljs-title, .hljs-variable"),
+    ).not.toBeNull();
   });
 
   it("块级公式渲染成 KaTeX", () => {
@@ -193,7 +197,9 @@ describe("M2 综合验收：渲染器之间不打架", () => {
     // mermaid / 代码块 / 表格都匹配 `FencedCode` 或同一片文本，
     // 谁抢到区间错了，这里就会多出一张表
     const view = createEditor(
-      ["```", "| a | b |", "| --- | --- |", "| 1 | 2 |", "```", "", "文末哨兵。"].join("\n"),
+      ["```", "| a | b |", "| --- | --- |", "| 1 | 2 |", "```", "", "文末哨兵。"].join(
+        "\n",
+      ),
     );
     parkCursorAtEnd(view);
 
@@ -202,7 +208,9 @@ describe("M2 综合验收：渲染器之间不打架", () => {
   });
 
   it("公式块里的表格语法要让开", () => {
-    const view = createEditor(["$$", "| a | b |", "| --- | --- |", "$$", "", "文末哨兵。"].join("\n"));
+    const view = createEditor(
+      ["$$", "| a | b |", "| --- | --- |", "$$", "", "文末哨兵。"].join("\n"),
+    );
     parkCursorAtEnd(view);
 
     expect(view.dom.querySelector(".cm-md-table")).toBeNull();
@@ -250,7 +258,7 @@ describe("M2 综合验收：HTML 输出", () => {
     expect(html).toContain("<code"); // 行内代码
     expect(html).toContain("katex"); // 公式已渲染
     expect(html).toContain("<pre"); // 代码块
-    expect(html).toContain("href=\"https://inkstone.app\"");
+    expect(html).toContain('href="https://inkstone.app"');
   });
 
   it("公式在 HTML 里是渲染结果而不是裸 LaTeX", () => {

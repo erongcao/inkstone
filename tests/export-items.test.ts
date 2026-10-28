@@ -44,17 +44,11 @@ describe("导出项解析", () => {
   });
 
   it("设置为空等同于没有自定义", () => {
-    expect(resolveExportItems(undefined).length).toBe(
-      resolveExportItems([]).length,
-    );
+    expect(resolveExportItems(undefined).length).toBe(resolveExportItems([]).length);
   });
 
   it("按设置里的顺序显示", () => {
-    const items = resolveExportItems([
-      { id: "docx" },
-      { id: "html" },
-      { id: "pdf" },
-    ]);
+    const items = resolveExportItems([{ id: "docx" }, { id: "html" }, { id: "pdf" }]);
     expect(items.slice(0, 3).map((item) => item.format.id)).toEqual([
       "docx",
       "html",
@@ -63,10 +57,7 @@ describe("导出项解析", () => {
   });
 
   it("visible 为 false 的项被标记为不可见", () => {
-    const items = resolveExportItems([
-      { id: "html" },
-      { id: "docx", visible: false },
-    ]);
+    const items = resolveExportItems([{ id: "html" }, { id: "docx", visible: false }]);
     const docx = items.find((item) => item.format.id === "docx");
     expect(docx?.visible).toBe(false);
   });

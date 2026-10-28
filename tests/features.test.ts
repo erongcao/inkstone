@@ -55,8 +55,14 @@ function nodesOfType(tree: Node, type: string): Node[] {
 }
 
 /** mdast 里有某种节点吗 */
-function hasNode(source: string, type: string, features?: Partial<MarkdownFeatures>): boolean {
-  return nodesOfType(parseMarkdown(source, { features }) as unknown as Node, type).length > 0;
+function hasNode(
+  source: string,
+  type: string,
+  features?: Partial<MarkdownFeatures>,
+): boolean {
+  return (
+    nodesOfType(parseMarkdown(source, { features }) as unknown as Node, type).length > 0
+  );
 }
 
 /** lezer 语法树里有某种节点吗 */
@@ -166,7 +172,9 @@ describe("语义层（remark/mdast）：关掉开关就不再产出对应节点"
     expect(items).toHaveLength(2);
     expect((items[0] as { checked?: boolean }).checked).toBe(true);
 
-    const off = parseMarkdown(source, { features: { taskLists: false } }) as unknown as Node;
+    const off = parseMarkdown(source, {
+      features: { taskLists: false },
+    }) as unknown as Node;
     const offItems = nodesOfType(off, "listItem");
     expect(offItems).toHaveLength(2);
     expect((offItems[0] as { checked?: boolean }).checked ?? null).toBe(null);
@@ -258,15 +266,22 @@ describe("两层必须给出同一个结论（架构约束 C）", () => {
 
   for (const { source, lezerType, mdastType } of cases) {
     it(`${JSON.stringify(source)}：开与关都要一致`, () => {
-      for (const features of [undefined, { tables: false, taskLists: false, highlight: false }]) {
+      for (const features of [
+        undefined,
+        { tables: false, taskLists: false, highlight: false },
+      ]) {
         // mdast 侧：任务列表不是独立节点类型，要看 `checked` 有没有。
-        const remarkSays = mdastType === "listItem"
-          ? nodesOfType(parseMarkdown(source, { features }) as unknown as Node, "listItem").some(
-              // mdast 里 `checked` 是 `boolean | null`：
-              // 任务项是 true/false，普通列表项是 null。
-              (n) => typeof (n as { checked?: unknown }).checked === "boolean",
-            )
-          : hasNode(source, mdastType, features);
+        const remarkSays =
+          mdastType === "listItem"
+            ? nodesOfType(
+                parseMarkdown(source, { features }) as unknown as Node,
+                "listItem",
+              ).some(
+                // mdast 里 `checked` 是 `boolean | null`：
+                // 任务项是 true/false，普通列表项是 null。
+                (n) => typeof (n as { checked?: unknown }).checked === "boolean",
+              )
+            : hasNode(source, mdastType, features);
         expect(lezerHas(source, lezerType, features)).toBe(remarkSays);
       }
     });
@@ -277,7 +292,9 @@ describe("导出必须与屏幕一致", () => {
   it("表格关掉 → 导出里没有 <table>", () => {
     const source = "| a | b |\n| - | - |\n| 1 | 2 |";
     expect(markdownToHtml(source)).toContain("<table>");
-    expect(markdownToHtml(source, { features: { tables: false } })).not.toContain("<table>");
+    expect(markdownToHtml(source, { features: { tables: false } })).not.toContain(
+      "<table>",
+    );
   });
 
   it("高亮关掉 → 导出里没有 <mark>", () => {

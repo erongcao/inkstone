@@ -45,7 +45,9 @@ const tree = parser.parse(sample);
 
 function text(node: SyntaxNode): string {
   const raw = sample.slice(node.from, node.to);
-  return raw.length > 44 ? `${raw.slice(0, 44).replace(/\n/g, "\\n")}…` : raw.replace(/\n/g, "\\n");
+  return raw.length > 44
+    ? `${raw.slice(0, 44).replace(/\n/g, "\\n")}…`
+    : raw.replace(/\n/g, "\\n");
 }
 
 console.log("\n=== lezer/markdown 语法树 ===\n");

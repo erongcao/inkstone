@@ -26,7 +26,11 @@ import { renderImage } from "@/editor/live-preview/image-widget";
 
 describe("剥尺寸", () => {
   it("=200x100", () => {
-    expect(stripImageSize("a.png=200x100")).toEqual({ src: "a.png", width: 200, height: 100 });
+    expect(stripImageSize("a.png=200x100")).toEqual({
+      src: "a.png",
+      width: 200,
+      height: 100,
+    });
   });
 
   it("只给宽度时不猜高度（否则会拉伸变形）", () => {
@@ -34,7 +38,9 @@ describe("剥尺寸", () => {
   });
 
   it("路径可以带子目录", () => {
-    expect(stripImageSize("images/子目录/图.png=300x200").src).toBe("images/子目录/图.png");
+    expect(stripImageSize("images/子目录/图.png=300x200").src).toBe(
+      "images/子目录/图.png",
+    );
   });
 
   it("没有尺寸就原样返回", () => {
@@ -175,7 +181,9 @@ describe("尺寸进到渲染层", () => {
   });
 
   it("同一张图、同尺寸时 key 相同（缓存仍然生效）", () => {
-    expect(renderImage("a.png", "", 0, 100).key).toBe(renderImage("a.png", "", 0, 100).key);
+    expect(renderImage("a.png", "", 0, 100).key).toBe(
+      renderImage("a.png", "", 0, 100).key,
+    );
   });
 
   it("有空格写法：行扫描兜底也替换成 widget", () => {

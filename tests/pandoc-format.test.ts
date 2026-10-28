@@ -107,12 +107,12 @@ describe("pandoc 输入格式：映射", () => {
   it("公式开关只全关时才关掉 pandoc 的美元符号数学", () => {
     // pandoc 只有一个 tex_math_dollars 管全部美元符号公式，
     // Inkstone 有三个更细的开关——粒度不够，只能这么对齐（见 pandoc-format.ts 的说明）
-    expect(pandocInputFormat(features({ inlineMath: false, blockMath: false }))).toContain(
-      "-tex_math_dollars",
-    );
-    expect(pandocInputFormat(features({ inlineMath: false, blockMath: true }))).not.toContain(
-      "-tex_math_dollars",
-    );
+    expect(
+      pandocInputFormat(features({ inlineMath: false, blockMath: false })),
+    ).toContain("-tex_math_dollars");
+    expect(
+      pandocInputFormat(features({ inlineMath: false, blockMath: true })),
+    ).not.toContain("-tex_math_dollars");
   });
 
   it("关掉高亮 → 不带 +mark", () => {
@@ -122,7 +122,10 @@ describe("pandoc 输入格式：映射", () => {
 
 describe.skipIf(!HAS_PANDOC)("pandoc 输入格式：真 pandoc 实测", () => {
   it("默认设置下 ==高亮== 渲染成 <mark>，不是字面文本", () => {
-    const html = pandocToHtml("普通 ==高亮== 文字。", pandocInputFormat(DEFAULT_FEATURES));
+    const html = pandocToHtml(
+      "普通 ==高亮== 文字。",
+      pandocInputFormat(DEFAULT_FEATURES),
+    );
 
     expect(html).toContain("<mark>高亮</mark>");
     expect(html).not.toContain("==高亮==");
@@ -182,7 +185,10 @@ describe.skipIf(!HAS_PANDOC)("pandoc 输入格式：真 pandoc 实测", () => {
     const on = pandocToHtml(source, pandocInputFormat(DEFAULT_FEATURES));
     expect(on).toContain("<sub>");
 
-    const off = pandocToHtml(source, pandocInputFormat(features({ subscriptSuperscript: false })));
+    const off = pandocToHtml(
+      source,
+      pandocInputFormat(features({ subscriptSuperscript: false })),
+    );
     expect(off).not.toContain("<sub>");
   });
 });
@@ -193,7 +199,11 @@ describe("pandoc 输入格式：走完整导出链路", () => {
     // 只测映射函数是不够的——中间任何一环没把参数传下去，单测都照样绿。
     vi.doMock("@/ipc/export", async () => ({
       isBrowserFallback: () => false,
-      detectPandoc: async () => ({ available: true, version: "3.8", path: "/usr/bin/pandoc" }),
+      detectPandoc: async () => ({
+        available: true,
+        version: "3.8",
+        path: "/usr/bin/pandoc",
+      }),
       pickExportPath: async () => "/tmp/out.docx",
       writeTextFile: async () => {},
       convertWithPandoc: async (

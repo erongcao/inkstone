@@ -124,7 +124,9 @@ describe("应用交互", () => {
       });
     });
 
-    expect(await screen.findByRole("button", { name: "第一章" }, { timeout: 3000 })).toBeTruthy();
+    expect(
+      await screen.findByRole("button", { name: "第一章" }, { timeout: 3000 }),
+    ).toBeTruthy();
     expect(screen.getByRole("button", { name: "第二节" })).toBeTruthy();
 
     // 点击后光标应落到该标题所在行
@@ -281,7 +283,9 @@ describe("应用交互", () => {
     });
 
     const view = getEditorView();
-    const replaceInput = view.dom.querySelector<HTMLInputElement>('input[name="replace"]');
+    const replaceInput = view.dom.querySelector<HTMLInputElement>(
+      'input[name="replace"]',
+    );
     expect(replaceInput).not.toBeNull();
     expect(view.root.activeElement).toBe(replaceInput);
   });

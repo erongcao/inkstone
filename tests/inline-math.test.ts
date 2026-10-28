@@ -32,7 +32,10 @@ const corpusFiles = readdirSync(CORPUS_DIR)
   .sort();
 
 /** 用**全文** remark 解析收集 inlineMath —— 作为对拍的基准 */
-function fullDocumentInlineMath(source: string, options: ParseOptions): InlineMathMatch[] {
+function fullDocumentInlineMath(
+  source: string,
+  options: ParseOptions,
+): InlineMathMatch[] {
   const out: InlineMathMatch[] = [];
   const walk = (node: Node): void => {
     const parent = node as Parent;
@@ -66,16 +69,17 @@ function withoutBlockRanges(
   matches: InlineMathMatch[],
   blockRanges: { from: number; to: number }[],
 ): InlineMathMatch[] {
-  return matches.filter(
-    (m) => !blockRanges.some((b) => m.from < b.to && b.from < m.to),
-  );
+  return matches.filter((m) => !blockRanges.some((b) => m.from < b.to && b.from < m.to));
 }
 
 describe("对拍：逐行解析 ≡ 全文解析", () => {
   it.each(corpusFiles)("语料 %s 的行内公式位置完全一致", (file) => {
     const source = readFileSync(join(CORPUS_DIR, file), "utf8");
     const tree = parseSyntax(source);
-    const blockRanges = findMathBlocks(tree, source).map(({ from, to }) => ({ from, to }));
+    const blockRanges = findMathBlocks(tree, source).map(({ from, to }) => ({
+      from,
+      to,
+    }));
 
     for (const singleDollarTextMath of [true, false]) {
       const expected = withoutBlockRanges(
@@ -88,7 +92,9 @@ describe("对拍：逐行解析 ≡ 全文解析", () => {
         features: { inlineMathSingleDollar: singleDollarTextMath },
         blockRanges,
       });
-      expect(actual, `${file}（singleDollarTextMath=${singleDollarTextMath}）`).toEqual(expected);
+      expect(actual, `${file}（singleDollarTextMath=${singleDollarTextMath}）`).toEqual(
+        expected,
+      );
     }
   });
 
@@ -124,7 +130,10 @@ describe("对拍：逐行解析 ≡ 全文解析", () => {
 
   it.each(tricky)("%s", (_name, source) => {
     const tree = parseSyntax(source);
-    const blockRanges = findMathBlocks(tree, source).map(({ from, to }) => ({ from, to }));
+    const blockRanges = findMathBlocks(tree, source).map(({ from, to }) => ({
+      from,
+      to,
+    }));
 
     for (const singleDollarTextMath of [true, false]) {
       const expected = withoutBlockRanges(
@@ -137,7 +146,9 @@ describe("对拍：逐行解析 ≡ 全文解析", () => {
         features: { inlineMathSingleDollar: singleDollarTextMath },
         blockRanges,
       });
-      expect(actual, `${source}（singleDollarTextMath=${singleDollarTextMath}）`).toEqual(expected);
+      expect(actual, `${source}（singleDollarTextMath=${singleDollarTextMath}）`).toEqual(
+        expected,
+      );
     }
   });
 });
@@ -192,13 +203,13 @@ describe("singleDollarTextMath 开关", () => {
     const source = "价格 $5 到 $10 元";
     expect(
       findInlineMath(parseSyntax(source), source, {
-      features: { inlineMathSingleDollar: true },
-    }),
+        features: { inlineMathSingleDollar: true },
+      }),
     ).toHaveLength(1);
     expect(
       findInlineMath(parseSyntax(source), source, {
-      features: { inlineMathSingleDollar: false },
-    }),
+        features: { inlineMathSingleDollar: false },
+      }),
     ).toEqual([]);
   });
 
@@ -216,7 +227,10 @@ describe("与块级渲染器的区间互斥", () => {
   it("行首 $$x^2$$ 归块级，行内渲染让开", () => {
     const source = "$$x^2$$\n\n正文 $y$ 结束";
     const tree = parseSyntax(source);
-    const blockRanges = findMathBlocks(tree, source).map(({ from, to }) => ({ from, to }));
+    const blockRanges = findMathBlocks(tree, source).map(({ from, to }) => ({
+      from,
+      to,
+    }));
     const hits = findInlineMath(tree, source, { blockRanges });
 
     // 块级独占 [0,7)，行内只应拿到第二个公式
@@ -228,7 +242,10 @@ describe("与块级渲染器的区间互斥", () => {
   it("行中 $$…$$（不是块级）归行内渲染", () => {
     const source = "前面 $$x^2$$ 后面";
     const tree = parseSyntax(source);
-    const blockRanges = findMathBlocks(tree, source).map(({ from, to }) => ({ from, to }));
+    const blockRanges = findMathBlocks(tree, source).map(({ from, to }) => ({
+      from,
+      to,
+    }));
     expect(blockRanges).toEqual([]);
     const hits = findInlineMath(tree, source, { blockRanges });
     expect(hits).toHaveLength(1);
@@ -238,7 +255,10 @@ describe("与块级渲染器的区间互斥", () => {
   it("跨行的块级区间也会让开（逐行的 skip 只看行首，必须再兜一次底）", () => {
     const source = "$$\nx^2\n$$\n\n正文 $y$";
     const tree = parseSyntax(source);
-    const blockRanges = findMathBlocks(tree, source).map(({ from, to }) => ({ from, to }));
+    const blockRanges = findMathBlocks(tree, source).map(({ from, to }) => ({
+      from,
+      to,
+    }));
     const hits = findInlineMath(tree, source, { blockRanges });
     expect(hits.map((h) => h.tex)).toEqual(["y"]);
   });
@@ -290,7 +310,9 @@ describe("装饰器管线集成", () => {
     const source = "行内 $x^2$ 结束";
     const hit = findInlineMath(parseSyntax(source), source)[0];
     const inside = hit.from + 2;
-    expect(replacedRanges(source, inside).find((r) => r.from === hit.from)).toBeUndefined();
+    expect(
+      replacedRanges(source, inside).find((r) => r.from === hit.from),
+    ).toBeUndefined();
   });
 
   it("关掉单 $ 之后，同一份文档不再产生行内装饰器", async () => {
@@ -301,7 +323,9 @@ describe("装饰器管线集成", () => {
     });
     expect(hit).toEqual([]);
     expect(
-      replacedRanges(source, 0, { inlineMathSingleDollar: false }).find((r) => r.from === 3),
+      replacedRanges(source, 0, { inlineMathSingleDollar: false }).find(
+        (r) => r.from === 3,
+      ),
     ).toBeUndefined();
   });
 

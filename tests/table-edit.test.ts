@@ -39,12 +39,17 @@ function geometryOf(doc: string) {
 }
 
 /** 套用一次编辑，返回新文档 */
-function applyEdit(doc: string, edit: { from: number; to: number; insert: string } | null): string {
+function applyEdit(
+  doc: string,
+  edit: { from: number; to: number; insert: string } | null,
+): string {
   if (!edit) throw new Error("预期有一次编辑，实际是 null");
   return doc.slice(0, edit.from) + edit.insert + doc.slice(edit.to);
 }
 
-const SIMPLE = ["| 名称 | 说明 |", "| --- | --- |", "| 甲 | 一 |", "| 乙 | 二 |"].join("\n");
+const SIMPLE = ["| 名称 | 说明 |", "| --- | --- |", "| 甲 | 一 |", "| 乙 | 二 |"].join(
+  "\n",
+);
 
 /* ═══════════════════════════════════════════════════════════ */
 
@@ -110,7 +115,9 @@ describe("增删行", () => {
     const { doc, rows } = geometryOf(SIMPLE);
     const result = applyEdit(doc, addTableRow(doc, rows));
     expect(result).toBe(
-      ["| 名称 | 说明 |", "| --- | --- |", "| 甲 | 一 |", "| 乙 | 二 |", "|  |  |"].join("\n"),
+      ["| 名称 | 说明 |", "| --- | --- |", "| 甲 | 一 |", "| 乙 | 二 |", "|  |  |"].join(
+        "\n",
+      ),
     );
   });
 
@@ -195,7 +202,12 @@ describe("增删列", () => {
     const { doc, rows } = geometryOf(SIMPLE);
     const result = applyEdit(doc, addTableColumn(doc, rows, -1));
     expect(result).toBe(
-      ["|  | 名称 | 说明 |", "| --- | --- | --- |", "|  | 甲 | 一 |", "|  | 乙 | 二 |"].join("\n"),
+      [
+        "|  | 名称 | 说明 |",
+        "| --- | --- | --- |",
+        "|  | 甲 | 一 |",
+        "|  | 乙 | 二 |",
+      ].join("\n"),
     );
   });
 
@@ -229,15 +241,30 @@ describe("增删列", () => {
     const { doc, rows } = geometryOf(SIMPLE);
     // afterColumn = 0 → 新列成为第 1 列（在「名称」右边）
     expect(applyEdit(doc, addTableColumn(doc, rows, 0))).toBe(
-      ["| 名称 |  | 说明 |", "| --- | --- | --- |", "| 甲 |  | 一 |", "| 乙 |  | 二 |"].join("\n"),
+      [
+        "| 名称 |  | 说明 |",
+        "| --- | --- | --- |",
+        "| 甲 |  | 一 |",
+        "| 乙 |  | 二 |",
+      ].join("\n"),
     );
     // afterColumn = -1 → 新列成为第 0 列（插在最前）
     expect(applyEdit(doc, addTableColumn(doc, rows, -1))).toBe(
-      ["|  | 名称 | 说明 |", "| --- | --- | --- |", "|  | 甲 | 一 |", "|  | 乙 | 二 |"].join("\n"),
+      [
+        "|  | 名称 | 说明 |",
+        "| --- | --- | --- |",
+        "|  | 甲 | 一 |",
+        "|  | 乙 | 二 |",
+      ].join("\n"),
     );
     // afterColumn = 列数 - 1 → 追加到末尾
     expect(applyEdit(doc, addTableColumn(doc, rows, 1))).toBe(
-      ["| 名称 | 说明 |  |", "| --- | --- | --- |", "| 甲 | 一 |  |", "| 乙 | 二 |  |"].join("\n"),
+      [
+        "| 名称 | 说明 |  |",
+        "| --- | --- | --- |",
+        "| 甲 | 一 |  |",
+        "| 乙 | 二 |  |",
+      ].join("\n"),
     );
   });
 
@@ -279,9 +306,13 @@ describe("列对齐", () => {
 
   it("设左 / 右对齐", () => {
     const { doc, rows } = geometryOf(SIMPLE);
-    expect(applyEdit(doc, setTableColumnAlign(doc, rows, 1, "right"))).toContain("| --- | --: |");
+    expect(applyEdit(doc, setTableColumnAlign(doc, rows, 1, "right"))).toContain(
+      "| --- | --: |",
+    );
     const b = geometryOf(doc).rows;
-    expect(applyEdit(doc, setTableColumnAlign(doc, b, 1, "left"))).toContain("| --- | :-- |");
+    expect(applyEdit(doc, setTableColumnAlign(doc, b, 1, "left"))).toContain(
+      "| --- | :-- |",
+    );
   });
 
   it("取消对齐回到 `---`", () => {

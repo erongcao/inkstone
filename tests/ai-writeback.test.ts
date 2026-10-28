@@ -81,7 +81,9 @@ describe("接受写回", () => {
 
   it("选区落到插入内容之后，用户能接着写", () => {
     const state = makeState("这是原文段落。", 0);
-    const next = state.update(acceptWriteback({ ...PENDING, from: 2, to: 4, text: "ABC" })).state;
+    const next = state.update(
+      acceptWriteback({ ...PENDING, from: 2, to: 4, text: "ABC" }),
+    ).state;
     expect(next.selection.main.head).toBe(2 + 3);
   });
 
@@ -103,10 +105,14 @@ describe("接受写回", () => {
 
   it("连续接受两次，两次都在撤销栈里", () => {
     const state = makeState("aaa bbb ccc", 0);
-    const first = state.update(acceptWriteback({ ...PENDING, from: 0, to: 3, text: "AAA" })).state;
+    const first = state.update(
+      acceptWriteback({ ...PENDING, from: 0, to: 3, text: "AAA" }),
+    ).state;
     // 第二次要基于**上一次的结果**，不是原始状态——
     // 否则两次变更都是从同一份原文算出来的，后一次会把前一次盖掉
-    const second = first.update(acceptWriteback({ ...PENDING, from: 4, to: 7, text: "BBB" })).state;
+    const second = first.update(
+      acceptWriteback({ ...PENDING, from: 4, to: 7, text: "BBB" }),
+    ).state;
     expect(second.doc.toString()).toBe("AAA BBB ccc");
 
     let s = second;
@@ -142,7 +148,12 @@ describe("放弃写回", () => {
     // 流式输出只是往面板里追加，不碰文档——所以放弃永远是安全的
     const source = "原文内容。";
     const state = makeState(source, 0);
-    const pending: PendingWriteback = { ...PENDING, from: 0, to: source.length, original: source };
+    const pending: PendingWriteback = {
+      ...PENDING,
+      from: 0,
+      to: source.length,
+      original: source,
+    };
     // 流式过程只改 pending.text
     pending.text = "模型已经写了很长一段";
     expect(rejectWriteback()).toBeNull();

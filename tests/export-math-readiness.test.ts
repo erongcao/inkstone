@@ -59,7 +59,14 @@ function context(content: string): ExportContext {
       now: new Date(),
     },
     definitions: [],
-    format: { id: "html", label: "HTML", extension: ".html", kind: "html", description: "", builtin: true },
+    format: {
+      id: "html",
+      label: "HTML",
+      extension: ".html",
+      kind: "html",
+      description: "",
+      builtin: true,
+    },
     fileName: "probe.html",
     overrides: {},
   };

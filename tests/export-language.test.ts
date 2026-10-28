@@ -82,7 +82,10 @@ describe("导出产物的语言", () => {
     const found = html.match(CJK);
     // 报出具体是哪几个字，而不是只说「有中文」——
     // 定位失败时能一眼看出是哪个词漏翻了
-    expect(found, `产物里出现了中文：${found ? [...new Set(found)].join("") : ""}`).toBeNull();
+    expect(
+      found,
+      `产物里出现了中文：${found ? [...new Set(found)].join("") : ""}`,
+    ).toBeNull();
   });
 
   it("英文界面下，大纲标题是英文", () => {

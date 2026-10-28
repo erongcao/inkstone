@@ -70,7 +70,19 @@ function randomEdit(text: string, rand: () => number): Edit {
 
   if (kind < 0.7) {
     // 插入一段有结构的文本
-    const inserts = ["**", "~~", "==", "`code`", "](url)", "\n\n", "- ", "1. ", "# ", "> ", "```\n"];
+    const inserts = [
+      "**",
+      "~~",
+      "==",
+      "`code`",
+      "](url)",
+      "\n\n",
+      "- ",
+      "1. ",
+      "# ",
+      "> ",
+      "```\n",
+    ];
     const s = inserts[Math.floor(rand() * inserts.length)];
     return {
       newText: text.slice(0, at) + s + text.slice(at),
@@ -119,9 +131,7 @@ function loadCorpus(): string {
 console.log("\n=== @lezer/markdown 增量解析一致性验证 ===\n");
 
 const base = loadCorpus();
-console.log(
-  "语料规模：" + base.length + " 字符 / " + base.split("\n").length + " 行\n",
-);
+console.log("语料规模：" + base.length + " 字符 / " + base.split("\n").length + " 行\n");
 
 if (base.length === 0) {
   console.error("语料为空，无法验证。请检查 tests/corpus/ 与运行目录。\n");
@@ -154,8 +164,12 @@ for (const seed of [1, 42, 2026]) {
       mismatch++;
       if (!firstDiff) {
         firstDiff =
-          "  第 " + i + " 轮编辑后不一致：" + d +
-          "\n  编辑位置：" + JSON.stringify(edit.ranges);
+          "  第 " +
+          i +
+          " 轮编辑后不一致：" +
+          d +
+          "\n  编辑位置：" +
+          JSON.stringify(edit.ranges);
       }
     }
 
@@ -166,8 +180,15 @@ for (const seed of [1, 42, 2026]) {
 
   const rate = ((mismatch / ROUNDS) * 100).toFixed(1);
   console.log(
-    "  seed=" + String(seed).padEnd(5) + " " + ROUNDS + " 轮随机编辑：不一致 " +
-    mismatch + " 次（" + rate + "%）",
+    "  seed=" +
+      String(seed).padEnd(5) +
+      " " +
+      ROUNDS +
+      " 轮随机编辑：不一致 " +
+      mismatch +
+      " 次（" +
+      rate +
+      "%）",
   );
   if (firstDiff) console.log(firstDiff);
 }
@@ -190,7 +211,13 @@ function bench(label: string, iterations: number, fn: () => void) {
   const p50 = samples[Math.floor(samples.length * 0.5)];
   const p95 = samples[Math.floor(samples.length * 0.95)];
   console.log(
-    "    " + label.padEnd(30) + " p50=" + p50.toFixed(2) + "ms  p95=" + p95.toFixed(2) + "ms",
+    "    " +
+      label.padEnd(30) +
+      " p50=" +
+      p50.toFixed(2) +
+      "ms  p95=" +
+      p95.toFixed(2) +
+      "ms",
   );
 }
 

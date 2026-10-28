@@ -120,24 +120,37 @@ describe("htmlToMarkdown：HTML → Markdown", () => {
   });
 
   it("行内样式表达的上下标（Word / Google Docs 的另一种写法）", () => {
-    expect(htmlToMarkdown('<p>H<span style="vertical-align: sub">2</span>O</p>')).toBe("H~2~O");
-    expect(htmlToMarkdown('<p>x<span style="vertical-align: super">2</span></p>')).toBe("x^2^");
+    expect(htmlToMarkdown('<p>H<span style="vertical-align: sub">2</span>O</p>')).toBe(
+      "H~2~O",
+    );
+    expect(htmlToMarkdown('<p>x<span style="vertical-align: super">2</span></p>')).toBe(
+      "x^2^",
+    );
     // `text-position` 是 CSS2 的写法（LibreOffice 用它）
-    expect(htmlToMarkdown('<p>x<span style="text-position: super">2</span></p>')).toBe("x^2^");
+    expect(htmlToMarkdown('<p>x<span style="text-position: super">2</span></p>')).toBe(
+      "x^2^",
+    );
     // 认不出来的内容不转
-    expect(htmlToMarkdown('<p><span style="vertical-align: sub">a b</span></p>')).toBe("a b");
+    expect(htmlToMarkdown('<p><span style="vertical-align: sub">a b</span></p>')).toBe(
+      "a b",
+    );
     // 别的 vertical-align 值不是上下标
-    expect(htmlToMarkdown('<p><span style="vertical-align: middle">x</span></p>')).toBe("x");
+    expect(htmlToMarkdown('<p><span style="vertical-align: middle">x</span></p>')).toBe(
+      "x",
+    );
   });
 
   it("既是粗体又是上标时不转（转了会变成一对比看得见的星号）", () => {
     expect(
-      htmlToMarkdown('<p><span style="font-weight:bold; vertical-align: super">x</span></p>'),
+      htmlToMarkdown(
+        '<p><span style="font-weight:bold; vertical-align: super">x</span></p>',
+      ),
     ).toBe("**x**");
   });
 
   it("表格转成 GFM 表格", () => {
-    const html = "<table><thead><tr><th>列一</th><th>列二</th></tr></thead><tbody><tr><td>甲</td><td>乙</td></tr></tbody></table>";
+    const html =
+      "<table><thead><tr><th>列一</th><th>列二</th></tr></thead><tbody><tr><td>甲</td><td>乙</td></tr></tbody></table>";
     const md = htmlToMarkdown(html);
     expect(md).toContain("| 列一 | 列二 |");
     expect(md).toContain("| --- | --- |");
@@ -167,19 +180,25 @@ describe("htmlToMarkdown：样式净化", () => {
   });
 
   it("剥掉表单控件", () => {
-    const md = htmlToMarkdown("<form><input value='x'><button>确定</button></form><p>正文</p>");
+    const md = htmlToMarkdown(
+      "<form><input value='x'><button>确定</button></form><p>正文</p>",
+    );
     expect(md).toBe("正文");
   });
 
   it("识别行内样式里的加粗（Word / Google Docs 导出的形式）", () => {
-    expect(htmlToMarkdown('<p><span style="font-weight:bold">粗体</span></p>')).toBe("**粗体**");
+    expect(htmlToMarkdown('<p><span style="font-weight:bold">粗体</span></p>')).toBe(
+      "**粗体**",
+    );
   });
 
   it("识别行内样式里的斜体与删除线", () => {
-    expect(htmlToMarkdown('<p><span style="font-style:italic">斜体</span></p>')).toBe("*斜体*");
-    expect(htmlToMarkdown('<p><span style="text-decoration:line-through">删掉</span></p>')).toBe(
-      "~~删掉~~",
+    expect(htmlToMarkdown('<p><span style="font-style:italic">斜体</span></p>')).toBe(
+      "*斜体*",
     );
+    expect(
+      htmlToMarkdown('<p><span style="text-decoration:line-through">删掉</span></p>'),
+    ).toBe("~~删掉~~");
   });
 
   it("普通的 span 样式不产生多余标记", () => {
@@ -243,7 +262,7 @@ describe("htmlToMarkdown：Word 导出的整份 HTML", () => {
     const html = [
       "<html><head>",
       '<meta http-equiv="Content-Type" content="text/html; charset=utf-8">',
-      '<meta name=ProgId content=Word.Document>',
+      "<meta name=ProgId content=Word.Document>",
       '<link rel=File-List href="file:///C:/Temp/word/clip_filelist.xml">',
       "<title>文档标题</title>",
       "</head>",
@@ -458,7 +477,9 @@ describe("htmlToMarkdown：单元格里的块级内容", () => {
     const lines = md.split("\n").filter((line) => line.trim() !== "");
     expect(lines.length).toBeGreaterThan(0);
     for (const line of lines) {
-      expect(line.startsWith("|"), `这一行不是表格行：${JSON.stringify(line)}`).toBe(true);
+      expect(line.startsWith("|"), `这一行不是表格行：${JSON.stringify(line)}`).toBe(
+        true,
+      );
       expect(line.endsWith("|")).toBe(true);
     }
   }
@@ -484,10 +505,14 @@ describe("htmlToMarkdown：单元格里的块级内容", () => {
   });
 
   it("中文用顿号、英文用逗号", () => {
-    const cn = htmlToMarkdown("<table><tr><td><ul><li>甲</li><li>乙</li></ul></td></tr></table>");
+    const cn = htmlToMarkdown(
+      "<table><tr><td><ul><li>甲</li><li>乙</li></ul></td></tr></table>",
+    );
     expect(cn).toContain("甲、乙");
 
-    const en = htmlToMarkdown("<table><tr><td><ul><li>a</li><li>b</li></ul></td></tr></table>");
+    const en = htmlToMarkdown(
+      "<table><tr><td><ul><li>a</li><li>b</li></ul></td></tr></table>",
+    );
     expect(en).toContain("a, b");
   });
 

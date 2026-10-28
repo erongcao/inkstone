@@ -79,17 +79,25 @@ describe("解析选项必须透传（红线 3：解析规则唯一）", () => {
     // 于是用户关掉单 `$` 之后，屏幕上不是公式、复制出去却是。
     const source = "价格 $5 和 $6";
     expect(markdownToHtml(source)).toContain("katex");
-    expect(markdownToHtml(source, { features: { inlineMathSingleDollar: false } })).not.toContain("katex");
+    expect(
+      markdownToHtml(source, { features: { inlineMathSingleDollar: false } }),
+    ).not.toContain("katex");
   });
 
   it("开着单 $ 时两边都当公式", () => {
-    expect(markdownToHtml("$x$", { features: { inlineMathSingleDollar: true } })).toContain("katex");
+    expect(
+      markdownToHtml("$x$", { features: { inlineMathSingleDollar: true } }),
+    ).toContain("katex");
   });
 
   it("双 $$ 不受单 $ 开关影响（两种设置下都是公式）", () => {
     const source = "$$x^2$$";
-    expect(markdownToHtml(source, { features: { inlineMathSingleDollar: false } })).toContain("katex");
-    expect(markdownToHtml(source, { features: { inlineMathSingleDollar: true } })).toContain("katex");
+    expect(
+      markdownToHtml(source, { features: { inlineMathSingleDollar: false } }),
+    ).toContain("katex");
+    expect(
+      markdownToHtml(source, { features: { inlineMathSingleDollar: true } }),
+    ).toContain("katex");
   });
 });
 

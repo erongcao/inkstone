@@ -1370,6 +1370,26 @@ cd src-tauri && cargo fmt --check && cargo clippy --all-targets
 | `gen:shortcuts --check` | 改了注册表忘了重新生成 `shortcuts.json` → 菜单加速键与前端不一致 |
 | `cargo fmt` / `clippy` | Rust 侧格式与 lint |
 
+### 闸门的**覆盖范围**也是闸门的一部分
+
+一道只扫了一半文件的闸门，给的是**假安全感**。
+
+`format:check` 原本只扫 `src/**`——`tests/`（72 个文件里 46 个不合规）、
+`scripts/`（7 个）、根配置文件全在闸门外。
+`lint` 原本只扫 `src tests`，`scripts/` 也在外面。
+
+现在两道的范围都补齐了（`src` / `tests` / `scripts` / 根配置），
+并把不合规的文件统一排过一遍。
+
+**判据**：闸门声称拦的是什么，就该覆盖**全部**会漂移的地方。
+「格式漂移」这个说法覆盖不到测试文件——测试文件一样会漂移，
+而漂移的测试文件读起来更难 review。
+
+> 注意：glob 要写成**多个带引号的模式**（`"src/**/*.{ts,tsx,css}" "tests/**/*..."`），
+> 不要用 `{src,tests,scripts}/**` 这种花括号——
+> 花括号展开是 **bash** 的能力，而 CI 的 Ubuntu 上 `/bin/sh` 是 dash，
+> 不支持展开，闸门会静默地什么都不检查。
+
 ### round-trip 测试是本项目最重要的质量基建
 
 `tests/corpus/` 里每个语料文件都要满足：

@@ -219,7 +219,13 @@ describe("崩溃恢复快照", () => {
 describe("恢复检查", () => {
   /** 写一份会话快照 */
   function writeSession(
-    tabs: { id: string; path: string | null; title: string; content: string; savedContent: string }[],
+    tabs: {
+      id: string;
+      path: string | null;
+      title: string;
+      content: string;
+      savedContent: string;
+    }[],
     activeId = tabs[0]?.id ?? "",
   ) {
     writeDraft({ tabs, activeId, savedAt: Date.now() });

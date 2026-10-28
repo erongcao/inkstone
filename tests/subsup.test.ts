@@ -58,7 +58,9 @@ function remarkHas(source: string, type: string): boolean {
 function lezerHas(source: string, nodeType: string, parser?: unknown): boolean {
   let found = false;
   const tree = parser
-    ? (parser as { parse: (s: string) => { iterate: (spec: unknown) => void } }).parse(source)
+    ? (parser as { parse: (s: string) => { iterate: (spec: unknown) => void } }).parse(
+        source,
+      )
     : parseSyntax(source);
   tree.iterate({
     enter: (ref: { node: { type: { name: string } } }) => {
@@ -355,7 +357,8 @@ describe("下标 / 上标：Live Preview 装饰器", () => {
   /** 把装饰器集合摊平成可断言的数组 */
   function collect(doc: string, cursor: number) {
     const set = buildLivePreviewDecorations(doc, cursor, "live", parseSyntax(doc));
-    const out: { from: number; to: number; kind: "replace" | "mark"; cls?: string }[] = [];
+    const out: { from: number; to: number; kind: "replace" | "mark"; cls?: string }[] =
+      [];
     const it = set.iter();
     while (it.value !== null) {
       const spec = it.value.spec as { widget?: unknown; class?: string };
@@ -406,7 +409,9 @@ describe("下标 / 上标：Live Preview 装饰器", () => {
   });
 
   it("普通文本不产生下标装饰", () => {
-    const marks = collect("普通文本", 4).filter((d) => d.cls?.includes("cm-md-subscript"));
+    const marks = collect("普通文本", 4).filter((d) =>
+      d.cls?.includes("cm-md-subscript"),
+    );
     expect(marks).toEqual([]);
   });
 });

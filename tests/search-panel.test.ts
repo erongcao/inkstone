@@ -51,9 +51,8 @@ describe("查找 / 替换面板接线", () => {
   it("openFindPanel 把焦点落在查找框上", () => {
     const view = createEditor();
     openFindPanel(view);
-    const searchInput = panelOf(view)?.querySelector<HTMLInputElement>(
-      'input[name="search"]',
-    );
+    const searchInput =
+      panelOf(view)?.querySelector<HTMLInputElement>('input[name="search"]');
     expect(searchInput).not.toBeNull();
     expect(view.root.activeElement).toBe(searchInput);
     view.destroy();
@@ -72,9 +71,8 @@ describe("查找 / 替换面板接线", () => {
     const replaceInput = panelOf(view)?.querySelector<HTMLInputElement>(
       'input[name="replace"]',
     );
-    const searchInput = panelOf(view)?.querySelector<HTMLInputElement>(
-      'input[name="search"]',
-    );
+    const searchInput =
+      panelOf(view)?.querySelector<HTMLInputElement>('input[name="search"]');
     expect(replaceInput).not.toBeNull();
     expect(view.root.activeElement).toBe(replaceInput);
     expect(view.root.activeElement).not.toBe(searchInput);

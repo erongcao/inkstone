@@ -43,7 +43,11 @@ const DOC = [
   "结尾段落。",
 ].join("\n");
 
-function slice(source: string, cursor: number, kind: Parameters<typeof sliceContext>[0]["kind"]) {
+function slice(
+  source: string,
+  cursor: number,
+  kind: Parameters<typeof sliceContext>[0]["kind"],
+) {
   return sliceContext({ source, cursor, kind });
 }
 
@@ -62,7 +66,12 @@ describe("切片：选区", () => {
 
   it("选区全是空白时返回 null", () => {
     expect(
-      sliceContext({ source: "abc   def", cursor: 3, selection: { from: 3, to: 6 }, kind: "selection" }),
+      sliceContext({
+        source: "abc   def",
+        cursor: 3,
+        selection: { from: 3, to: 6 },
+        kind: "selection",
+      }),
     ).toBeNull();
   });
 
@@ -137,7 +146,9 @@ describe("上下文降级", () => {
     // 显式给一个比段落短的门槛，才能验证「够长」这条分支
     const got = resolveContext({ source: DOC, cursor: at, kind: "paragraph" }, 10);
     expect(got?.kind).toBe("paragraph");
-    expect(got?.text).toBe("小节甲的第一段，内容足够长以便通过最小长度门槛判断逻辑是否生效。");
+    expect(got?.text).toBe(
+      "小节甲的第一段，内容足够长以便通过最小长度门槛判断逻辑是否生效。",
+    );
   });
 
   it("段落太短就自动扩到章节（避免拿一句话去改写）", () => {
@@ -163,7 +174,13 @@ describe("上下文降级", () => {
 });
 
 describe("动作构造", () => {
-  const ctx: ContextSlice = { kind: "paragraph", from: 0, to: 5, text: "原始文字", title: "章节甲" };
+  const ctx: ContextSlice = {
+    kind: "paragraph",
+    from: 0,
+    to: 5,
+    text: "原始文字",
+    title: "章节甲",
+  };
 
   it("改写请求带上 system 与章节标题", () => {
     const req = buildRewriteRequest("polish", ctx, "你是写作助手");
@@ -186,7 +203,10 @@ describe("动作构造", () => {
   it("五种改写与四种总结都有中文标签", () => {
     expect(Object.keys(REWRITE_LABELS)).toHaveLength(5);
     expect(Object.keys(SUMMARIZE_LABELS)).toHaveLength(4);
-    for (const label of [...Object.values(REWRITE_LABELS), ...Object.values(SUMMARIZE_LABELS)]) {
+    for (const label of [
+      ...Object.values(REWRITE_LABELS),
+      ...Object.values(SUMMARIZE_LABELS),
+    ]) {
       expect(label).toMatch(/[一-龥]/);
     }
   });

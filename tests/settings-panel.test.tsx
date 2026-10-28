@@ -35,13 +35,14 @@ function markdownToggles(container: HTMLElement): {
   disabled: boolean;
   note: string | null;
 }[] {
-  const section = Array.from(container.querySelectorAll(".settings-group")).find((node) =>
-    node.querySelector("h3")?.textContent === "Markdown",
+  const section = Array.from(container.querySelectorAll(".settings-group")).find(
+    (node) => node.querySelector("h3")?.textContent === "Markdown",
   );
   if (!section) return [];
   return Array.from(section.querySelectorAll("label.field")).map((label) => ({
     label: label.querySelector("span")?.textContent ?? "",
-    disabled: (label.querySelector("input") as HTMLInputElement | null)?.disabled ?? false,
+    disabled:
+      (label.querySelector("input") as HTMLInputElement | null)?.disabled ?? false,
     note: label.querySelector(".field__note")?.textContent ?? null,
   }));
 }
@@ -57,19 +58,25 @@ describe("设置面板：Markdown 分区", () => {
   });
 
   it("13 个开关一个不少", () => {
-    const { container } = render(<SettingsPanel onClose={() => {}} initialSection="markdown" />);
+    const { container } = render(
+      <SettingsPanel onClose={() => {}} initialSection="markdown" />,
+    );
     expect(markdownToggles(container)).toHaveLength(13);
   });
 
   it("还没做的那个开关是置灰的", () => {
-    const { container } = render(<SettingsPanel onClose={() => {}} initialSection="markdown" />);
+    const { container } = render(
+      <SettingsPanel onClose={() => {}} initialSection="markdown" />,
+    );
     const toggles = markdownToggles(container);
     const pending = toggles.filter((t) => t.disabled).map((t) => t.label);
     expect(pending).toEqual(["公式自动编号"]);
   });
 
   it("置灰的开关写明了原因（不是默默点不动）", () => {
-    const { container } = render(<SettingsPanel onClose={() => {}} initialSection="markdown" />);
+    const { container } = render(
+      <SettingsPanel onClose={() => {}} initialSection="markdown" />,
+    );
     const pending = markdownToggles(container).filter((t) => t.disabled);
     for (const item of pending) {
       expect(item.note, `${item.label} 没有写原因`).toBeTruthy();
@@ -78,7 +85,9 @@ describe("设置面板：Markdown 分区", () => {
   });
 
   it("真正接了线的开关都是可点的", () => {
-    const { container } = render(<SettingsPanel onClose={() => {}} initialSection="markdown" />);
+    const { container } = render(
+      <SettingsPanel onClose={() => {}} initialSection="markdown" />,
+    );
     const enabled = markdownToggles(container)
       .filter((t) => !t.disabled)
       .map((t) => t.label);
@@ -95,7 +104,9 @@ describe("设置面板：Markdown 分区", () => {
   });
 
   it("置灰的开关不写原因提示（只有「还没做的」才写）", () => {
-    const { container } = render(<SettingsPanel onClose={() => {}} initialSection="markdown" />);
+    const { container } = render(
+      <SettingsPanel onClose={() => {}} initialSection="markdown" />,
+    );
     const withNote = markdownToggles(container).filter((t) => t.note !== null);
     expect(withNote.every((t) => t.disabled)).toBe(true);
   });

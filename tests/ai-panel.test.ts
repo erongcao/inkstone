@@ -109,7 +109,9 @@ beforeAll(async () => {
 });
 
 beforeEach(() => {
-  updateSettings({ ai: { enabled: true, defaultEndpointId: "minimax-cn", defaultModel: "" } });
+  updateSettings({
+    ai: { enabled: true, defaultEndpointId: "minimax-cn", defaultModel: "" },
+  });
 });
 
 afterEach(() => {
@@ -155,9 +157,12 @@ describe("上下文切片", () => {
   });
 
   it("没有选区时降级到段落 / 章节", () => {
-    fixture = setupEditor("# 标题\n\n这是一个足够长的段落，用来触发段落级的上下文切片。", {
-      cursor: 12,
-    });
+    fixture = setupEditor(
+      "# 标题\n\n这是一个足够长的段落，用来触发段落级的上下文切片。",
+      {
+        cursor: 12,
+      },
+    );
     openAiPanel("rewrite");
     const label = getAiPanelState().contextLabel;
     expect(label).toMatch(/当前段落|章节/);

@@ -43,12 +43,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import {
-  MENU_ACTION_IDS,
-  MENU_CHROME,
-  SHORTCUTS,
-  toAccelerator,
-} from "../src/shortcuts";
+import { MENU_ACTION_IDS, MENU_CHROME, SHORTCUTS, toAccelerator } from "../src/shortcuts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const OUTPUT = resolve(here, "../src-tauri/shortcuts.json");
@@ -63,7 +58,12 @@ const OUTPUT = resolve(here, "../src-tauri/shortcuts.json");
  *
  * 这一条是「替换」从 ⌘H 改成 ⌃H 的原因。
  */
-const MACOS_RESERVED = new Set(["CmdOrCtrl+H", "CmdOrCtrl+Q", "CmdOrCtrl+W", "CmdOrCtrl+M"]);
+const MACOS_RESERVED = new Set([
+  "CmdOrCtrl+H",
+  "CmdOrCtrl+Q",
+  "CmdOrCtrl+W",
+  "CmdOrCtrl+M",
+]);
 
 /** 收集注册表里所有带加速键的条目 */
 function collect(): { actionId: string; accelerator: string }[] {
@@ -164,5 +164,7 @@ if (process.argv.includes("--check")) {
 } else {
   writeFileSync(OUTPUT, content, "utf-8");
   const count = Object.keys(JSON.parse(content).accelerators).length;
-  console.log(`✅ 已生成 ${OUTPUT}（${MENU_ACTION_IDS.length} 个动作 / ${count} 个加速键）`);
+  console.log(
+    `✅ 已生成 ${OUTPUT}（${MENU_ACTION_IDS.length} 个动作 / ${count} 个加速键）`,
+  );
 }

@@ -62,7 +62,9 @@ describe("大纲：与 mdast 对拍", () => {
     expect(index.outline).toHaveLength(2);
     for (const item of index.outline) {
       // 跳到 from 应该正好落在该标题行
-      expect(source.slice(item.from, item.to).split("\n")[0]).toContain(item.text.replace(/[*`]/g, ""));
+      expect(source.slice(item.from, item.to).split("\n")[0]).toContain(
+        item.text.replace(/[*`]/g, ""),
+      );
     }
   });
 

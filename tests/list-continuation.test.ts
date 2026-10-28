@@ -63,12 +63,16 @@ function pressEnter(doc: string, cursor: number): string | null {
 
 /** 在光标处模拟按 Tab */
 function pressTab(doc: string, cursor: number): string | null {
-  return withView(doc, cursor, (view) => (indentListItem(view) ? view.state.doc.toString() : null));
+  return withView(doc, cursor, (view) =>
+    indentListItem(view) ? view.state.doc.toString() : null,
+  );
 }
 
 /** 在光标处模拟按 Shift-Tab */
 function pressShiftTab(doc: string, cursor: number): string | null {
-  return withView(doc, cursor, (view) => (outdentListItem(view) ? view.state.doc.toString() : null));
+  return withView(doc, cursor, (view) =>
+    outdentListItem(view) ? view.state.doc.toString() : null,
+  );
 }
 
 describe("列表上下文识别", () => {
@@ -133,7 +137,9 @@ describe("回车续行：无序列表", () => {
   });
 
   it("缩进原样带过去（嵌套不打平）", () => {
-    expect(pressEnter("1. 一\n   - 嵌套项", "1. 一\n   - 嵌套项".length)).toBe("1. 一\n   - 嵌套项\n   - ");
+    expect(pressEnter("1. 一\n   - 嵌套项", "1. 一\n   - 嵌套项".length)).toBe(
+      "1. 一\n   - 嵌套项\n   - ",
+    );
   });
 });
 
@@ -165,11 +171,15 @@ describe("回车续行：任务列表", () => {
   });
 
   it("**已勾选的续出未勾选的**——勾选状态不传染", () => {
-    expect(pressEnter("- [x] 已完成", "- [x] 已完成".length)).toBe("- [x] 已完成\n- [ ] ");
+    expect(pressEnter("- [x] 已完成", "- [x] 已完成".length)).toBe(
+      "- [x] 已完成\n- [ ] ",
+    );
   });
 
   it("有序任务列表同样不传染", () => {
-    expect(pressEnter("1. [x] 已完成", "1. [x] 已完成".length)).toBe("1. [x] 已完成\n2. [ ] ");
+    expect(pressEnter("1. [x] 已完成", "1. [x] 已完成".length)).toBe(
+      "1. [x] 已完成\n2. [ ] ",
+    );
   });
 });
 

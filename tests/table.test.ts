@@ -28,7 +28,9 @@ type Align = "left" | "center" | "right" | null;
  *   强行去拼文本只会让测试去纠结「转义保留」和「两端空白」这些
  *   与契约无关的细节。单元格**内容**的正确性由下面的渲染用例单独保证。
  */
-function remarkTables(source: string): { from: number; to: number; align: Align[]; cols: number[] }[] {
+function remarkTables(
+  source: string,
+): { from: number; to: number; align: Align[]; cols: number[] }[] {
   const out: { from: number; to: number; align: Align[]; cols: number[] }[] = [];
   const walk = (node: Node): void => {
     const parent = node as Parent;
@@ -160,7 +162,10 @@ describe("与其它渲染器的区间互斥", () => {
     // lezer 不认数学，所以这不是 lezer 的禁区；
     // 必须靠 blockRanges（块级渲染器已占用的区间）让开
     const tree = parseSyntax(source);
-    const blockRanges = findMathBlocks(tree, source).map(({ from, to }) => ({ from, to }));
+    const blockRanges = findMathBlocks(tree, source).map(({ from, to }) => ({
+      from,
+      to,
+    }));
     expect(findTables(tree, source, { blockRanges })).toEqual([]);
     // 不给 blockRanges 时它确实会被误判——这就是该参数存在的理由
     expect(findTables(tree, source).length).toBeGreaterThan(0);
@@ -171,6 +176,8 @@ describe("与其它渲染器的区间互斥", () => {
     registerBlockRenderer(codeBlockRenderer);
     registerBlockRenderer(mathBlockRenderer);
     registerBlockRenderer(tableRenderer);
-    expect(() => findTables(parseSyntax("| a |\n| --- |\n| 1 |"), "| a |\n| --- |\n| 1 |")).not.toThrow();
+    expect(() =>
+      findTables(parseSyntax("| a |\n| --- |\n| 1 |"), "| a |\n| --- |\n| 1 |"),
+    ).not.toThrow();
   });
 });

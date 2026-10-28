@@ -46,9 +46,7 @@ function sourceFiles(dir: string): string[] {
 
 /** 去掉注释——否则文档里的示例代码会被当成真的调用点 */
 function stripComments(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/(^|[^:"'\\])\/\/[^\n]*/g, "$1");
+  return source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'\\])\/\/[^\n]*/g, "$1");
 }
 
 const ALL_SOURCE = sourceFiles(SRC_DIR)
@@ -217,11 +215,13 @@ describe("t() 的回退与插值", () => {
   it("插值替换占位符", () => {
     resetSettings();
     updateSettings({ general: { language: "en" } });
-    expect(t("{hits} 处匹配 · 扫了 {files} 个文件 · {ms} ms", {
-      hits: 3,
-      files: 2,
-      ms: 17,
-    })).toContain("3");
+    expect(
+      t("{hits} 处匹配 · 扫了 {files} 个文件 · {ms} ms", {
+        hits: 3,
+        files: 2,
+        ms: 17,
+      }),
+    ).toContain("3");
   });
 
   it("语言一变，t() 立刻跟着变（不重启、不刷新）", () => {

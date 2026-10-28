@@ -42,12 +42,7 @@ function blockRanges(
   source: string,
   cursor: number,
 ): { from: number; to: number; block: boolean }[] {
-  const set = buildLivePreviewDecorations(
-    source,
-    cursor,
-    "live",
-    parseSyntax(source),
-  );
+  const set = buildLivePreviewDecorations(source, cursor, "live", parseSyntax(source));
   const out: { from: number; to: number; block: boolean }[] = [];
   const it = set.iter();
   while (it.value !== null) {
@@ -141,7 +136,10 @@ describe("块级渲染的展开判定", () => {
     const block = ranges.find((r) => r.block);
     expect(block).toBeDefined();
     expect(block!.from).toBe(DOC.indexOf("```js"));
-    expect(block!.to).toBe(DOC.indexOf("```js") + "```js\nfunction greet(name) {\n  return name;\n}\n```".length);
+    expect(block!.to).toBe(
+      DOC.indexOf("```js") +
+        "```js\nfunction greet(name) {\n  return name;\n}\n```".length,
+    );
   });
 
   it("光标在块内 → 显示源码（不替换）", () => {

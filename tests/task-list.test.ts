@@ -167,7 +167,10 @@ describe("点击勾选框真的改写文档（走 EditorState，不靠 DOM）", 
    */
   function makeView(source: string) {
     // 带 history() 才能验证「改动天然进撤销栈」
-    let state = EditorState.create({ doc: source, extensions: [livePreviewField, history()] });
+    let state = EditorState.create({
+      doc: source,
+      extensions: [livePreviewField, history()],
+    });
     const view = {
       get state() {
         return state;

@@ -105,12 +105,18 @@ describe("界面级漏译", () => {
     // 导入时定型成英文，之后 `t("Outline")` 查不到译文 —— 任何语言下都是英文。
     updateSettings({ general: { language: "en" } });
     render(<App />);
-    const english = new Set(visibleText().map((text) => text.trim()).filter(Boolean));
+    const english = new Set(
+      visibleText()
+        .map((text) => text.trim())
+        .filter(Boolean),
+    );
 
     cleanup();
     updateSettings({ general: { language: "zh-TW" } });
     render(<App />);
-    const traditional = visibleText().map((text) => text.trim()).filter(Boolean);
+    const traditional = visibleText()
+      .map((text) => text.trim())
+      .filter(Boolean);
 
     // 这些本来就不该翻译：产品名、格式名、语言名
     const ALLOWED = new Set([
@@ -128,10 +134,7 @@ describe("界面级漏译", () => {
     const untranslated = [
       ...new Set(
         traditional.filter(
-          (text) =>
-            /[A-Za-z]/.test(text) &&
-            english.has(text) &&
-            !ALLOWED.has(text),
+          (text) => /[A-Za-z]/.test(text) && english.has(text) && !ALLOWED.has(text),
         ),
       ),
     ];

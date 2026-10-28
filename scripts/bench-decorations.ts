@@ -46,7 +46,13 @@ function bench(label: string, iterations: number, fn: () => void) {
   const p50 = samples[Math.floor(samples.length * 0.5)];
   const p95 = samples[Math.floor(samples.length * 0.95)];
   console.log(
-    "    " + label.padEnd(34) + " p50=" + p50.toFixed(2) + "ms  p95=" + p95.toFixed(2) + "ms",
+    "    " +
+      label.padEnd(34) +
+      " p50=" +
+      p50.toFixed(2) +
+      "ms  p95=" +
+      p95.toFixed(2) +
+      "ms",
   );
   return p50;
 }
@@ -99,8 +105,13 @@ for (const lines of [500, 1500, 4000, 8000]) {
   });
 
   console.log(
-    "\n【" + lines + " 行 / " + (Buffer.byteLength(doc) / 1024).toFixed(0) + " KB / " +
-    nodeCount + " 个语法节点】",
+    "\n【" +
+      lines +
+      " 行 / " +
+      (Buffer.byteLength(doc) / 1024).toFixed(0) +
+      " KB / " +
+      nodeCount +
+      " 个语法节点】",
   );
 
   // 1. 取字符串

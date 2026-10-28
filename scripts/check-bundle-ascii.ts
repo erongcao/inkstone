@@ -117,7 +117,9 @@ const problems: string[] = [];
 for (const [path, value] of checks) {
   const bad = unencodable(value);
   if (bad.length > 0) {
-    problems.push(`${path}: ${JSON.stringify(value)} —— 含 1252 装不下的字符 ${bad.join(" ")}`);
+    problems.push(
+      `${path}: ${JSON.stringify(value)} —— 含 1252 装不下的字符 ${bad.join(" ")}`,
+    );
   }
 }
 

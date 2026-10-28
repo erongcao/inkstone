@@ -120,7 +120,10 @@ function expectOutlineLanding(doc: string, expectCount?: number): void {
 
   for (const entry of entries) {
     const hit = headings.find((h) => h.id === entry.href);
-    expect(hit, `大纲项「${entry.text}」的锚点 ${entry.href} 在正文里不存在`).toBeTruthy();
+    expect(
+      hit,
+      `大纲项「${entry.text}」的锚点 ${entry.href} 在正文里不存在`,
+    ).toBeTruthy();
     expect(
       hit?.level,
       `大纲项「${entry.text}」落到了另一个层级的标题上（${hit?.level}）`,
@@ -163,10 +166,7 @@ describe("导出的大纲：链接落到对应的标题", () => {
   });
 
   it("锚点 id 不重复", () => {
-    const html = exportToHtml(
-      "# 一\n\n## 二\n\n### 三\n\n> # 四\n\n- # 五\n",
-      base,
-    );
+    const html = exportToHtml("# 一\n\n## 二\n\n### 三\n\n> # 四\n\n- # 五\n", base);
     const ids = [...html.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]);
     expect(ids.length).toBeGreaterThan(0);
     expect(new Set(ids).size, `锚点 id 重复了：${ids.join(", ")}`).toBe(ids.length);

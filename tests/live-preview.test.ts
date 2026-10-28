@@ -153,7 +153,9 @@ describe("Live Preview 装饰器", () => {
 
   it("带标题的链接：data-href 只取网址，不含标题", () => {
     const doc = '[文字](https://a.com "标题")';
-    expect(markAttrs(doc, doc.length, "cm-md-link")[0]["data-href"]).toBe("https://a.com");
+    expect(markAttrs(doc, doc.length, "cm-md-link")[0]["data-href"]).toBe(
+      "https://a.com",
+    );
   });
 
   it("引用式链接没有 URL 节点 → 不挂属性（而不是挂一个空的）", () => {
@@ -230,7 +232,11 @@ describe("Live Preview 装饰器", () => {
 
 describe("标记符显示策略", () => {
   /** 取指定模式下的替换装饰（隐藏标记）区间 */
-  function replaced(doc: string, cursor: number, mode: MarkerDisplayMode): [number, number][] {
+  function replaced(
+    doc: string,
+    cursor: number,
+    mode: MarkerDisplayMode,
+  ): [number, number][] {
     return collect(doc, cursor, mode)
       .filter((d) => d.kind === "replace")
       .map((d) => [d.from, d.to] as [number, number]);
@@ -257,14 +263,20 @@ describe("标记符显示策略", () => {
   it("弱化模式下光标位置不影响标记显隐", () => {
     const doc = "**粗体**";
     // 光标在结构内
-    expect(collect(doc, 3, "dimmed").filter((d) => d.cls === "cm-md-marker")).toHaveLength(2);
+    expect(
+      collect(doc, 3, "dimmed").filter((d) => d.cls === "cm-md-marker"),
+    ).toHaveLength(2);
     // 光标在结构外
-    expect(collect(doc, 0, "dimmed").filter((d) => d.cls === "cm-md-marker")).toHaveLength(2);
+    expect(
+      collect(doc, 0, "dimmed").filter((d) => d.cls === "cm-md-marker"),
+    ).toHaveLength(2);
   });
 
   it("弱化模式同样处理链接的括号与网址", () => {
     const doc = "[文字](https://a.com) 后";
-    const dimmed = collect(doc, doc.length, "dimmed").filter((d) => d.cls === "cm-md-marker");
+    const dimmed = collect(doc, doc.length, "dimmed").filter(
+      (d) => d.cls === "cm-md-marker",
+    );
     // `[`、`]`、`(`、`)`、URL —— 5 段
     expect(dimmed).toHaveLength(5);
     expect(replaced(doc, doc.length, "dimmed")).toEqual([]);
@@ -292,10 +304,13 @@ describe("Live Preview 与撤销栈", () => {
       }),
       parent: host,
     });
-    return { view, dispose: () => {
-      view.destroy();
-      host.remove();
-    } };
+    return {
+      view,
+      dispose: () => {
+        view.destroy();
+        host.remove();
+      },
+    };
   }
 
   /** 当前状态下被隐藏的标记区间 */
@@ -320,7 +335,10 @@ describe("Live Preview 与撤销栈", () => {
     ]);
 
     // 删掉整个加粗结构 → 不再有标记可隐藏
-    view.dispatch({ changes: { from: 0, to: 6, insert: "" }, userEvent: "delete.backward" });
+    view.dispatch({
+      changes: { from: 0, to: 6, insert: "" },
+      userEvent: "delete.backward",
+    });
     expect(view.state.doc.toString()).toBe(" 后");
     expect(hiddenRanges(view)).toEqual([]);
 

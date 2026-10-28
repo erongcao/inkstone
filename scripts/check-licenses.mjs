@@ -319,7 +319,9 @@ function main() {
 
   // 已审阅的弱 copyleft 例外：单独一节，永远打印，绝不静默
   if (acknowledgedHits.length > 0) {
-    console.log(`\n⚠️  已登记的弱 copyleft 例外 ${acknowledgedHits.length} 条（已签字接受，仍每次打印）：`);
+    console.log(
+      `\n⚠️  已登记的弱 copyleft 例外 ${acknowledgedHits.length} 条（已签字接受，仍每次打印）：`,
+    );
     for (const dep of acknowledgedHits) {
       console.log(`  ⚠ ${dep.name} — ${dep.license}`);
       console.log(`     理由：${dep.reason}`);

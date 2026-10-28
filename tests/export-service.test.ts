@@ -7,7 +7,12 @@
 
 import { describe, expect, it, beforeEach } from "vitest";
 import { parseMarkdown } from "@/parser/markdown";
-import { deriveTitle, exportDocument, prepareExport, sanitizeFileName } from "@/export/service";
+import {
+  deriveTitle,
+  exportDocument,
+  prepareExport,
+  sanitizeFileName,
+} from "@/export/service";
 import { findExportFormat, suggestFileName } from "@/export/registry";
 import { isBrowserFallback } from "@/ipc/export";
 import { updateSettings, resetSettings } from "@/settings/store";
@@ -55,7 +60,7 @@ describe("导出项注册表", () => {
   });
 
   it("建议文件名清掉非法字符", () => {
-    expect(suggestFileName('a:b*c?', ".html")).toBe("a_b_c_.html");
+    expect(suggestFileName("a:b*c?", ".html")).toBe("a_b_c_.html");
   });
 
   it("空标题退回未命名", () => {
@@ -66,9 +71,13 @@ describe("导出项注册表", () => {
 describe("标题推导", () => {
   it("front matter 的 title 优先", () => {
     const tree = parseMarkdown("---\ntitle: 元数据标题\n---\n\n# 正文标题");
-    expect(deriveTitle(tree.children.length ? { title: "元数据标题" } : {}, "# 正文标题", null)).toBe(
-      "元数据标题",
-    );
+    expect(
+      deriveTitle(
+        tree.children.length ? { title: "元数据标题" } : {},
+        "# 正文标题",
+        null,
+      ),
+    ).toBe("元数据标题");
   });
 
   it("没有 front matter 时用第一个一级标题", () => {

@@ -72,7 +72,8 @@ if (!Range.prototype.getClientRects) {
   };
 }
 if (!Range.prototype.getBoundingClientRect) {
-  Range.prototype.getBoundingClientRect = emptyRect as unknown as Range["getBoundingClientRect"];
+  Range.prototype.getBoundingClientRect =
+    emptyRect as unknown as Range["getBoundingClientRect"];
 }
 
 /**

@@ -49,8 +49,12 @@ describe("变量求值", () => {
   });
 
   it("路径变量给出目录", () => {
-    expect(resolveVariable({ name: "p", source: "path" }, ctx())).toBe("/Users/me/笔记/笔记.md");
-    expect(resolveVariable({ name: "d", source: "directory" }, ctx())).toBe("/Users/me/笔记");
+    expect(resolveVariable({ name: "p", source: "path" }, ctx())).toBe(
+      "/Users/me/笔记/笔记.md",
+    );
+    expect(resolveVariable({ name: "d", source: "directory" }, ctx())).toBe(
+      "/Users/me/笔记",
+    );
   });
 
   it("未命名文档的路径变量是空串而不是 null", () => {

@@ -117,7 +117,8 @@ function fieldPaths(value: unknown, prefix = ""): string[] {
   return Object.entries(value as Record<string, unknown>).flatMap(([key, child]) => {
     const path = prefix ? `${prefix}.${key}` : key;
     // 叶子：布尔 / 字符串 / 数字 / 数组
-    if (child === null || typeof child !== "object" || Array.isArray(child)) return [path];
+    if (child === null || typeof child !== "object" || Array.isArray(child))
+      return [path];
     return fieldPaths(child, path);
   });
 }
@@ -187,7 +188,9 @@ describe("设置面板：登记为「还没接线」的开关确实是禁用的"
       fireEvent.click(tab);
 
       const boxes = Array.from(
-        document.querySelectorAll<HTMLInputElement>("input[type=checkbox][data-setting-key]"),
+        document.querySelectorAll<HTMLInputElement>(
+          "input[type=checkbox][data-setting-key]",
+        ),
       );
       for (const box of boxes) {
         const key = box.dataset.settingKey!;

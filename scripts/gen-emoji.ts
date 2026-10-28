@@ -60,7 +60,9 @@ function build(): void {
     .sort((a, b) => (a.glyph < b.glyph ? -1 : a.glyph > b.glyph ? 1 : 0));
 
   const rows = entries
-    .map((e) => `  [${JSON.stringify(e.glyph)}, ${JSON.stringify(e.keywords.join(" "))}],`)
+    .map(
+      (e) => `  [${JSON.stringify(e.glyph)}, ${JSON.stringify(e.keywords.join(" "))}],`,
+    )
     .join("\n");
 
   const header = `/**

@@ -18,7 +18,11 @@ import {
   type EndpointConfig,
 } from "@/ai/provider";
 import { openAICompatible, joinUrl } from "@/ai/providers/openai-compatible";
-import { anthropic, ANTHROPIC_VERSION, DEFAULT_MAX_TOKENS } from "@/ai/providers/anthropic";
+import {
+  anthropic,
+  ANTHROPIC_VERSION,
+  DEFAULT_MAX_TOKENS,
+} from "@/ai/providers/anthropic";
 import { gemini } from "@/ai/providers/gemini";
 import { providerFor } from "@/ai/chat";
 import { BUILTIN_ENDPOINTS, BILLING_LABELS } from "@/ai/endpoints";
@@ -45,13 +49,17 @@ describe("URL 拼装", () => {
   });
 
   it("OpenAI 兼容走 /chat/completions", () => {
-    expect(openAICompatible.endpointUrl(cfg())).toBe("https://example.invalid/v1/chat/completions");
+    expect(openAICompatible.endpointUrl(cfg())).toBe(
+      "https://example.invalid/v1/chat/completions",
+    );
   });
 
   it("Anthropic 走 /v1/messages", () => {
-    expect(anthropic.endpointUrl(cfg({ protocol: "anthropic", baseUrl: "https://api.anthropic.com" }))).toBe(
-      "https://api.anthropic.com/v1/messages",
-    );
+    expect(
+      anthropic.endpointUrl(
+        cfg({ protocol: "anthropic", baseUrl: "https://api.anthropic.com" }),
+      ),
+    ).toBe("https://api.anthropic.com/v1/messages");
   });
 
   it("Gemini 把模型名放进路径并带 alt=sse", () => {
@@ -64,7 +72,9 @@ describe("URL 拼装", () => {
   });
 
   it("Gemini 的模型名要做 URL 编码", () => {
-    const url = gemini.endpointUrl(cfg({ protocol: "gemini", baseUrl: "https://g.test", model: "models/x y" }));
+    const url = gemini.endpointUrl(
+      cfg({ protocol: "gemini", baseUrl: "https://g.test", model: "models/x y" }),
+    );
     expect(url).toContain("models%2Fx%20y");
   });
 });
@@ -72,7 +82,10 @@ describe("URL 拼装", () => {
 describe("OpenAI 兼容编解码", () => {
   it("system 是 messages 里的一条", () => {
     const body = JSON.parse(
-      openAICompatible.encodeBody({ system: "你是助手", messages: [{ role: "user", content: "你好" }] }, cfg()),
+      openAICompatible.encodeBody(
+        { system: "你是助手", messages: [{ role: "user", content: "你好" }] },
+        cfg(),
+      ),
     );
     expect(body.messages[0]).toEqual({ role: "system", content: "你是助手" });
     expect(body.messages[1]).toEqual({ role: "user", content: "你好" });
@@ -98,7 +111,9 @@ describe("OpenAI 兼容编解码", () => {
   });
 
   it("解析 choices[0].delta.content", () => {
-    expect(openAICompatible.decodeDelta('{"choices":[{"delta":{"content":"你好"}}]}')).toBe("你好");
+    expect(
+      openAICompatible.decodeDelta('{"choices":[{"delta":{"content":"你好"}}]}'),
+    ).toBe("你好");
   });
 
   it("心跳 / 非 JSON 负载返回空串而不是抛错", () => {
@@ -107,14 +122,19 @@ describe("OpenAI 兼容编解码", () => {
   });
 
   it("usage-only 的负载没有文本增量", () => {
-    expect(openAICompatible.decodeDelta('{"choices":[{"delta":{},"finish_reason":"stop"}]}')).toBe("");
+    expect(
+      openAICompatible.decodeDelta('{"choices":[{"delta":{},"finish_reason":"stop"}]}'),
+    ).toBe("");
   });
 });
 
 describe("Anthropic 编解码", () => {
   it("system 是独立字段，不进 messages", () => {
     const body = JSON.parse(
-      anthropic.encodeBody({ system: "你是助手", messages: [{ role: "user", content: "你好" }] }, cfg({ protocol: "anthropic" })),
+      anthropic.encodeBody(
+        { system: "你是助手", messages: [{ role: "user", content: "你好" }] },
+        cfg({ protocol: "anthropic" }),
+      ),
     );
     expect(body.system).toBe("你是助手");
     expect(body.messages).toEqual([{ role: "user", content: "你好" }]);
@@ -129,7 +149,9 @@ describe("Anthropic 编解码", () => {
 
   it("带 anthropic-version 头，且它不进 auth（不是密钥）", () => {
     const c = cfg({ protocol: "anthropic" });
-    expect(anthropic.extraHeaders?.(c)).toEqual({ "anthropic-version": ANTHROPIC_VERSION });
+    expect(anthropic.extraHeaders?.(c)).toEqual({
+      "anthropic-version": ANTHROPIC_VERSION,
+    });
     const auth = anthropic.auth(c);
     expect(auth.kind).toBe("header");
     expect(auth.header).toBe("x-api-key");
@@ -137,14 +159,21 @@ describe("Anthropic 编解码", () => {
   });
 
   it("只从 content_block_delta 取文本", () => {
-    expect(anthropic.decodeDelta('{"type":"content_block_delta","delta":{"text":"片段"}}')).toBe("片段");
+    expect(
+      anthropic.decodeDelta('{"type":"content_block_delta","delta":{"text":"片段"}}'),
+    ).toBe("片段");
     expect(anthropic.decodeDelta('{"type":"message_start","message":{}}')).toBe("");
-    expect(anthropic.decodeDelta('{"type":"message_delta","usage":{"output_tokens":5}}')).toBe("");
+    expect(
+      anthropic.decodeDelta('{"type":"message_delta","usage":{"output_tokens":5}}'),
+    ).toBe("");
   });
 
   it("thinking 开关映射成 type: enabled/disabled", () => {
     const body = JSON.parse(
-      anthropic.encodeBody({ messages: [], reasoning: true }, cfg({ protocol: "anthropic" })),
+      anthropic.encodeBody(
+        { messages: [], reasoning: true },
+        cfg({ protocol: "anthropic" }),
+      ),
     );
     expect(body.thinking).toEqual({ type: "enabled" });
   });
@@ -154,7 +183,12 @@ describe("Gemini 编解码", () => {
   it("assistant 映射成 model", () => {
     const body = JSON.parse(
       gemini.encodeBody(
-        { messages: [{ role: "user", content: "问" }, { role: "assistant", content: "答" }] },
+        {
+          messages: [
+            { role: "user", content: "问" },
+            { role: "assistant", content: "答" },
+          ],
+        },
         cfg({ protocol: "gemini" }),
       ),
     );
@@ -164,27 +198,37 @@ describe("Gemini 编解码", () => {
 
   it("system 包成 systemInstruction.parts", () => {
     const body = JSON.parse(
-      gemini.encodeBody({ system: "你是助手", messages: [] }, cfg({ protocol: "gemini" })),
+      gemini.encodeBody(
+        { system: "你是助手", messages: [] },
+        cfg({ protocol: "gemini" }),
+      ),
     );
     expect(body.systemInstruction).toEqual({ parts: [{ text: "你是助手" }] });
   });
 
   it("采样参数进 generationConfig 且 maxTokens 改名 maxOutputTokens", () => {
     const body = JSON.parse(
-      gemini.encodeBody({ messages: [], temperature: 0.3, maxTokens: 100 }, cfg({ protocol: "gemini" })),
+      gemini.encodeBody(
+        { messages: [], temperature: 0.3, maxTokens: 100 },
+        cfg({ protocol: "gemini" }),
+      ),
     );
     expect(body.generationConfig.temperature).toBe(0.3);
     expect(body.generationConfig.maxOutputTokens).toBe(100);
   });
 
   it("没有采样参数时不应出现空的 generationConfig", () => {
-    const body = JSON.parse(gemini.encodeBody({ messages: [] }, cfg({ protocol: "gemini" })));
+    const body = JSON.parse(
+      gemini.encodeBody({ messages: [] }, cfg({ protocol: "gemini" })),
+    );
     expect(body).not.toHaveProperty("generationConfig");
   });
 
   it("一次增量可能带多个 part，要拼起来", () => {
     expect(
-      gemini.decodeDelta('{"candidates":[{"content":{"parts":[{"text":"甲"},{"text":"乙"}]}}]}'),
+      gemini.decodeDelta(
+        '{"candidates":[{"content":{"parts":[{"text":"甲"},{"text":"乙"}]}}]}',
+      ),
     ).toBe("甲乙");
   });
 
@@ -229,7 +273,11 @@ describe("端点预设", () => {
   });
 
   it("计费标签三种都有中文名", () => {
-    expect(Object.keys(BILLING_LABELS).sort()).toEqual(["local-free", "pay-per-token", "subscription"]);
+    expect(Object.keys(BILLING_LABELS).sort()).toEqual([
+      "local-free",
+      "pay-per-token",
+      "subscription",
+    ]);
   });
 
   it("移除 temperature 的模型，预设里能力位是关的", () => {

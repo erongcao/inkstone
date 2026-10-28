@@ -194,7 +194,11 @@ describe("行内包裹", () => {
     select(view, 0, 5);
     toggleWrap(view, "**", "文字");
     expect(doc(view)).toBe("**hello**");
-    expect(view.state.sliceDoc(...Object.values(view.state.selection.main).slice(0, 2) as [number, number]));
+    expect(
+      view.state.sliceDoc(
+        ...(Object.values(view.state.selection.main).slice(0, 2) as [number, number]),
+      ),
+    );
   });
 
   it("空选区时用占位文字，光标停在开标记之后（可以直接改占位内容）", () => {
@@ -216,9 +220,9 @@ describe("行内包裹", () => {
     toggleWrap(view, "**", "文字");
     toggleWrap(view, "**", "文字");
     expect(doc(view)).toBe("hello");
-    expect(view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to)).toBe(
-      "hello",
-    );
+    expect(
+      view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to),
+    ).toBe("hello");
   });
 
   it("多字符标记（==）的拆包裹", () => {
@@ -348,9 +352,9 @@ describe("两侧插入", () => {
     select(view, 0, 2);
     insertAround(view, "[", "](url)", "链接文字");
     expect(doc(view)).toBe("[文字](url)");
-    expect(view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to)).toBe(
-      "文字",
-    );
+    expect(
+      view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to),
+    ).toBe("文字");
   });
 
   it("空选区时用占位文字", () => {
@@ -451,10 +455,7 @@ describe("意图总线", () => {
       runCommand("view.focus-mode", createEditor());
       // 注意：发出去的**意图**是 view.toggle-focus-mode，
       // 与命令 id（view.focus-mode）是两回事——意图描述的是「要做什么」
-      expect(seen).toEqual([
-        { type: "view.source" },
-        { type: "view.toggle-focus-mode" },
-      ]);
+      expect(seen).toEqual([{ type: "view.source" }, { type: "view.toggle-focus-mode" }]);
     } finally {
       off();
     }

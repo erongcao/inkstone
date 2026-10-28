@@ -133,9 +133,9 @@ describe("语法速查表：界面", () => {
     );
     expect(titles).toEqual(groups.map((group) => group.name));
 
-    const samples = Array.from(container.querySelectorAll(".syntax-reference__sample")).map(
-      (node) => node.textContent ?? "",
-    );
+    const samples = Array.from(
+      container.querySelectorAll(".syntax-reference__sample"),
+    ).map((node) => node.textContent ?? "");
     expect(samples).toEqual(groups.flatMap((group) => group.samples.map((s) => s.text)));
   });
 

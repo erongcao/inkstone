@@ -184,8 +184,6 @@ describe("粘贴为纯文本", () => {
   it("未置位时按常规逻辑处理", () => {
     const view = createEditor();
     expect(isPlainTextPasteArmed(view.state)).toBe(false);
-    expect(
-      handlePaste(view, fakeEvent({ "text/plain": "abc" })),
-    ).toBe(true);
+    expect(handlePaste(view, fakeEvent({ "text/plain": "abc" }))).toBe(true);
   });
 });

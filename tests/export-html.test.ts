@@ -38,7 +38,10 @@ describe("HTML 导出产出完整文档", () => {
   });
 
   it("标题里的特殊字符被转义", () => {
-    const html = exportToHtml("# 正文", { ...base, title: '<script>alert("x")</script>' });
+    const html = exportToHtml("# 正文", {
+      ...base,
+      title: '<script>alert("x")</script>',
+    });
     // 不能让标题把 <script> 注入到 <title> 里
     expect(html).not.toContain("<script>alert");
     expect(html).toContain("&lt;script&gt;");
@@ -127,7 +130,8 @@ describe("代码高亮", () => {
   });
 
   it("高亮函数不会破坏非代码块", () => {
-    const input = '<p>普通段落</p><pre><code class="language-js">const a = 1;</code></pre>';
+    const input =
+      '<p>普通段落</p><pre><code class="language-js">const a = 1;</code></pre>';
     const output = highlightCodeBlocks(input);
     expect(output).toContain("<p>普通段落</p>");
     expect(output).toContain("hljs");
@@ -135,7 +139,7 @@ describe("代码高亮", () => {
 
   it("行内代码不被当成代码块处理", () => {
     // 行内 code 不是 <pre>，正则不该匹配到它
-    const input = '<p>用 <code>const</code> 声明</p>';
+    const input = "<p>用 <code>const</code> 声明</p>";
     expect(highlightCodeBlocks(input)).toBe(input);
   });
 });
@@ -169,7 +173,10 @@ describe("公式", () => {
     // 那是对的（读屏软件需要）；但正文里不该再出现一份裸 LaTeX
     const body = /<article[\s\S]*?<\/article>/.exec(html)?.[0] ?? "";
     // 去掉 MathML 之后再找裸 LaTeX
-    const withoutMathml = body.replace(/<span class="katex-mathml">[\s\S]*?<\/span><\/span>/g, "");
+    const withoutMathml = body.replace(
+      /<span class="katex-mathml">[\s\S]*?<\/span><\/span>/g,
+      "",
+    );
     expect(withoutMathml).not.toContain("∫");
     expect(withoutMathml).not.toContain("mc^2");
   });

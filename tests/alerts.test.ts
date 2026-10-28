@@ -170,7 +170,9 @@ describe("导出：提示块变成带样式的 div", () => {
   });
 
   it("开关关掉 → 就是普通引用块", () => {
-    const html = markdownToHtml("> [!NOTE]\n> 内容", { features: { githubAlerts: false } });
+    const html = markdownToHtml("> [!NOTE]\n> 内容", {
+      features: { githubAlerts: false },
+    });
     expect(html).not.toContain("markdown-alert");
     expect(html).toContain("<blockquote>");
   });

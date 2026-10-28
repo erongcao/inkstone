@@ -19,7 +19,9 @@ import { codeBlockRenderer } from "@/editor/render/code-block";
 import { registerBlockRenderer, clearBlockRenderers } from "@/editor/render/registry";
 import { ensureMathRenderer, renderMathSync } from "@/editor/render/math-loader";
 
-const DOC = ["前文段落。", "", "$$", "x^2 + y^2 = z^2", "$$", "", "后文段落。"].join("\n");
+const DOC = ["前文段落。", "", "$$", "x^2 + y^2 = z^2", "$$", "", "后文段落。"].join(
+  "\n",
+);
 
 /** 收集装饰器里「块级替换」的部分 */
 function blockRanges(source: string, cursor: number) {
@@ -105,7 +107,12 @@ describe("公式块定位", () => {
   });
 
   it("文档里没有 $$ 时走快筛，零匹配", () => {
-    expect(findMathBlocks(parseSyntax("只有普通 Markdown。\n\n第二段。"), "只有普通 Markdown。\n\n第二段。")).toHaveLength(0);
+    expect(
+      findMathBlocks(
+        parseSyntax("只有普通 Markdown。\n\n第二段。"),
+        "只有普通 Markdown。\n\n第二段。",
+      ),
+    ).toHaveLength(0);
   });
 
   it("行首最多允许 3 个空格", () => {
@@ -116,9 +123,14 @@ describe("公式块定位", () => {
   });
 
   it("剥掉公共缩进，但保留行内的相对缩进（LaTeX 对齐环境靠它）", () => {
-    const plain = ["$$", "\\begin{align}", "y = a &= b \\\\", "z   &= c", "\\end{align}", "$$"].join(
-      "\n",
-    );
+    const plain = [
+      "$$",
+      "\\begin{align}",
+      "y = a &= b \\\\",
+      "z   &= c",
+      "\\end{align}",
+      "$$",
+    ].join("\n");
     expect(findMathBlocks(parseSyntax(plain), plain)[0].content).toBe(
       "\\begin{align}\ny = a &= b \\\\\nz   &= c\n\\end{align}",
     );
