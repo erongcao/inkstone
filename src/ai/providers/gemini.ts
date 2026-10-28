@@ -31,6 +31,12 @@ export const gemini: ChatProvider = {
     );
   },
 
+  modelsUrl(cfg) {
+    // `GET /v1beta/models`——与上面同一个版本前缀，只是把末尾的
+    // `{模型名}:streamGenerateContent` 换成目录本身。
+    return joinUrl(cfg.baseUrl, "v1beta/models");
+  },
+
   encodeBody(req, cfg) {
     const body: Record<string, unknown> = {
       contents: req.messages.map((m) => ({

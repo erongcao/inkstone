@@ -423,6 +423,16 @@ export const en: Record<string, string> = {
   "模型 ID": "Model ID",
   "模型正在思考「{action}」…": "The model is thinking about “{action}”…",
   "模型没有返回任何内容。": "The model returned nothing.",
+  获取模型列表: "Fetch model list",
+  "正在获取模型列表…": "Fetching model list…",
+  从列表中选择: "Choose from the list",
+  "— 选择模型 —": "— Choose a model —",
+  "该端点返回的不是 JSON —— 多数服务并不提供「列出模型」接口。":
+    "The endpoint didn't return JSON — most services don't provide a model-listing endpoint.",
+  "该端点没有返回模型列表。": "The endpoint didn't return a model list.",
+  "该端点返回了空的模型列表。": "The endpoint returned an empty model list.",
+  "浏览器开发模式拿不到系统钥匙串里的密钥，只能列本机推理服务（Ollama / LM Studio / vLLM）的模型。":
+    "Browser dev mode can't read the key from the system keychain, so only local inference servers (Ollama / LM Studio / vLLM) can be listed.",
   正则表达式无效: "Invalid regular expression",
   "正在分析文档结构…": "Analyzing the document structure…",
   "正在检查…": "Checking…",

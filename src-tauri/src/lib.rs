@@ -70,6 +70,7 @@ pub fn run() {
             ai::secrets::ai_delete_secret,
             ai::http::ai_stream_chat,
             ai::http::ai_cancel_stream,
+            ai::http::ai_list_models,
             update::latest_release,
         ])
         .build(tauri::generate_context!())

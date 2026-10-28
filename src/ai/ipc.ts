@@ -41,6 +41,60 @@ export function aiDeleteSecret(account: string): Promise<void> {
   return invoke<void>("ai_delete_secret", { account });
 }
 
+/** 前端 → Rust：一次「列出模型」的请求 */
+export interface ListModelsPayload {
+  /** 完整 URL（路径由前端按协议拼好，Rust 侧不懂协议） */
+  url: string;
+  /** 鉴权描述：Rust 侧按它去钥匙串取密钥并注入 */
+  auth: AuthSpec;
+  /** 额外的请求头（不含任何密钥） */
+  headers: string[];
+}
+
+/**
+ * 取回模型列表的**原始响应体**。
+ *
+ * 返回原始文本而不是解析好的数组：协议编解码在前端（`src/ai/models.ts`），
+ * Rust 侧只做传输与密钥注入——与流式聊天是同一套分工。
+ */
+export async function aiListModels(payload: ListModelsPayload): Promise<string> {
+  // 浏览器开发模式没有 Tauri 运行时，invoke 用不了——改走前端 fetch。
+  // 与 streamInBrowser 一样，这条路**只支持本地端点**。
+  if (!isTauriRuntime()) {
+    return listModelsInBrowser(payload);
+  }
+  return invoke<string>("ai_list_models", { req: payload });
+}
+
+/**
+ * 浏览器降级：前端 fetch 列模型。
+ *
+ * 与 `streamInBrowser` 同一套限制——**只有本地端点能走**：
+ * 云端端点在浏览器里会被 CORS 挡住，密钥也拿不到（它在系统钥匙串里）。
+ */
+async function listModelsInBrowser(payload: ListModelsPayload): Promise<string> {
+  if (payload.auth.kind !== "none") {
+    throw new Error(
+      t(
+        "浏览器开发模式拿不到系统钥匙串里的密钥，只能列本机推理服务（Ollama / LM Studio / vLLM）的模型。",
+      ),
+    );
+  }
+
+  const headers: Record<string, string> = {};
+  for (const raw of payload.headers) {
+    const at = raw.indexOf(":");
+    if (at > 0) headers[raw.slice(0, at).trim()] = raw.slice(at + 1).trim();
+  }
+
+  const response = await fetch(payload.url, { method: "GET", headers });
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`HTTP ${response.status}：${detail.slice(0, 300)}`);
+  }
+  return response.text();
+}
+
 /** Rust 侧收到的流式请求 */
 interface StreamRequestPayload {
   id: string;

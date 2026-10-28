@@ -33,6 +33,13 @@ export const anthropic: ChatProvider = {
     return joinUrl(cfg.baseUrl, "v1/messages");
   },
 
+  modelsUrl(cfg) {
+    // 官方文档：`GET /v1/models`，查询参数 `limit` 范围 1–1000，**默认只有 20**。
+    // 不给上限的话，Anthropic 一家就有二十多个模型，一半会被默认页大小截掉——
+    // 用户会以为某个模型不存在，而它其实只是排在第二页。
+    return `${joinUrl(cfg.baseUrl, "v1/models")}?limit=200`;
+  },
+
   encodeBody(req, cfg) {
     const body: Record<string, unknown> = {
       model: cfg.model,

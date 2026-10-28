@@ -193,8 +193,14 @@ export function builtinEndpoint(id: string): EndpointConfig | undefined {
  * 从设置里解析出**当前要用的**端点。
  *
  * 优先级：用户自建端点（与内置同 id 时自建优先）→ 内置预设。
- * 模型 id 用设置里的 `defaultModel` 覆盖端点自带的——
- * 用户换模型是常事，而端点预设里的模型只是默认值。
+ *
+ * 模型 id 的优先级：**该端点自己选的**（`modelOverrides`）→ 全局 `defaultModel`
+ * → 端点预设自带的模型。
+ *
+ * 为什么模型要按端点分别记：模型 id 是跟着服务商走的，
+ * Anthropic 的 `claude-sonnet-4-5` 拿到 Ollama 上一试就报 model not found。
+ * 而模型 id 只有一个全局槽位时，给 Anthropic 选完模型再切到 Ollama，
+ * 那个 id 会被原样带过去——「换端点模型串台」。
  *
  * 放在这里而不是组件里：设置面板与 AI 面板都要用同一套解析规则，
  * 两处各写一遍迟早会分叉（面板能连、设置页显示的是另一个模型）。
@@ -207,7 +213,7 @@ export function resolveEndpointConfig(settings: AiSettings): EndpointConfig | nu
   if (!base) return null;
   return {
     ...base,
-    model: settings.defaultModel || base.model,
+    model: settings.modelOverrides?.[id] || settings.defaultModel || base.model,
   };
 }
 

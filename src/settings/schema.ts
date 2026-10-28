@@ -380,8 +380,27 @@ export interface AiSettings {
   endpoints: AiEndpointSetting[];
   /** 默认端点 id */
   defaultEndpointId: string;
-  /** 默认模型 id */
+  /**
+   * 默认模型 id（**全局**的，所有端点共用）。
+   *
+   * 现在它只当「还没单独选过模型的端点」的兜底——
+   * 真正生效的是下面的 `modelOverrides`。
+   *
+   * 为什么要有 `modelOverrides`：模型 id 是**跟着服务商走的**，
+   * Anthropic 的 `claude-sonnet-4-5` 拿到 Ollama 上一试就报 model not found。
+   * 而这个字段是全局的——给 Anthropic 选完模型再切到 Ollama，
+   * 那个 id 会被原样带过去。列模型的入口一开，这个坑立刻就踩到了。
+   */
   defaultModel: string;
+  /**
+   * 每个端点各自选的模型（`端点 id → 模型 id`）。
+   *
+   * 优先级：`modelOverrides[端点]` > `defaultModel` > 端点预设自带的模型。
+   *
+   * 这是**新增**字段，老用户没有它 → 行为与升级前完全一致
+   * （继续吃 `defaultModel`），所以不需要迁移。
+   */
+  modelOverrides: Record<string, string>;
   /** 改写类的系统提示词（用户可改） */
   rewriteSystemPrompt: string;
   /** 总结类的系统提示词 */
@@ -489,6 +508,7 @@ export const DEFAULT_SETTINGS: Settings = {
     endpoints: [],
     defaultEndpointId: "",
     defaultModel: "",
+    modelOverrides: {},
     rewriteSystemPrompt:
       "你是一位中文写作助手。用户会给 you 一段 Markdown 文本，" +
       "请按要求改写它。只输出改写后的 Markdown，不要解释、不要加引号、" +

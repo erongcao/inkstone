@@ -61,6 +61,20 @@ export interface ChatProvider {
   capabilities: ProviderCapabilities;
   /** 拼出完整的流式端点 URL */
   endpointUrl(cfg: ResolvedEndpoint): string;
+  /**
+   * 拼出「列出可用模型」的 URL。
+   *
+   * 路径规则与 `endpointUrl` 同源：**同一个 base、同一个版本前缀**，
+   * 只是把末尾那个操作换掉：
+   *   - OpenAI 兼容：`{base}/chat/completions` → `{base}/models`
+   *   - Anthropic：  `{base}/v1/messages`     → `{base}/v1/models`
+   *   - Gemini：     `{base}/v1beta/models/{m}:…` → `{base}/v1beta/models`
+   *
+   * 为什么放在 provider 上而不是另写一张「协议 → 列表路径」的表：
+   * 协议与 URL 布局本来就是一回事，两处各写一遍迟早会分叉
+   * （分叉出来的表现是「聊天能通、列模型 404」，极难排查）。
+   */
+  modelsUrl(cfg: ResolvedEndpoint): string;
   /** 编解码成该协议的请求体（返回 JSON 字符串） */
   encodeBody(req: ChatRequest, cfg: ResolvedEndpoint): string;
   /**

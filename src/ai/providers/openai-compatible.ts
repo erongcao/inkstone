@@ -29,6 +29,12 @@ export const openAICompatible: ChatProvider = {
     return joinUrl(cfg.baseUrl, "chat/completions");
   },
 
+  modelsUrl(cfg) {
+    // base 里已经带了版本前缀（`/v1`），所以模型列表与 chat/completions 同级。
+    // 本地推理服务也正是这个路径（Ollama / LM Studio / vLLM 都提供 `GET /v1/models`）。
+    return joinUrl(cfg.baseUrl, "models");
+  },
+
   encodeBody(req, cfg) {
     const body: Record<string, unknown> = {
       model: cfg.model,

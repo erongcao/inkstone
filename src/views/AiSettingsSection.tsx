@@ -15,6 +15,8 @@ import { useCallback, useEffect, useState } from "react";
 import { BUILTIN_ENDPOINTS, BILLING_LABELS } from "@/ai/endpoints";
 import { aiSecretStatus, aiSetSecret, aiDeleteSecret } from "@/ai/ipc";
 import type { SecretStatus } from "@/ai/ipc";
+import { providerFor } from "@/ai/chat";
+import { fetchModelList, type ModelInfo } from "@/ai/models";
 import { resolveEndpoint, type EndpointConfig } from "@/ai/provider";
 import type { AiEndpointSetting, Settings } from "@/settings/schema";
 import { t } from "@/i18n";
@@ -36,6 +38,16 @@ export function AiSection({ settings, patch }: Props) {
     null,
   );
   const [notice, setNotice] = useState<string | null>(null);
+  // 模型列表与密钥状态是同一个道理：**属于某个端点**。
+  // 换端点就作废，免得把上一个端点的模型摆到当前端点下面。
+  const [modelList, setModelList] = useState<{
+    id: string;
+    models: ModelInfo[];
+    error: string | null;
+  } | null>(null);
+  // 正在取列表的是哪个端点。记 id 而不是记布尔值：
+  // 用户在请求途中换端点，旧请求回来时不该把新端点的加载态关掉。
+  const [loadingFor, setLoadingFor] = useState<string | null>(null);
 
   const selectedId = ai.defaultEndpointId || BUILTIN_ENDPOINTS[0]?.id || "";
   const builtin = BUILTIN_ENDPOINTS.find((e) => e.id === selectedId);
@@ -43,6 +55,50 @@ export function AiSection({ settings, patch }: Props) {
   const active: EndpointConfig | undefined = custom ?? builtin;
 
   const status = statusFor?.id === selectedId ? statusFor.value : null;
+
+  // 模型列表同样按端点归属：换端点就当没有
+  const list = modelList?.id === selectedId ? modelList : null;
+  const loading = loadingFor === selectedId;
+
+  // 该端点自己选的模型 > 全局默认 > 端点预设自带的模型
+  // （与 `resolveEndpointConfig` 是同一条规则，两处不能分叉）
+  const currentModel =
+    ai.modelOverrides?.[selectedId] || ai.defaultModel || active?.model || "";
+
+  /** 记下这个端点选的模型 */
+  const setModel = useCallback(
+    (model: string) => {
+      patch("ai", {
+        modelOverrides: { ...(ai.modelOverrides ?? {}), [selectedId]: model },
+      });
+    },
+    [ai.modelOverrides, patch, selectedId],
+  );
+
+  /** 取该端点的可用模型列表 */
+  const onLoadModels = useCallback(async () => {
+    if (!active) return;
+    const provider = providerFor(active.protocol);
+    const cfg = resolveEndpoint(active);
+    setLoadingFor(active.id);
+    try {
+      const result = await fetchModelList(provider, cfg);
+      setModelList({
+        id: active.id,
+        models: result.ok ? result.models : [],
+        error: result.ok
+          ? result.models.length === 0
+            ? t("该端点返回了空的模型列表。")
+            : null
+          : result.message,
+      });
+    } catch (error) {
+      setModelList({ id: active.id, models: [], error: String(error) });
+    } finally {
+      // 只关掉**自己**那次请求的加载态：用户中途换了端点就别去动别人的
+      setLoadingFor((cur) => (cur === active.id ? null : cur));
+    }
+  }, [active]);
 
   // 切换端点时查一次密钥状态
   useEffect(() => {
@@ -148,11 +204,48 @@ export function AiSection({ settings, patch }: Props) {
         <span>{t("模型 ID")}</span>
         <input
           type="text"
-          value={ai.defaultModel || active?.model || ""}
+          value={currentModel}
           placeholder={active?.model ?? ""}
-          onChange={(ev) => patch("ai", { defaultModel: ev.target.value })}
+          onChange={(ev) => setModel(ev.target.value)}
         />
       </label>
+
+      {/* 列出可用模型：云端与本地都支持。
+          手输框**永远保留**——有的服务不提供列表接口，
+          有的模型名是自定义的（本地推理服务启动时会打印实际名字）。 */}
+      <div className="field field--actions">
+        <button
+          type="button"
+          className="btn"
+          onClick={() => void onLoadModels()}
+          disabled={!active || loading}
+        >
+          {loading ? t("正在获取模型列表…") : t("获取模型列表")}
+        </button>
+      </div>
+
+      {list?.error && (
+        <p className="ai-warning" role="alert">
+          {list.error}
+        </p>
+      )}
+
+      {list && list.models.length > 0 && (
+        <label className="field">
+          <span>{t("从列表中选择")}</span>
+          <select
+            value={list.models.some((m) => m.id === currentModel) ? currentModel : ""}
+            onChange={(ev) => setModel(ev.target.value)}
+          >
+            <option value="">{t("— 选择模型 —")}</option>
+            {list.models.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.label === m.id ? m.id : `${m.label} · ${m.id}`}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
 
       {/* 密钥：输入框永远不回显已保存的值 */}
       <label className="field">

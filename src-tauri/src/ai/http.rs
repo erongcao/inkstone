@@ -52,6 +52,135 @@ pub struct StreamRequest {
     pub headers: HashSet<String>,
 }
 
+/// 前端 → Rust：一次「列出模型」的请求
+///
+/// 与 `StreamRequest` 分开是因为方法不同（GET / 无请求体），
+/// 但**鉴权注入是同一套逻辑**，所以两者都走 `build_authed`。
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListModelsRequest {
+    /// 完整 URL（路径由前端按协议拼好——Rust 侧不懂协议）
+    pub url: String,
+    pub auth: AuthSpec,
+    /// 额外的请求头（不含任何密钥）
+    #[serde(default)]
+    pub headers: HashSet<String>,
+}
+
+/// 读取该端点的密钥
+///
+/// `kind = "none"` 表示这个端点不需要密钥（本地推理服务）。
+/// 其余情况去系统钥匙串取；取不到就报错——**不要**发一个没有密钥的请求，
+/// 那样上游只会回一句含糊的 401。
+fn resolve_secret(app: &AppHandle, auth: &AuthSpec) -> Result<Option<String>, String> {
+    if auth.kind == "none" {
+        return Ok(None);
+    }
+    match secrets::read_secret(app, &auth.account) {
+        Ok(Some(s)) => Ok(Some(s)),
+        Ok(None) => Err("未配置该端点的密钥".into()),
+        Err(e) => Err(e),
+    }
+}
+
+/// 按鉴权方式算出最终的 URL 与要加的请求头
+///
+/// 密钥只在内存里：`query` 方式把它拼进 URL 的**副本**，
+/// 绝不能进日志或错误信息。
+///
+/// 抽出来是因为「列模型」和「流式聊天」用的是同一套注入规则——
+/// 两处各写一遍，改了一处忘了另一处，表现为「聊天能通、列模型 401」。
+fn build_authed(
+    url: &str,
+    auth: &AuthSpec,
+    secret: Option<&str>,
+    extra: &HashSet<String>,
+) -> Result<(String, Vec<(String, String)>), String> {
+    let mut headers: Vec<(String, String)> = Vec::new();
+    for raw in extra {
+        if let Some((name, value)) = raw.split_once(':') {
+            headers.push((name.trim().to_string(), value.trim().to_string()));
+        }
+    }
+
+    let mut final_url = url.to_string();
+
+    // 没有密钥 ⇒ `resolve_secret` 只在 `kind = "none"` 时才会返回 None，
+    // 所以这里直接放行，不去校验 kind。
+    let Some(secret) = secret else {
+        return Ok((final_url, headers));
+    };
+
+    match auth.kind.as_str() {
+        "bearer" => {
+            let prefix = auth.prefix.as_deref().unwrap_or("Bearer ");
+            headers.push(("authorization".to_string(), format!("{prefix}{secret}")));
+        }
+        "header" => {
+            let name = auth
+                .header
+                .as_deref()
+                .ok_or("auth.kind=header 时必须给出 header 名")?;
+            headers.push((name.to_string(), secret.to_string()));
+        }
+        "query" => {
+            let param = auth
+                .param
+                .as_deref()
+                .ok_or("auth.kind=query 时必须给出参数名")?;
+            // query 里的密钥不能进日志——这里只改内存中的 URL 副本
+            final_url.push(if final_url.contains('?') { '&' } else { '?' });
+            final_url.push_str(&format!("{param}={secret}"));
+        }
+        other => return Err(format!("未知的鉴权方式: {other}")),
+    }
+
+    Ok((final_url, headers))
+}
+
+/// 列出该端点可用的模型
+///
+/// **只做传输**：把上游的响应体原样送回前端，由前端按协议解析
+/// （`src/ai/models.ts`）——协议编解码在前端是既有分工，见 `docs/ai-design.md`。
+///
+/// 返回原始字符串而不是结构体，是因为 Rust 侧一旦开始认协议形状，
+/// 每加一家厂商就要改 Rust 再重新编译。
+#[tauri::command]
+pub async fn ai_list_models(app: AppHandle, req: ListModelsRequest) -> Result<String, String> {
+    let secret = resolve_secret(&app, &req.auth)?;
+    fetch_model_list(&req.url, &req.auth, secret.as_deref(), &req.headers).await
+}
+
+/// 真正发请求的那一段
+///
+/// 与 Tauri 无关——所以能对着一个**真的本地 HTTP 服务器**做端到端测试
+/// （真 socket、真 HTTP、真状态码），而不是 mock 出一个「看起来对」的响应。
+async fn fetch_model_list(
+    url: &str,
+    auth: &AuthSpec,
+    secret: Option<&str>,
+    extra: &HashSet<String>,
+) -> Result<String, String> {
+    let (url, headers) = build_authed(url, auth, secret, extra)?;
+
+    let mut builder = reqwest::Client::new().get(&url);
+    for (name, value) in headers {
+        builder = builder.header(name, value);
+    }
+
+    let response = builder.send().await.map_err(|e| format!("请求失败: {e}"))?;
+    let status = response.status();
+    let text = response.text().await.unwrap_or_default();
+    if !status.is_success() {
+        // 上游的错误体要原样带回前端（401/403/404 的区别对用户很关键：
+        // 是「key 填错」「这个服务没有列表接口」还是「路径不对」）。
+        // 截断长度，避免把整个错误页糊进界面。
+        let detail: String = text.chars().take(400).collect();
+        return Err(format!("HTTP {}: {}", status.as_u16(), detail));
+    }
+    Ok(text)
+}
+
 /// 前端监听的事件名
 const DELTA_EVENT: &str = "ai://delta";
 const DONE_EVENT: &str = "ai://done";
@@ -96,71 +225,24 @@ pub async fn ai_stream_chat(app: AppHandle, req: StreamRequest) -> Result<(), St
     let id = req.id.clone();
 
     // 先解析密钥：没有密钥就没必要发请求
-    let secret = if req.auth.kind == "none" {
-        None
-    } else {
-        match secrets::read_secret(&app, &req.auth.account) {
-            Ok(Some(s)) => Some(s),
-            Ok(None) => {
-                emit_error(&app, &id, "未配置该端点的密钥");
-                return Err("未配置该端点的密钥".into());
-            }
-            Err(e) => {
-                emit_error(&app, &id, &e);
-                return Err(e);
-            }
+    let secret = match resolve_secret(&app, &req.auth) {
+        Ok(s) => s,
+        Err(e) => {
+            emit_error(&app, &id, &e);
+            return Err(e);
         }
     };
 
-    // URL 与鉴权注入
-    let mut url = req.url.clone();
+    // URL 与鉴权注入（与「列模型」共用 build_authed）
+    let (url, headers) = build_authed(&req.url, &req.auth, secret.as_deref(), &req.headers)?;
+
     let mut builder = reqwest::Client::new()
         .post(&url)
         .header("content-type", "application/json")
         .header("accept", "text/event-stream");
 
-    for raw in &req.headers {
-        if let Some((name, value)) = raw.split_once(':') {
-            builder = builder.header(name.trim(), value.trim());
-        }
-    }
-
-    match secret.as_deref() {
-        None => {}
-        Some(secret) => match req.auth.kind.as_str() {
-            "bearer" => {
-                let prefix = req.auth.prefix.as_deref().unwrap_or("Bearer ");
-                builder = builder.header("authorization", format!("{prefix}{secret}"));
-            }
-            "header" => {
-                let name = req
-                    .auth
-                    .header
-                    .as_deref()
-                    .ok_or("auth.kind=header 时必须给出 header 名")?;
-                builder = builder.header(name, secret);
-            }
-            "query" => {
-                let param = req
-                    .auth
-                    .param
-                    .as_deref()
-                    .ok_or("auth.kind=query 时必须给出参数名")?;
-                // query 里的密钥不能进日志——这里只改内存中的 URL 副本
-                url.push(if url.contains('?') { '&' } else { '?' });
-                url.push_str(&format!("{param}={secret}"));
-                builder = reqwest::Client::new()
-                    .post(&url)
-                    .header("content-type", "application/json")
-                    .header("accept", "text/event-stream");
-                for raw in &req.headers {
-                    if let Some((name, value)) = raw.split_once(':') {
-                        builder = builder.header(name.trim(), value.trim());
-                    }
-                }
-            }
-            other => return Err(format!("未知的鉴权方式: {other}")),
-        },
+    for (name, value) in headers {
+        builder = builder.header(name, value);
     }
 
     let response = match builder.body(req.body.clone()).send().await {
@@ -683,5 +765,230 @@ mod network_tests {
         });
         assert_eq!(status, 401);
         assert!(text.contains("invalid api key"), "错误体丢了: {text}");
+    }
+}
+
+/// 「列出模型」这条链路的守卫。
+///
+/// 守的是三件事：
+///   1. **鉴权注入**——密钥按 `AuthSpec` 说的位置放进去，一个位置都不能错
+///   2. **传输是通的**——对着真的本地 HTTP 服务器发真的请求，
+///      响应体**原样**回来（Rust 侧不解析，它是协议无关的）
+///   3. **错误不被吞掉**——401/404 要带着状态码和响应体回到前端，
+///      因为「key 填错」与「这个服务没有列表接口」要靠它区分
+#[cfg(test)]
+mod models_tests {
+    use super::{build_authed, fetch_model_list, AuthSpec};
+    use std::collections::HashSet;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::thread;
+
+    fn auth(kind: &str) -> AuthSpec {
+        AuthSpec {
+            kind: kind.to_string(),
+            account: "test".to_string(),
+            header: None,
+            prefix: None,
+            param: None,
+        }
+    }
+
+    /// 起一个本地服务器：收到请求后把**请求头**原样作为响应体回给客户端
+    ///
+    /// 这样「密钥有没有真的被注入」就能在响应里直接看见——
+    /// 不用去 mock reqwest（mock 掉的东西往往正是出问题的那一层）。
+    fn serve_echo_headers(status: &'static str) -> (String, thread::JoinHandle<String>) {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("绑定失败");
+        let addr = listener.local_addr().expect("取地址失败");
+        let handle = thread::spawn(move || {
+            let mut seen = String::new();
+            if let Ok((mut socket, _)) = listener.accept() {
+                let mut buf = [0u8; 4096];
+                if let Ok(n) = socket.read(&mut buf) {
+                    seen = String::from_utf8_lossy(&buf[..n]).to_string();
+                }
+                let response = format!(
+                    "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{{}}"
+                );
+                let _ = socket.write_all(response.as_bytes());
+                let _ = socket.flush();
+                let _ = socket.shutdown(std::net::Shutdown::Write);
+            }
+            seen
+        });
+        (format!("http://{addr}/v1/models"), handle)
+    }
+
+    /// 起一个只回固定响应体的本地服务器
+    fn serve_body(body: &'static str) -> (String, thread::JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("绑定失败");
+        let addr = listener.local_addr().expect("取地址失败");
+        let handle = thread::spawn(move || {
+            if let Ok((mut socket, _)) = listener.accept() {
+                let mut buf = [0u8; 2048];
+                let _ = socket.read(&mut buf);
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                let _ = socket.write_all(response.as_bytes());
+                let _ = socket.flush();
+                let _ = socket.shutdown(std::net::Shutdown::Write);
+            }
+        });
+        (format!("http://{addr}/v1/models"), handle)
+    }
+
+    fn runtime() -> tokio::runtime::Runtime {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("建 runtime 失败")
+    }
+
+    // ── 鉴权注入 ──────────────────────────────────────────────────────
+
+    #[test]
+    fn bearer_把密钥放进_authorization_头() {
+        let mut spec = auth("bearer");
+        spec.prefix = Some("Bearer ".into());
+        let (url, headers) = build_authed(
+            "https://x.test/v1/models",
+            &spec,
+            Some("sk-123"),
+            &HashSet::new(),
+        )
+        .unwrap();
+        assert_eq!(url, "https://x.test/v1/models");
+        assert!(headers
+            .iter()
+            .any(|(n, v)| n == "authorization" && v == "Bearer sk-123"));
+    }
+
+    #[test]
+    fn header_方式把密钥放进指定的头() {
+        let mut spec = auth("header");
+        spec.header = Some("x-api-key".into());
+        let (_, headers) = build_authed(
+            "https://x.test/v1/models",
+            &spec,
+            Some("k"),
+            &HashSet::new(),
+        )
+        .unwrap();
+        assert!(headers.iter().any(|(n, v)| n == "x-api-key" && v == "k"));
+    }
+
+    #[test]
+    fn query_方式把密钥拼进_url() {
+        let mut spec = auth("query");
+        spec.param = Some("key".into());
+        let (url, _) = build_authed(
+            "https://x.test/v1/models",
+            &spec,
+            Some("k"),
+            &HashSet::new(),
+        )
+        .unwrap();
+        assert_eq!(url, "https://x.test/v1/models?key=k");
+    }
+
+    #[test]
+    fn query_方式在_url_已有查询参数时用_amp_连接() {
+        // Anthropic 的模型列表 URL 自带 `?limit=200`——这里再拼密钥不能拼出两个问号
+        let mut spec = auth("query");
+        spec.param = Some("key".into());
+        let (url, _) = build_authed(
+            "https://x.test/v1/models?limit=200",
+            &spec,
+            Some("k"),
+            &HashSet::new(),
+        )
+        .unwrap();
+        assert_eq!(url, "https://x.test/v1/models?limit=200&key=k");
+    }
+
+    #[test]
+    fn none_方式不加任何鉴权() {
+        let (_, headers) = build_authed(
+            "https://x.test/v1/models",
+            &auth("none"),
+            None,
+            &HashSet::new(),
+        )
+        .unwrap();
+        assert!(headers.is_empty());
+    }
+
+    #[test]
+    fn 额外的请求头会被带上去() {
+        let mut extra = HashSet::new();
+        extra.insert("anthropic-version: 2023-06-01".to_string());
+        let (_, headers) =
+            build_authed("https://x.test/v1/models", &auth("none"), None, &extra).unwrap();
+        assert!(headers
+            .iter()
+            .any(|(n, v)| n == "anthropic-version" && v == "2023-06-01"));
+    }
+
+    #[test]
+    fn 未知鉴权方式报错而不是悄悄放过() {
+        let err = build_authed(
+            "https://x.test/v1/models",
+            &auth("magic"),
+            Some("k"),
+            &HashSet::new(),
+        )
+        .unwrap_err();
+        assert!(err.contains("未知的鉴权方式"), "错误信息没说明问题: {err}");
+    }
+
+    // ── 传输 ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn 响应体原样回来_rust_侧不解析() {
+        // Rust 侧只做传输：前端要按协议自己解析，所以这里必须**一字不改**
+        let body = r#"{"data":[{"id":"gpt-4o-mini"}],"object":"list"}"#;
+        let (url, handle) = serve_body(body);
+        let rt = runtime();
+        let text = rt
+            .block_on(fetch_model_list(&url, &auth("none"), None, &HashSet::new()))
+            .expect("请求失败");
+        handle.join().unwrap();
+        assert_eq!(text, body);
+    }
+
+    #[test]
+    fn 密钥真的进了请求头() {
+        let (url, handle) = serve_echo_headers("200 OK");
+        let mut spec = auth("bearer");
+        spec.prefix = Some("Bearer ".into());
+        let rt = runtime();
+        let _ = rt.block_on(fetch_model_list(
+            &url,
+            &spec,
+            Some("sk-secret"),
+            &HashSet::new(),
+        ));
+        let seen = handle.join().unwrap();
+        assert!(
+            seen.contains("authorization: Bearer sk-secret"),
+            "请求头里没有密钥:\n{seen}"
+        );
+    }
+
+    #[test]
+    fn 失败时带着状态码与响应体回来() {
+        // 「key 填错」与「这个服务没有列表接口」在界面上要能分开，
+        // 所以 404 不能被压成一句「请求失败」
+        let (url, handle) = serve_echo_headers("404 Not Found");
+        let rt = runtime();
+        let err = rt
+            .block_on(fetch_model_list(&url, &auth("none"), None, &HashSet::new()))
+            .unwrap_err();
+        handle.join().unwrap();
+        assert!(err.contains("404"), "错误信息里没有状态码: {err}");
     }
 }
