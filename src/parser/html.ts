@@ -28,6 +28,7 @@ import { applyImageSizes } from "./image-size";
 import { highlightHastHandlers } from "./highlight";
 import { subSupHastHandlers } from "./subsup";
 import { rehypeMath, katexStylesheet, type HastNode } from "./rehype-math";
+import { t, getLocale } from "@/i18n";
 
 /**
  * 构建 HTML 输出处理器。
@@ -67,6 +68,19 @@ function buildHtmlProcessor(): HtmlPipeline {
       // 那是 mdast-util-to-hast 唯一开放的扩展入口。
       .use(remarkRehype, {
         handlers: { ...highlightHastHandlers, ...subSupHastHandlers },
+        // 脚注区的标题与回链的无障碍标签。
+        //
+        // 上游的默认值是英文，而上游自己的注释写着
+        // 「When your page is not in English, you must define translated values」——
+        // 这两项**只对读屏软件可见**（标题带 `sr-only` 类，回链是 `aria-label`），
+        // 但恰恰是这类「只给辅助技术看」的文字最容易漏掉本地化：
+        // 眼睛看不见，测试也难发现。
+        footnoteLabel: t("脚注"),
+        footnoteBackLabel: (referenceIndex: number, rereferenceIndex: number) => {
+          const label = t("返回引用 {index}", { index: referenceIndex + 1 });
+          // 同一个脚注被引用多次时，上游会加一个后缀区分（第 2 次、第 3 次…）
+          return rereferenceIndex > 1 ? `${label}-${rereferenceIndex}` : label;
+        },
       })
       .use(rehypeStringify, { allowDangerousHtml: true }) as unknown as HtmlPipeline
   );
@@ -74,14 +88,24 @@ function buildHtmlProcessor(): HtmlPipeline {
 
 type HtmlProcessor = ReturnType<typeof buildHtmlProcessor>;
 
-let htmlProcessor: HtmlProcessor | null = null;
+/**
+ * 处理器缓存。
+ *
+ * **按语言存**：脚注标签是在 `.use()` 时定下的（`.use()` 的选项是静态的，
+ * 不会跟着设置里的语言变），所以语言一换就得重建处理器。
+ *
+ * 语言很少变，所以「换语言就重建一次」的成本可以忽略；
+ * 而每次调用都重建会让 `unified()` 的组装开销进到热路径里。
+ */
+let htmlProcessor: { locale: string; processor: HtmlProcessor } | null = null;
 
 /** 获取（并缓存）HTML 输出处理器 */
 function getHtmlProcessor(): HtmlProcessor {
-  if (!htmlProcessor) {
-    htmlProcessor = buildHtmlProcessor();
+  const locale = getLocale();
+  if (!htmlProcessor || htmlProcessor.locale !== locale) {
+    htmlProcessor = { locale, processor: buildHtmlProcessor() };
   }
-  return htmlProcessor;
+  return htmlProcessor.processor;
 }
 
 /**

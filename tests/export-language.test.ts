@@ -53,6 +53,12 @@ const base = {
 /** CJK 统一表意文字（含扩展 A 与兼容表意文字） */
 const CJK = /[㐀-䶿一-鿿豈-﫿]/g;
 
+/** 含脚注的文档——脚注区有两处**只给辅助技术看**的文字 */
+const FOOTNOTE_DOC = `Body with a note[^1].
+
+[^1]: The note.
+`;
+
 /**
  * 去掉 HTML 注释。
  *
@@ -117,5 +123,24 @@ describe("导出产物的语言", () => {
 
     updateSettings({ general: { language: "zh-CN" } });
     expect(sanitizeFileName("///")).toBe("未命名");
+  });
+
+  it("脚注区的标题与回链标签跟着界面语言走", () => {
+    // 这两处**只给读屏软件看**（标题带 `sr-only` 类，回链是 `aria-label`），
+    // 所以最容易被漏掉：眼睛看不见，写错了也没人发现。
+    //
+    // 上游（mdast-util-to-hast）的默认值是英文，而它自己的注释写着
+    // 「When your page is not in English, you must define translated values」。
+    updateSettings({ general: { language: "zh-TW" } });
+    const tw = exportToHtml(FOOTNOTE_DOC, base);
+    expect(tw).toContain(">註腳</h2>");
+    expect(tw).toContain('aria-label="返回引用 1"');
+    expect(tw).not.toContain("Back to reference");
+
+    updateSettings({ general: { language: "zh-CN" } });
+    const cn = exportToHtml(FOOTNOTE_DOC, base);
+    expect(cn).toContain(">脚注</h2>");
+    expect(cn).toContain('aria-label="返回引用 1"');
+    expect(cn).not.toContain("Back to reference");
   });
 });

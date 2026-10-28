@@ -94,9 +94,23 @@ export interface RehypeMathOptions {
  *
  * 安全前提：这里的 raw 内容全部由 **KaTeX 自己生成**
  * （`MATH_OPTIONS.trust: false` 已禁掉 `\href` / `\url` 这类能注入任意标签或
- * 地址的宏），不是用户原文。`allowDangerousHtml` 的另一个副作用是让
- * **用户写在 Markdown 里的原始 HTML 也被保留**——这是符合 Markdown 规范的
- * 行为（默认的 `remark-rehype` 会丢弃它们），复制到富文本编辑器时也更符合预期。
+ * 地址的宏），不是用户原文。
+ *
+ * ## `allowDangerousHtml` 只开在 `rehype-stringify` 上，**不是** `remark-rehype`
+ *
+ * 这两个插件各有一个同名选项，作用完全不同：
+ *
+ *   - `remark-rehype`（mdast → hast）：决定 mdast 的 `html` 节点
+ *     （用户写在 Markdown 里的原始 HTML）**要不要变成 hast 的 raw 节点**。
+ *     默认 `false` → **丢弃**。
+ *   - `rehype-stringify`（hast → HTML）：决定 hast 里已有的 `raw` 节点
+ *     要不要原样序列化。KaTeX 的输出走这条路，所以这个必须开。
+ *
+ * 所以：**用户写在 Markdown 里的原始 HTML，在 `remark-rehype` 阶段就没了**，
+ * 到不了 `rehype-stringify`。
+ *
+ * （本文件早先的注释写成「用户原始 HTML 从此会被保留」——那是把两个选项
+ * 搞混了。`tests/html-math.test.ts` 记的是实际行为。）
  */
 export function rehypeMath(options: RehypeMathOptions = {}) {
   return (tree: HastNode): HastNode => {

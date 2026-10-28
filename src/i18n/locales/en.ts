@@ -489,6 +489,7 @@ export const en: Record<string, string> = {
   缩进首行: "Indent the first line",
   翻译成中文: "Translate to Chinese",
   脚注: "Footnote",
+  "返回引用 {index}": "Back to reference {index}",
   自动保存: "Autosave",
   "自动保存失败：{error}": "Autosave failed: {error}",
   "自动保存间隔（毫秒）": "Autosave interval (ms)",
