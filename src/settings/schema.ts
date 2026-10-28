@@ -90,7 +90,16 @@ export interface AppearanceSettings {
   backgroundColor: string;
   /** 用户自定义 CSS 文件内容（内联注入） */
   customCss: string;
-  /** 是否跟随系统自动切换明暗 */
+  /**
+   * 是否**强制**跟随系统明暗。
+   *
+   * 打开时明暗完全由系统决定（「明暗模式」下拉框被置灰、不起作用）；
+   * 关掉时由下拉框决定：「跟随系统」跟系统，「亮色 / 暗色」固定。
+   *
+   * 2026-10-28 之前这个字段是**死的**：实现里两个分支返回同一个值，
+   * 复选框点不点都没区别（实测 12 种输入组合，它一次都没改变过结果）。
+   * 语义与迁移见 `src/settings/store.ts` 的 v3 → v4。
+   */
   followSystemAppearance: boolean;
 }
 
@@ -414,7 +423,13 @@ export const DEFAULT_SETTINGS: Settings = {
     contentWidth: 46,
     backgroundColor: "",
     customCss: "",
-    followSystemAppearance: true,
+    // 默认**关**：明暗由「明暗模式」下拉框决定。
+    //
+    // 旧默认是 `true`，但那时这个字段是**死的**（实现里两个分支返回同一个值），
+    // 所以旧值不代表任何用户意图——迁移层把它按 `false` 处理。
+    // 新的默认下，`colorMode: "auto"` 仍然跟随系统，
+    // **老用户与新装用户看到的样子完全一样**。
+    followSystemAppearance: false,
   },
   editor: {
     markerDisplay: "live",

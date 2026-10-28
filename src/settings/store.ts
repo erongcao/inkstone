@@ -18,6 +18,46 @@ import {
 const STORAGE_KEY = "inkstone.settings.v1";
 
 /**
+ * 持久化文件的版本号。
+ *
+ * ## 为什么现在才加
+ *
+ * 之前的三次迁移（v1→v2、v2→v3）都是**幂等**的：
+ * 「旧值恰好等于旧默认值 → 当成没设过」，
+ * 所以不需要知道文件是第几版也能迁对。
+ *
+ * v3 → v4 不一样：它**不是**幂等的。
+ *
+ * ## 为什么要一个版本号
+ *
+ * `appearance.followSystemAppearance` 在 v3 里是**死开关**
+ * （实现里两个分支返回同一个值，点不点都没区别）。
+ * 它的旧值**不带任何用户意图**——
+ * 存着 `true` 可能只是因为那是旧默认值，没人动过。
+ *
+ * 新语义下 `true` 变成「强制跟随系统」，
+ * 于是旧值必须**一律当作 `false`**：
+ * 否则老用户升级后，「明暗模式」里选的亮色/暗色会被这个开关**顶掉**——
+ * 明明没动过设置，外观却变了。
+ *
+ * 但「一律当 false」如果每次启动都跑一遍，用户**主动打开**这个开关
+ * 就会在下次启动时被迁回去——开关等于不存在。
+ *
+ * 所以要有版本号：迁移**只跑一次**，跑完把版本号写进持久化文件。
+ * 之后用户再打开开关，版本号已经是 4，迁移不会再碰它。
+ *
+ * 这个版本号是**持久化文件的元数据**，不是设置项——
+ * 所以它不进 `Settings`，也不会出现在设置面板里。
+ */
+const PERSISTED_VERSION = 4;
+
+/** 持久化文件里的版本号 key（`__` 前缀：不会与设置项重名） */
+const VERSION_KEY = "__v";
+
+/** 持久化文件：设置 + 版本号 */
+type PersistedBlob = DeepPartial<Settings> & { __v?: unknown };
+
+/**
  * 设置版本迁移。
  *
  * v1 → v2：`editor.autoPair`（布尔）拆成 `editor.autoPairMode`（off/basic/markdown）。
@@ -51,15 +91,22 @@ const LEGACY_FONT_FAMILY =
 const LEGACY_MONO_FONT_FAMILY =
   'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace';
 
-function migratePersisted(raw: DeepPartial<Settings>): DeepPartial<Settings> {
-  let result = raw;
+function migratePersisted(raw: PersistedBlob): DeepPartial<Settings> {
+  // 版本号从持久化文件里读出来。老文件没有这个 key → 当作 0（最老的一版）。
+  const version = typeof raw[VERSION_KEY] === "number" ? (raw[VERSION_KEY] as number) : 0;
+
+  // 版本号是**文件的元数据**，不进 Settings。
+  // 不剥掉的话它会跟着 `mergeSettings` 进入内存状态，再被 `persist` 写回去，
+  // 最后变成一个「设置面板里看不到、但确实存在」的字段。
+  const { [VERSION_KEY]: _version, ...rest } = raw;
+  let result: DeepPartial<Settings> = rest;
 
   // v1 → v2：autoPair 布尔 → autoPairMode
   const editor = raw.editor as
     (DeepPartial<EditorSettings> & { autoPair?: unknown }) | undefined;
   if (editor && editor.autoPair !== undefined) {
-    const { autoPair, ...rest } = editor;
-    const migrated: DeepPartial<EditorSettings> = { ...rest };
+    const { autoPair, ...restEditor } = editor;
+    const migrated: DeepPartial<EditorSettings> = { ...restEditor };
     if (migrated.autoPairMode === undefined) {
       migrated.autoPairMode = autoPair === true ? "markdown" : "off";
     }
@@ -78,6 +125,24 @@ function migratePersisted(raw: DeepPartial<Settings>): DeepPartial<Settings> {
       migrated.monoFontFamily = "";
     }
     result = { ...result, appearance: migrated };
+  }
+
+  // v3 → v4：死开关 `followSystemAppearance` 变成「强制跟随系统」
+  //
+  // 旧值是死的，**不带用户意图**（存着 true 可能只是因为那是旧默认值）。
+  // 新语义下 true 会顶掉用户在「明暗模式」里选的亮色/暗色——
+  // 明明没动过设置，外观却变了。所以旧值一律当 false。
+  //
+  // **只在版本 < 4 时跑**：用户升级后主动打开这个开关，
+  // 版本号已经是 4，迁移不会再把它迁回去（否则开关等于不存在）。
+  if (version < 4) {
+    const current = result.appearance as Partial<AppearanceSettings> | undefined;
+    if (current?.followSystemAppearance === true) {
+      result = {
+        ...result,
+        appearance: { ...current, followSystemAppearance: false },
+      };
+    }
   }
 
   return result;
@@ -104,11 +169,11 @@ function mergeSettings<T>(base: T, patch: unknown): T {
   return result as T;
 }
 
-function readPersisted(): Partial<Settings> {
+function readPersisted(): PersistedBlob {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return {};
-    return JSON.parse(raw) as Partial<Settings>;
+    return JSON.parse(raw) as PersistedBlob;
   } catch {
     // 设置文件损坏不应导致启动失败，回退到默认值
     return {};
@@ -144,7 +209,12 @@ function getSnapshot(): Settings {
 
 function persist(next: Settings) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    // 带上版本号：下次启动就知道这个文件已经迁过了，
+    // 非幂等的迁移（v3 → v4）不会重跑，用户主动设的值留得住。
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ ...next, [VERSION_KEY]: PERSISTED_VERSION }),
+    );
   } catch {
     // 隐私模式下 localStorage 可能不可写，忽略即可（设置仍在内存中生效）
   }

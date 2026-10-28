@@ -146,6 +146,10 @@ function AppearanceSection({ settings, patch }: { settings: Settings; patch: Pat
         <span>{t("明暗模式")}</span>
         <select
           value={a.colorMode}
+          // 「跟随系统外观」打开时，明暗**完全**由系统决定——
+          // 下拉框这时被置灰，免得用户选了「亮色」却发现没反应
+          //（那又是一个「看起来能点、其实没用」的控件）。
+          disabled={a.followSystemAppearance}
           onChange={(e) =>
             patch("appearance", { colorMode: e.target.value as typeof a.colorMode })
           }
@@ -160,12 +164,16 @@ function AppearanceSection({ settings, patch }: { settings: Settings; patch: Pat
         <span>{t("跟随系统外观")}</span>
         <input
           type="checkbox"
+          data-setting-key="appearance.followSystemAppearance"
           checked={a.followSystemAppearance}
           onChange={(e) =>
             patch("appearance", { followSystemAppearance: e.target.checked })
           }
         />
       </label>
+      <p className="field__note">
+        {t("打开时明暗完全由系统决定，「明暗模式」不起作用；关掉后由「明暗模式」决定。")}
+      </p>
 
       <h3>{t("排版")}</h3>
       <label className="field">

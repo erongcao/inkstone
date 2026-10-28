@@ -536,6 +536,8 @@ export const en: Record<string, string> = {
     "Failed to read the directory ({path}): no such folder in the sample library",
   跟随系统: "Follow system",
   跟随系统外观: "Follow system appearance",
+  "打开时明暗完全由系统决定，「明暗模式」不起作用；关掉后由「明暗模式」决定。":
+    "When on, light/dark is decided entirely by the system and the “Light/Dark mode” dropdown has no effect; when off, the dropdown decides.",
   跳到脚注定义: "Jump to the footnote definition",
   跳回第一个引用: "Jump back to the first reference",
   "输入关键词开始搜索。": "Type a keyword to start searching.",

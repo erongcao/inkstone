@@ -71,15 +71,36 @@ export function currentColorMode(): "light" | "dark" {
 
 /**
  * 解析最终生效的明暗模式。
- * followSystem + auto 时跟随系统，否则取 colorMode。
+ *
+ * ## 语义（2026-10-28 定）
+ *
+ * - `followSystem` **打开** = **强制**跟随系统，无视「明暗模式」下拉框
+ * - `followSystem` **关掉** = 由下拉框决定：
+ *   「跟随系统」跟系统，「亮色 / 暗色」固定
+ *
+ * ## 早先这里是**死代码**
+ *
+ * 原来的写法是：
+ *
+ * ```ts
+ * if (followSystem && colorMode === "auto") return systemPrefersDark ? "dark" : "light";
+ * return colorMode === "auto" ? (systemPrefersDark ? "dark" : "light") : colorMode;
+ * ```
+ *
+ * 两个 `"auto"` 分支**返回的是同一个值**——
+ * 所以 `followSystem` 无论传什么都不影响结果，
+ * 设置面板里那个复选框点不点都没区别。
+ *
+ * 实测枚举过 12 种输入组合（`colorMode` × `followSystem` × `systemPrefersDark`），
+ * `followSystem` 一次都没改变过结果：它连第二个分支都没走到。
  */
 export function resolveColorMode(
   colorMode: ColorMode,
   followSystem: boolean,
   systemPrefersDark: boolean,
 ): "light" | "dark" {
-  if (followSystem && colorMode === "auto") {
-    return systemPrefersDark ? "dark" : "light";
-  }
+  // 强制跟随系统：下拉框选了什么都不算数。
+  if (followSystem) return systemPrefersDark ? "dark" : "light";
+  // 由下拉框决定：「跟随系统」跟系统，亮/暗固定。
   return colorMode === "auto" ? (systemPrefersDark ? "dark" : "light") : colorMode;
 }
