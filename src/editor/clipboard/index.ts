@@ -30,9 +30,12 @@ import {
   type EditorState,
   type Extension,
 } from "@codemirror/state";
-import { ensureMarkdownToHtml, renderMarkdownToHtml } from "@/parser/html-loader";
+import {
+  ensureMarkdownToHtml,
+  renderMarkdownToHtml,
+  type HtmlRendererOptions,
+} from "@/parser/html-loader";
 import { readSettings } from "@/settings/store";
-import type { ParseOptions } from "@/parser/markdown";
 import { featuresFromSettings } from "@/parser/features";
 import { writeHtmlAndText, writePlainText } from "./write";
 
@@ -122,8 +125,16 @@ export function handleCopy(view: EditorView, event: ClipboardEvent): boolean {
  * 传的是**全部**开关，不只是公式那一个：
  * 复制出去的 HTML 必须与屏幕上看到的一致（架构约束 C）。
  */
-function parseOptionsNow(): ParseOptions {
-  return { features: featuresFromSettings(readSettings().markdown) };
+function parseOptionsNow(): HtmlRendererOptions {
+  const settings = readSettings();
+  return {
+    features: featuresFromSettings(settings.markdown),
+    // 题注也要进剪贴板：屏幕上写着「图 1-1 说明」，
+    // 复制到 Word 里就该是「图 1-1 说明」，而不是「图：说明」。
+    captions: settings.markdown.captions.enabled
+      ? { numbering: settings.markdown.captions.numbering }
+      : null,
+  };
 }
 
 /**

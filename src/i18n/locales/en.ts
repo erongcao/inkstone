@@ -578,4 +578,11 @@ export const en: Record<string, string> = {
   "＋行/－行": "+Row/−Row",
   "－列": "−Col",
   "－行": "−Row",
+  题注: "Captions",
+  "图题 / 表题": "Figure / table captions",
+  编号方式: "Numbering",
+  "按章重编（图 1-1）": "Per chapter (Figure 1-1)",
+  "全篇连续（图 1、图 2）": "Continuous through the document (Figure 1, Figure 2)",
+  "以「图：」「表：」开头的段落，且紧挨着图片或表格时，会被当作题注并自动编号。编号只出现在渲染结果里，不会写回原文。":
+    "A paragraph starting with “Figure:” or “Table:” that sits right next to an image or a table is treated as a caption and numbered automatically. The number only appears in the rendered result — it is never written back to the source.",
 };

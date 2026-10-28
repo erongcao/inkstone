@@ -117,6 +117,32 @@ export interface EditorSettings {
   alwaysShowWordCount: boolean;
 }
 
+/**
+ * 题注的编号方式。
+ *
+ * - `chapter`：按章重编——顶层的一级标题算一章，章内重新计数 → `图 1-1`
+ * - `continuous`：全篇连续 → `图 1`、`图 2`
+ */
+export type CaptionNumbering = "chapter" | "continuous";
+
+/**
+ * 题注（图题 / 表题）的设置。
+ *
+ * 题注的**写法**是约定而不是设置项：
+ * 一个以「图：」「表：」开头的段落，紧挨着图片或表格（规则见
+ * `src/parser/captions.ts`）。这里只管「要不要编号、怎么编号」。
+ */
+export interface CaptionSettings {
+  /**
+   * 是否启用题注。
+   *
+   * 关掉后「图：说明」就只是普通段落——标记原样显示，不编号。
+   */
+  enabled: boolean;
+  /** 编号方式 */
+  numbering: CaptionNumbering;
+}
+
 export interface MarkdownSettings {
   /** 行内数学 $...$ */
   inlineMath: boolean;
@@ -156,6 +182,8 @@ export interface MarkdownSettings {
   tables: boolean;
   /** 任务列表 */
   taskLists: boolean;
+  /** 题注（图题 / 表题）与自动编号 */
+  captions: CaptionSettings;
 }
 
 export interface ExportSettings {
@@ -392,6 +420,10 @@ export const DEFAULT_SETTINGS: Settings = {
     frontMatter: true,
     tables: true,
     taskLists: true,
+    captions: {
+      enabled: true,
+      numbering: "chapter",
+    },
   },
   export: {
     openFolderAfterExport: false,

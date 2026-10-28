@@ -15,6 +15,7 @@ import { runCommand } from "@/editor/commands";
 import { useSettings } from "@/settings/store";
 import { MARKER_DISPLAY_MODES } from "@/settings/schema";
 import { featuresFromSettings } from "@/parser/features";
+import type { CaptionOptions } from "@/parser/captions";
 import { resolveExportItems } from "@/export/items";
 import { setAiEditorBridge } from "@/ai/editor-bridge";
 import { openAiPanel } from "@/ai/panel-store";
@@ -39,6 +40,19 @@ export function EditorSurface({ onOpenSettings }: Props) {
   const markdownFeatures = useMemo(
     () => featuresFromSettings(settings.markdown),
     [settings.markdown],
+  );
+  /**
+   * 题注设置。
+   *
+   * 关掉时传 `null`——编辑器那边就知道「不启用题注」，
+   * 而不是「用默认编号方式但什么都别渲染」。
+   */
+  const captionOptions = useMemo<CaptionOptions | null>(
+    () =>
+      settings.markdown.captions.enabled
+        ? { numbering: settings.markdown.captions.numbering }
+        : null,
+    [settings.markdown.captions.enabled, settings.markdown.captions.numbering],
   );
   const focusMode = settings.editor.focusMode;
   const typewriterMode = settings.editor.typewriterMode;
@@ -162,6 +176,13 @@ export function EditorSurface({ onOpenSettings }: Props) {
   useEffect(() => {
     editorRef.current?.setMarkdownFeatures(markdownFeatures);
   }, [markdownFeatures]);
+
+  // 题注设置变化 → 同步到编辑器
+  //
+  // 题注不换 parser，只重算装饰器——比换 Markdown 开关轻得多。
+  useEffect(() => {
+    editorRef.current?.setCaptionOptions(captionOptions);
+  }, [captionOptions]);
 
   // 焦点模式 / 打字机模式：都走设置层的开关（持久化），编辑器侧只接收结果
   useEffect(() => {

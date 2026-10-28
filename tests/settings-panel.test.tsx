@@ -57,11 +57,12 @@ describe("设置面板：Markdown 分区", () => {
     resetSettings();
   });
 
-  it("13 个开关一个不少", () => {
+  it("15 个开关一个不少", () => {
     const { container } = render(
       <SettingsPanel onClose={() => {}} initialSection="markdown" />,
     );
-    expect(markdownToggles(container)).toHaveLength(13);
+    // 13 个语法开关 + 题注那一组的两个（开关 + 编号方式）
+    expect(markdownToggles(container)).toHaveLength(15);
   });
 
   it("还没做的那个开关是置灰的", () => {

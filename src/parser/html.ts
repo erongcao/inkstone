@@ -26,6 +26,7 @@ import { resolveFeatures } from "./features";
 import { applyAlerts } from "./alerts";
 import { applyImageSizes } from "./image-size";
 import { applyHeadingAnchors } from "./heading-anchors";
+import { applyCaptions, type CaptionOptions } from "./captions";
 import { highlightHastHandlers } from "./highlight";
 import { subSupHastHandlers } from "./subsup";
 import { rehypeMath, katexStylesheet, type HastNode } from "./rehype-math";
@@ -105,6 +106,15 @@ export interface HtmlOptions extends ParseOptions {
    * 见 `heading-anchors.ts` 的说明（以及那里记录的一次错位事故）。
    */
   headingAnchors?: boolean;
+  /**
+   * 题注设置；`null` / 不传 = 不启用。
+   *
+   * 题注是**约定**（以「图：」「表：」开头的段落），
+   * 启用后这些段落会被加上编号前缀（`图 1-1 说明`）。
+   *
+   * 编号只出现在渲染结果里，源文一个字节都不改。
+   */
+  captions?: CaptionOptions | null;
 }
 
 /**
@@ -261,5 +271,16 @@ export function htmlFromAst(tree: MarkdownAst, options: HtmlOptions = {}): strin
  * 导出那条路会显式打开，见 `HtmlOptions` 的说明。
  */
 export function markdownToHtml(source: string, options?: HtmlOptions): string {
-  return htmlFromAst(parseMarkdown(source, options), options);
+  const tree = parseMarkdown(source, options);
+  // 题注要**就地**改写这棵树（把「图：」换成「图 1-1 」）。
+  //
+  // 为什么在这里改、而不是在 `htmlFromAst` 里：
+  // 题注的标记是按**源码**匹配的（两个实现必须对同一份源码给出一致结论），
+  // 而 `htmlFromAst` 只拿到树、拿不到源码。
+  // 两个调用点（这里与 `export/html.ts` 的 `exportToHtml`）都同时有树和源码，
+  // 所以各自改写自己那棵——树是一次性的，不会互相污染。
+  if (options?.captions) {
+    applyCaptions(tree, source, options.captions);
+  }
+  return htmlFromAst(tree, options);
 }

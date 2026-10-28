@@ -28,7 +28,12 @@ import {
 } from "@/export/items";
 import { formatShortcut } from "@/shortcuts";
 import { NOT_IMPLEMENTED_SETTINGS } from "@/settings/coverage";
-import type { ExportItemSetting, ExportVariableSetting } from "@/settings/schema";
+import type {
+  CaptionNumbering,
+  ExportItemSetting,
+  ExportVariableSetting,
+  MarkdownSettings,
+} from "@/settings/schema";
 import { AiSection } from "./AiSettingsSection";
 import { t } from "@/i18n";
 import { useEscapeToClose } from "./use-escape";
@@ -327,10 +332,20 @@ function EditorSection({ settings, patch }: { settings: Settings; patch: PatchFn
   );
 }
 
+/**
+ * `MarkdownSettings` 里那些**布尔**的键。
+ *
+ * 题注那一组是对象（`captions.enabled` / `captions.numbering`），
+ * 不能混进「复选框列表」里——那个列表渲染的是 `checked={m[key]}`。
+ */
+type BooleanMarkdownKey = {
+  [K in keyof MarkdownSettings]: MarkdownSettings[K] extends boolean ? K : never;
+}[keyof MarkdownSettings];
+
 function MarkdownSection({ settings, patch }: { settings: Settings; patch: PatchFn }) {
   const m = settings.markdown;
   const toggles: {
-    key: keyof typeof m;
+    key: BooleanMarkdownKey;
     label: string;
     hint?: string;
     /**
@@ -392,6 +407,39 @@ function MarkdownSection({ settings, patch }: { settings: Settings; patch: Patch
           </label>
         );
       })}
+
+      <h3>{t("题注")}</h3>
+      <label className="field field--inline">
+        <span>{t("图题 / 表题")}</span>
+        <input
+          type="checkbox"
+          data-setting-key="markdown.captions.enabled"
+          checked={m.captions.enabled}
+          onChange={(ev) =>
+            patch("markdown", { captions: { enabled: ev.target.checked } })
+          }
+        />
+      </label>
+      <label className="field">
+        <span>{t("编号方式")}</span>
+        <select
+          value={m.captions.numbering}
+          disabled={!m.captions.enabled}
+          onChange={(ev) =>
+            patch("markdown", {
+              captions: { numbering: ev.target.value as CaptionNumbering },
+            })
+          }
+        >
+          <option value="chapter">{t("按章重编（图 1-1）")}</option>
+          <option value="continuous">{t("全篇连续（图 1、图 2）")}</option>
+        </select>
+      </label>
+      <p className="field__note">
+        {t(
+          "以「图：」「表：」开头的段落，且紧挨着图片或表格时，会被当作题注并自动编号。编号只出现在渲染结果里，不会写回原文。",
+        )}
+      </p>
     </section>
   );
 }

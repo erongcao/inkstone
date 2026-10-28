@@ -13,6 +13,7 @@ import {
   Transaction,
   Compartment,
   type Extension,
+  type StateEffect,
 } from "@codemirror/state";
 import { EditorView, keymap, lineNumbers, highlightActiveLine } from "@codemirror/view";
 import {
@@ -27,7 +28,11 @@ import { searchKeymap, highlightSelectionMatches, search } from "@codemirror/sea
 import { openFindPanel } from "./search-panel";
 import { languages } from "@codemirror/language-data";
 import { livePreview, setDisplayModeOf } from "./live-preview";
-import { setMarkdownFeatures, livePreviewField } from "./live-preview/state";
+import {
+  setMarkdownFeatures,
+  setCaptionOptions,
+  livePreviewField,
+} from "./live-preview/state";
 import { emitIntent } from "./intents";
 import { setActiveEditorView } from "./active-view";
 import { autoPair } from "./auto-pair";
@@ -65,6 +70,7 @@ import {
 } from "./clipboard";
 import type { AutoPairMode, MarkerDisplayMode } from "@/settings/schema";
 import { DEFAULT_FEATURES, featuresKey, type MarkdownFeatures } from "@/parser/features";
+import type { CaptionOptions } from "@/parser/captions";
 
 export interface MarkdownEditorOptions {
   /** 初始内容 */
@@ -77,6 +83,8 @@ export interface MarkdownEditorOptions {
   autoPairMode?: AutoPairMode;
   /** 初始的 Markdown 扩展开关（默认全开） */
   features?: MarkdownFeatures;
+  /** 初始的题注设置；`null` = 不启用 */
+  captions?: CaptionOptions | null;
   /** 内容变化回调 */
   onChange?: (value: string) => void;
   /** 选区变化回调 */
@@ -254,6 +262,18 @@ export interface ExportShortcutBinding {
   formatId: string;
 }
 
+/**
+ * 两份题注设置是不是同一份。
+ *
+ * 比的是**内容**不是引用：设置面板每次改动都会 `updateSettings` 出新对象，
+ * 按引用比的话改任何别的设置都会触发一次全文装饰器重算。
+ */
+function captionsEqual(a: CaptionOptions | null, b: CaptionOptions | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.numbering === b.numbering;
+}
+
 export interface MarkdownEditorHandle {
   /** 获取当前内容 */
   getValue(): string;
@@ -272,6 +292,15 @@ export interface MarkdownEditorHandle {
    * 与 Live Preview 的语法树（编辑布局）。
    */
   setMarkdownFeatures(features: MarkdownFeatures): void;
+  /**
+   * 切换题注设置。
+   *
+   * `null` = 关闭题注。
+   *
+   * 与 `setMarkdownFeatures` 不同：题注不换 parser，
+   * 所以这里只重算装饰器，不做整篇重解析。
+   */
+  setCaptionOptions(captions: CaptionOptions | null): void;
   /** 切换焦点模式（弱化光标所在段落之外的内容） */
   setFocusMode(enabled: boolean): void;
   /** 切换打字机模式（光标固定在视口垂直中线） */
@@ -339,6 +368,8 @@ export function createMarkdownEditor(
   const languageBox = new Compartment();
   // 当前生效的开关组合——用来判断「是不是真的变了」。
   let appliedFeatures: MarkdownFeatures = options.features ?? DEFAULT_FEATURES;
+  // 题注设置：同样要跟住「当前设置」，否则切标签页新建状态时会丢。
+  let appliedCaptions: CaptionOptions | null = options.captions ?? null;
   // 扩展只建一次：所有标签页的状态共用同一套扩展（Compartment 也共用），
   // 这样切换状态时自动配对级别之类的运行时配置不会丢
   const extensions = buildExtensions(
@@ -390,9 +421,14 @@ export function createMarkdownEditor(
       // 这里补一次 effect，让新状态跟上当前开关。
       //
       // 只有真的不一致时才做：一致的话省掉一次整篇重解析。
-      const current = state.field(livePreviewField).features;
-      if (featuresKey(current) === featuresKey(appliedFeatures)) return state;
-      return state.update({ effects: setMarkdownFeatures.of(appliedFeatures) }).state;
+      const current = state.field(livePreviewField);
+      const sameFeatures = featuresKey(current.features) === featuresKey(appliedFeatures);
+      const sameCaptions = captionsEqual(current.captions, appliedCaptions);
+      if (sameFeatures && sameCaptions) return state;
+      const effects: StateEffect<unknown>[] = [];
+      if (!sameFeatures) effects.push(setMarkdownFeatures.of(appliedFeatures));
+      if (!sameCaptions) effects.push(setCaptionOptions.of(appliedCaptions));
+      return state.update({ effects }).state;
     },
     setState: (next: EditorState) => view.setState(next),
     getSelectionRange: () => {
@@ -440,6 +476,12 @@ export function createMarkdownEditor(
           setMarkdownFeatures.of(next),
         ],
       });
+    },
+    setCaptionOptions: (next: CaptionOptions | null) => {
+      // 没变就别动：改一次编号方式就要重算一遍全文的装饰器。
+      if (captionsEqual(appliedCaptions, next)) return;
+      appliedCaptions = next;
+      view.dispatch({ effects: setCaptionOptions.of(next) });
     },
     setFocusMode: (enabled: boolean) => setFocusModeOf(view, enabled),
     setTypewriterMode: (enabled: boolean) => setTypewriterModeOf(view, enabled),

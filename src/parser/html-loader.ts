@@ -19,6 +19,7 @@
  */
 
 import type { ParseOptions } from "./markdown";
+import type { CaptionOptions } from "./captions";
 import { ensureMathRenderer } from "@/editor/render/math-loader";
 
 /**
@@ -34,7 +35,15 @@ import { ensureMathRenderer } from "@/editor/render/math-loader";
  * 两条路的取舍见 `parser/html.ts` 的 `HtmlOptions`：
  * 导出保留（用户自己的内容不该消失），剪贴板丢弃（往 Word / 邮件里贴少些意外内容）。
  */
-export type HtmlRenderer = (source: string, options?: ParseOptions) => string;
+/**
+ * HTML 渲染器的选项。
+ *
+ * 比 `ParseOptions` 多一个 `captions`——题注要在剪贴板里也生效
+ * （屏幕上写着「图 1-1 说明」，复制到 Word 里就该一样）。
+ */
+export type HtmlRendererOptions = ParseOptions & { captions?: CaptionOptions | null };
+
+export type HtmlRenderer = (source: string, options?: HtmlRendererOptions) => string;
 
 let renderer: HtmlRenderer | null = null;
 let pending: Promise<HtmlRenderer> | null = null;

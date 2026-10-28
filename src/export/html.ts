@@ -29,6 +29,7 @@ import { htmlFromAst } from "@/parser/html";
 import { parseMarkdown } from "@/parser/markdown";
 import { featuresFromSettings } from "@/parser/features";
 import { headingAnchorId } from "@/parser/heading-anchors";
+import { applyCaptions } from "@/parser/captions";
 import { readSettings } from "@/settings/store";
 import { highlightCode, resolveLanguage } from "@/editor/render/code-block";
 import { buildIndexFromTree, type OutlineItem } from "@/editor/document-index";
@@ -288,6 +289,14 @@ body {
 .inkstone-doc tbody tr:nth-child(2n) { background: var(--ink-table-stripe-bg); }
 
 .inkstone-doc img { max-width: 100%; height: auto; }
+
+/* 题注：图题 / 表题 */
+.inkstone-doc .ink-caption {
+  margin: 0.4em 0 1.2em;
+  text-align: center;
+  font-size: 0.9em;
+  color: var(--ink-fg-muted);
+}
 
 .inkstone-doc hr {
   height: 1px;
@@ -566,7 +575,8 @@ ${items}
  * @param source Markdown 源码
  */
 export function exportToHtml(source: string, options: HtmlExportOptions): string {
-  const features = featuresFromSettings(readSettings().markdown);
+  const settings = readSettings();
+  const features = featuresFromSettings(settings.markdown);
 
   // **一棵**树：大纲与正文都从它派生。
   //
@@ -582,6 +592,19 @@ export function exportToHtml(source: string, options: HtmlExportOptions): string
   // 索引必须在渲染**之前**算：渲染会就地改树
   // （提示块变换会往引用块里插节点、图片尺寸会改 url）。
   const index = buildIndexFromTree(tree);
+
+  // 题注：把「图：」换成「图 1-1 」。
+  //
+  // 编号是**渲染层**算出来的，源文不动——
+  // 导出物里带编号，用户的 .md 文件里还是那个「图：」。
+  //
+  // 必须在渲染**之前**做：题注的改写是就地改树（段落正文被换掉）。
+  const captionOptions = settings.markdown.captions.enabled
+    ? { numbering: settings.markdown.captions.numbering }
+    : null;
+  if (captionOptions) {
+    applyCaptions(tree, source, captionOptions);
+  }
 
   // 正文：复用现成的 HTML 链路（含 KaTeX 公式渲染与标题锚点）
   //

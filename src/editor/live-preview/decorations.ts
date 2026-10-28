@@ -30,9 +30,11 @@ import { FootnoteRefWidget, FootnoteDefWidget } from "./footnote-widget";
 import { ImageWidget, renderImage } from "./image-widget";
 import { findAlerts } from "../render/alert";
 import { AlertTitleWidget } from "./alert-widget";
+import { captionContentStart, findCaptions } from "../render/captions";
 import type { BlockMatch, BlockRenderer } from "../render/types";
 import type { MarkerDisplayMode } from "@/settings/schema";
 import { resolveFeatures, type MarkdownFeatures } from "@/parser/features";
+import type { Caption, CaptionOptions } from "@/parser/captions";
 
 /**
  * 行内标记类型 → 规格 的查找表。
@@ -71,6 +73,36 @@ class HiddenMarkerWidget extends WidgetType {
 /** 创建「隐藏标记」的替换装饰 */
 function hiddenMarker(): Decoration {
   return Decoration.replace({ widget: new HiddenMarkerWidget() });
+}
+
+/**
+ * 题注的编号前缀 widget（「图 1-1 」）。
+ *
+ * 它顶替的是源文里的「图：」标记——
+ * 编号是**渲染层**算出来的，源文里没有、也不会被写回去。
+ *
+ * 宽度是实打实的（不是零宽占位）：编号要看得见。
+ */
+class CaptionPrefixWidget extends WidgetType {
+  constructor(readonly text: string) {
+    super();
+  }
+
+  toDOM(): HTMLElement {
+    const span = document.createElement("span");
+    span.className = "cm-md-caption-prefix";
+    span.textContent = this.text;
+    return span;
+  }
+
+  eq(other: CaptionPrefixWidget): boolean {
+    return other.text === this.text;
+  }
+
+  ignoreEvent(): boolean {
+    // 让事件冒出去：点在编号上时光标应该能落回这一段
+    return false;
+  }
 }
 
 /** 一个纯区间（不含装饰器信息） */
@@ -197,6 +229,7 @@ function analyze(
  * @param features 当前的 Markdown 扩展开关。
  *   关掉一个扩展，那套语法就**不被识别**——显示为字面文本。
  *   解析层（remark）那边同时关着，两层才对得上（架构约束 C）。
+ * @param captions 题注设置；`null` = 不启用题注。
  */
 export function buildLivePreviewDecorations(
   source: string,
@@ -204,6 +237,7 @@ export function buildLivePreviewDecorations(
   mode: MarkerDisplayMode = "live",
   tree: Tree,
   features?: Partial<MarkdownFeatures>,
+  captions?: CaptionOptions | null,
 ): DecorationSet {
   const syntaxTree = tree;
   // 补齐缺省：传进来的对象可能只写了要改的那几项。
@@ -223,6 +257,17 @@ export function buildLivePreviewDecorations(
   const renderedDecos: Range<Decoration>[] = [];
   const footnoteDecos: Range<Decoration>[] = [];
   const imageDecos: Range<Decoration>[] = [];
+
+  // 题注要**先**算出来：段落装饰循环要用它把「图：」换成编号前缀。
+  //
+  // 编号由 lezer 那版算（位置必须每击键都准，理由见 `render/captions.ts`），
+  // 规则与语义层共用同一份代码（`parser/captions.ts`），
+  // 两版结果由 `tests/captions.test.ts` 的对拍测试钉死。
+  const captionList = captions ? findCaptions(syntaxTree, source, captions) : [];
+  const captionByStart = new Map<number, Caption>();
+  for (const caption of captionList) {
+    captionByStart.set(caption.from, caption);
+  }
 
   // 任务项要**先**算出来：后面的装饰循环要用它来藏列表符号、换勾选框。
   // 「任务列表」关掉时**不认**这个语法——`- [ ]` 就是普通列表项。
@@ -280,6 +325,43 @@ export function buildLivePreviewDecorations(
       // 理由与代价见 `image-size.ts` 的文件头。
       if (name === "Paragraph") {
         imageDecos.push(...buildSizedImageDecorations(ref.node, source, cursor, mode));
+      }
+
+      // ---- 0c. 题注段落：「图：说明」→ 「图 1-1 说明」 ----
+      //
+      // 换掉的是**标记**（「图：」），不是整段——
+      // 题注文字本身是作者写的正文，必须照常显示、照常可编辑。
+      //
+      // 光标进入该段落时露出原文（与其它标记同一套规矩）：
+      // 用户要改「图：」这个标记本身时，得看得见它。
+      if (name === "Paragraph" || name === "Task") {
+        const caption = captionByStart.get(captionContentStart(ref.node));
+        if (caption) {
+          // 整段挂题注样式（居中、小一号）。
+          // 行装饰一次只管一行，所以逐行挂。
+          let pos = caption.from;
+          while (pos <= caption.to) {
+            blockDecos.push(Decoration.line({ class: "cm-md-caption" }).range(pos));
+            const newline = source.indexOf("\n", pos);
+            if (newline === -1 || newline >= caption.to) break;
+            pos = newline + 1;
+          }
+          if (mode === "dimmed") {
+            // 弱化模式：标记照旧显示，只弱化着色（Ulysses 式）
+            inlineDecos.push(
+              Decoration.mark({ class: "cm-md-marker" }).range(
+                caption.markerFrom,
+                caption.markerTo,
+              ),
+            );
+          } else if (!shouldReveal(ref.node, cursor)) {
+            inlineDecos.push(
+              Decoration.replace({
+                widget: new CaptionPrefixWidget(caption.prefix),
+              }).range(caption.markerFrom, caption.markerTo),
+            );
+          }
+        }
       }
 
       // ---- 1. 行内标记（可隐藏 / 可弱化）----

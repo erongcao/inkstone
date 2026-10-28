@@ -32,6 +32,7 @@ import {
 import { exportToHtml, typographyFromAppearance } from "./html";
 import { pandocInputFormat } from "./pandoc-format";
 import { featuresFromSettings } from "@/parser/features";
+import { applyCaptionsToSource, collectCaptions } from "@/parser/captions";
 import { sanitizeFileName, suggestFileName, type ExportFormat } from "./registry";
 import { findResolvedExportItem } from "./items";
 import {
@@ -43,6 +44,7 @@ import {
 } from "@/ipc/export";
 import { getDocumentContent, getDocumentState } from "@/ipc/document";
 import { readSettings } from "@/settings/store";
+import type { Settings } from "@/settings/schema";
 import { buildIndexFromTree } from "@/editor/document-index";
 import { ensureMathRenderer } from "@/editor/render/math-loader";
 import { t } from "@/i18n";
@@ -248,6 +250,26 @@ export function prepareExport(
 export { sanitizeFileName };
 
 /**
+ * 给 pandoc 的源码：题注标记换成编号前缀。
+ *
+ * pandoc 不认识「图：」这种约定——不做这一步，
+ * 导出的 Word / EPUB 里就只剩一句「图：说明」，没有编号，
+ * 而屏幕上明明写着「图 1-1 说明」（屏幕与导出必须一致）。
+ *
+ * 改的是**喂给 pandoc 的那份副本**，用户的源文件一个字节都不动。
+ */
+function withCaptionNumbers(source: string, settings: Settings): string {
+  const captionSettings = settings.markdown.captions;
+  if (!captionSettings.enabled) return source;
+  const features = featuresFromSettings(settings.markdown);
+  const tree = parseMarkdown(source, { features });
+  const captions = collectCaptions(tree, source, {
+    numbering: captionSettings.numbering,
+  });
+  return applyCaptionsToSource(source, captions);
+}
+
+/**
  * 执行一次导出。
  *
  * @param formatId 导出格式 id
@@ -319,7 +341,9 @@ export async function exportDocument(formatId: string): Promise<ExportResult> {
       const from = pandocInputFormat(featuresFromSettings(settings.markdown));
       const output = await convertWithPandoc(
         format.pandocFormat ?? format.id,
-        context.content,
+        // 题注在这里换成编号前缀（pandoc 不认识「图：」这种约定）。
+        // 改的是喂给 pandoc 的副本，用户的 .md 文件不动。
+        withCaptionNumbers(context.content, settings),
         targetPath,
         resourceDir,
         from,

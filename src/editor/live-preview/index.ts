@@ -71,10 +71,10 @@ import { DEFAULT_FEATURES, type MarkdownFeatures } from "@/parser/features";
  */
 const livePreviewDecorations = EditorView.decorations.from(
   livePreviewField,
-  ({ source, cursor, mode, tree, features }) => {
+  ({ source, cursor, mode, tree, features, captions }) => {
     // 源码模式：不做任何渲染
     if (mode === "source") return Decoration.none;
-    return buildLivePreviewDecorations(source, cursor, mode, tree, features);
+    return buildLivePreviewDecorations(source, cursor, mode, tree, features, captions);
   },
 );
 

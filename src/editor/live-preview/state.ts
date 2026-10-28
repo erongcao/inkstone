@@ -23,6 +23,7 @@ import { parseSyntax } from "./syntax";
 import { getMarkdownParser } from "../markdown-language";
 import type { MarkerDisplayMode } from "@/settings/schema";
 import { DEFAULT_FEATURES, featuresKey, type MarkdownFeatures } from "@/parser/features";
+import type { CaptionOptions } from "@/parser/captions";
 
 /** 切换标记符显示策略 */
 export const setDisplayMode = StateEffect.define<MarkerDisplayMode>();
@@ -49,6 +50,17 @@ export const refreshRendering = StateEffect.define<null>();
  * `TreeFragment` 与 parser 绑定，跨 parser 复用片段会得到错误的树。
  */
 export const setMarkdownFeatures = StateEffect.define<MarkdownFeatures>();
+
+/**
+ * 题注设置变了。
+ *
+ * 与 `setMarkdownFeatures` 不同：题注**不换 parser**（它不是语法扩展，
+ * 只是「哪些段落算题注」的判定），所以这里不需要整篇重解析——
+ * 只要重算装饰器就够了。
+ *
+ * `null` = 关闭题注（设置里把「题注」关掉）。
+ */
+export const setCaptionOptions = StateEffect.define<CaptionOptions | null>();
 
 /**
  * 编辑器**创建时**生效的开关。
@@ -90,6 +102,8 @@ export interface LivePreviewState {
   mode: MarkerDisplayMode;
   /** 当前的 Markdown 扩展开关 */
   features: MarkdownFeatures;
+  /** 题注设置；`null` = 不启用 */
+  captions: CaptionOptions | null;
 }
 
 /**
@@ -111,6 +125,9 @@ export const livePreviewField = StateField.define<LivePreviewState>({
       cursor: state.selection.main.head,
       mode: "live",
       features,
+      // 题注默认关闭：设置面板同步过来之前，先按「没有题注」渲染。
+      // 真正的初值由 `EditorSurface` 的 effect 派发（见 MarkdownEditor 的 setCaptionOptions）。
+      captions: null,
     };
   },
 
@@ -119,9 +136,11 @@ export const livePreviewField = StateField.define<LivePreviewState>({
     let mode = value.mode;
     let forced = false;
     let features = value.features;
+    let captions = value.captions;
     for (const effect of tr.effects) {
       if (effect.is(setDisplayMode)) mode = effect.value;
       if (effect.is(setMarkdownFeatures)) features = effect.value;
+      if (effect.is(setCaptionOptions)) captions = effect.value;
       if (effect.is(refreshRendering)) forced = true;
     }
 
@@ -147,16 +166,17 @@ export const livePreviewField = StateField.define<LivePreviewState>({
           cursor,
           mode,
           features,
+          captions,
         };
       }
       // 强制重算：返回**新对象**（身份变了）让 CM6 重跑装饰器映射。
       // 注意不能在这里提前 return value，那会把请求吞掉。
-      if (forced) return { ...value, cursor, mode, features };
+      if (forced) return { ...value, cursor, mode, features, captions };
       // 只是选区或模式变了：树与片段都保持不变
-      if (cursor === value.cursor && mode === value.mode) {
+      if (cursor === value.cursor && mode === value.mode && captions === value.captions) {
         return value;
       }
-      return { ...value, cursor, mode, features };
+      return { ...value, cursor, mode, features, captions };
     }
 
     // 文档变了 → 增量解析
@@ -183,6 +203,7 @@ export const livePreviewField = StateField.define<LivePreviewState>({
       cursor,
       mode,
       features,
+      captions,
     };
   },
 });
