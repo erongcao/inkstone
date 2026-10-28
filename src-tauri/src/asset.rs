@@ -316,4 +316,90 @@ mod tests {
         assert_eq!(mime_from_extension("jpeg"), "image/jpeg");
         assert_eq!(mime_from_extension("svg"), "image/svg+xml");
     }
+
+    /// `read_image_data_url` 是**导出内联图片**真正干活的地方：
+    /// 相对路径 → 按文档目录读盘 → base64 的 data: URI。
+    ///
+    /// 它以前没有直接测试——而导出链路正是在用它
+    /// （编辑器显示图片也是走它，见 `src/ipc/image.ts`）。
+    /// 这里的断言是**产物**：返回的 URI 长什么样、字节对不对。
+    mod data_url {
+        use super::*;
+        use std::fs;
+
+        /// 建一个临时目录，放一个已知内容的图片
+        fn fixture(name: &str, bytes: &[u8]) -> (PathBuf, PathBuf) {
+            let dir = std::env::temp_dir().join(format!(
+                "inkstone-asset-test-{}-{}",
+                std::process::id(),
+                name
+            ));
+            let _ = fs::remove_dir_all(&dir);
+            fs::create_dir_all(dir.join("assets")).unwrap();
+            let file = dir.join("assets").join("fig.png");
+            fs::write(&file, bytes).unwrap();
+            (dir.clone(), file)
+        }
+
+        /// 异步函数用 Tauri 自带的运行时驱动——
+        /// 不给 tokio 加 `macros` feature（那会多一个 feature 组合要维护）。
+        fn run<F: std::future::Future>(f: F) -> F::Output {
+            tauri::async_runtime::block_on(f)
+        }
+
+        #[test]
+        fn 相对路径按文档目录解析成_data_uri() {
+            let (dir, _file) = fixture("rel", b"\x89PNG\r\n\x1a\nhello");
+            let doc = dir.join("note.md");
+
+            let url = run(read_image_data_url(
+                Some(doc.to_string_lossy().to_string()),
+                "assets/fig.png".to_string(),
+            ))
+            .unwrap();
+
+            assert!(url.starts_with("data:image/png;base64,"), "实际是 {url}");
+            let payload = url.trim_start_matches("data:image/png;base64,");
+            let decoded = BASE64.decode(payload).unwrap();
+            assert_eq!(decoded, b"\x89PNG\r\n\x1a\nhello");
+
+            let _ = fs::remove_dir_all(&dir);
+        }
+
+        #[test]
+        fn 远程与内联地址原样返回() {
+            assert_eq!(
+                run(read_image_data_url(
+                    None,
+                    "https://example.com/a.png".to_string()
+                ))
+                .unwrap(),
+                "https://example.com/a.png"
+            );
+            assert_eq!(
+                run(read_image_data_url(
+                    None,
+                    "data:image/png;base64,AAA".to_string()
+                ))
+                .unwrap(),
+                "data:image/png;base64,AAA"
+            );
+        }
+
+        #[test]
+        fn 读不到时报错而不是给一个空地址() {
+            let err = run(read_image_data_url(
+                Some("/docs/note.md".to_string()),
+                "assets/missing.png".to_string(),
+            ))
+            .unwrap_err();
+            assert!(err.contains("读取图片失败"), "实际是 {err}");
+        }
+
+        #[test]
+        fn 文档没保存时相对路径无从解析() {
+            let err = run(read_image_data_url(None, "assets/fig.png".to_string())).unwrap_err();
+            assert!(err.contains("未保存"), "实际是 {err}");
+        }
+    }
 }

@@ -30,6 +30,7 @@ import {
   type VariableContext,
 } from "./variables";
 import { exportToHtml, typographyFromAppearance } from "./html";
+import { inlineImages, type ImageResolver } from "./inline-images";
 import { pandocInputFormat } from "./pandoc-format";
 import { featuresFromSettings } from "@/parser/features";
 import { applyCaptionsToSource, collectCaptions } from "@/parser/captions";
@@ -270,6 +271,77 @@ function withCaptionNumbers(source: string, settings: Settings): string {
 }
 
 /**
+ * 产出 HTML 导出的内容（**不含写盘**）。
+ *
+ * ## 为什么要单独一个函数
+ *
+ * 守卫要能**拿到产物**来断言「图到底变成什么了」——
+ * 而 `exportDocument` 的最后一步是写盘（浏览器降级时是 Blob 下载），
+ * 写出去的内容在测试里看不见。
+ *
+ * 把「产出内容」与「写盘」分开，产物就能被直接检查。
+ *
+ * @param context 导出上下文
+ * @param deps 依赖注入（测试用；生产不传）
+ */
+export async function buildHtmlExport(
+  context: ExportContext,
+  deps?: { resolveImage?: ImageResolver },
+): Promise<string> {
+  const settings = readSettings();
+
+  // 是否带大纲：设置里的默认值，可能被 front matter 覆盖
+  const includeOutline =
+    context.overrides.htmlIncludeOutline ?? settings.export.htmlIncludeOutline;
+
+  // 等公式渲染器就绪——KaTeX 的 CSS 是跟着 math-render chunk 一起加载的，
+  // 渲染器没就绪就拿不到那张样式表，导出的公式会显示成「两份」
+  // （KaTeX 渲染结果 + 一串裸 LaTeX）。
+  // 详见 export/html.ts 里关于 `.katex-mathml` 的说明。
+  await ensureMathRenderer();
+
+  // 大纲由导出链路**自己**从同一棵树派生——
+  // 不在这里另外解析一棵：两棵树的锚点可能对不上，
+  // 目录里的链接就会指错地方。理由见 parser/heading-anchors.ts。
+  const html = exportToHtml(context.content, {
+    title: context.title,
+    theme: settings.appearance.theme,
+    mode: currentColorMode(),
+    includeOutline,
+    extraHead: settings.export.htmlExtraHead,
+    extraBody: settings.export.htmlExtraBody,
+    // 自定义 CSS 也要进导出——编辑器里有、导出里没有就是「屏幕与导出不一致」
+    customCss: settings.appearance.customCss,
+    // 排版（字号 / 行高 / 写作区宽度 / 字体 / 页面背景）同样要跟屏幕一致
+    typography: typographyFromAppearance(settings.appearance),
+    words: context.variables.words,
+    chars: context.variables.chars,
+    // 打印 / 分页样式
+    //
+    // **不传纸张尺寸**：HTML 导出是一份「拿到哪都能打开」的文件，
+    // 把 A4 写死进去，用户在 Letter 纸上打印会被浏览器按 A4 排版。
+    // 纸张由浏览器 / 打印面板决定；页边距与分页规则由我们决定。
+    print: {
+      margin: context.overrides.pdfMargin ?? settings.export.pdfMargin,
+      chapterBreak: context.overrides.pdfChapterBreak ?? settings.export.pdfChapterBreak,
+      includeOutline:
+        context.overrides.pdfIncludeOutline ?? settings.export.pdfIncludeOutline,
+    },
+  });
+
+  // 图片内联成 data: URI。
+  //
+  // 为什么必须内联：导出文件一旦离开文档目录，
+  // `![](assets/fig.png)` 这种相对路径就断了。
+  // 内联之后导出物是**自足**的——挪走、发给别人都还带图。
+  // 理由与代价见 `src/export/inline-images.ts` 的文件头。
+  return inlineImages(html, {
+    docPath: context.variables.path,
+    resolve: deps?.resolveImage,
+  });
+}
+
+/**
  * 执行一次导出。
  *
  * @param formatId 导出格式 id
@@ -359,45 +431,7 @@ export async function exportDocument(formatId: string): Promise<ExportResult> {
         warnings.push(...output.warnings);
       }
     } else if (format.kind === "html") {
-      // 是否带大纲：设置里的默认值，可能被 front matter 覆盖
-      const includeOutline =
-        context.overrides.htmlIncludeOutline ?? settings.export.htmlIncludeOutline;
-
-      // 等公式渲染器就绪——KaTeX 的 CSS 是跟着 math-render chunk 一起加载的，
-      // 渲染器没就绪就拿不到那张样式表，导出的公式会显示成「两份」
-      // （KaTeX 渲染结果 + 一串裸 LaTeX）。
-      // 详见 export/html.ts 里关于 `.katex-mathml` 的说明。
-      await ensureMathRenderer();
-
-      // 大纲由导出链路**自己**从同一棵树派生——
-      // 不在这里另外解析一棵：两棵树的锚点可能对不上，
-      // 目录里的链接就会指错地方。理由见 parser/heading-anchors.ts。
-      const html = exportToHtml(context.content, {
-        title: context.title,
-        theme: settings.appearance.theme,
-        mode: currentColorMode(),
-        includeOutline,
-        extraHead: settings.export.htmlExtraHead,
-        extraBody: settings.export.htmlExtraBody,
-        // 自定义 CSS 也要进导出——编辑器里有、导出里没有就是「屏幕与导出不一致」
-        customCss: settings.appearance.customCss,
-        // 排版（字号 / 行高 / 写作区宽度 / 字体 / 页面背景）同样要跟屏幕一致
-        typography: typographyFromAppearance(settings.appearance),
-        words: context.variables.words,
-        chars: context.variables.chars,
-        // 打印 / 分页样式
-        //
-        // **不传纸张尺寸**：HTML 导出是一份「拿到哪都能打开」的文件，
-        // 把 A4 写死进去，用户在 Letter 纸上打印会被浏览器按 A4 排版。
-        // 纸张由浏览器 / 打印面板决定；页边距与分页规则由我们决定。
-        print: {
-          margin: context.overrides.pdfMargin ?? settings.export.pdfMargin,
-          chapterBreak:
-            context.overrides.pdfChapterBreak ?? settings.export.pdfChapterBreak,
-          includeOutline:
-            context.overrides.pdfIncludeOutline ?? settings.export.pdfIncludeOutline,
-        },
-      });
+      const html = await buildHtmlExport(context);
       await writeTextFile(targetPath, html);
     } else {
       // PDF：走 WebView 打印路径（见 export/pdf.ts）

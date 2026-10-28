@@ -36,6 +36,7 @@
  */
 
 import { exportToHtml, typographyFromAppearance } from "./html";
+import { inlineImages, type ImageResolver } from "./inline-images";
 import type { ExportContext } from "./service";
 import type { ExportResult } from "./service";
 import { readSettings } from "@/settings/store";
@@ -147,7 +148,10 @@ export function printReadyScript(timeoutMs = 15000): string {
  * 这里必须自己等——打印 HTML 是另一条独立的产出路径，
  * 不能指望调用方记得替它做这件事。
  */
-export async function buildPrintHtml(context: ExportContext): Promise<string> {
+export async function buildPrintHtml(
+  context: ExportContext,
+  deps?: { resolveImage?: ImageResolver },
+): Promise<string> {
   const settings = readSettings();
 
   // 先等渲染器：KaTeX 是按需加载的 603 KB chunk，
@@ -184,9 +188,25 @@ export async function buildPrintHtml(context: ExportContext): Promise<string> {
     print: printOptions,
   });
 
+  // 图片内联成 data: URI。
+  //
+  // 这条链路**必须**内联：打印用的 HTML 落在系统临时目录
+  // （`/tmp/inkstone-print/`）、用 `file://` 打开、没有 `<base>`——
+  // 相对路径的图片在纸上就是**坏图**。
+  //
+  // 顺带的好处：内联后打印不依赖任何外部文件，
+  // 就绪门等图片也就只等内联的 data: URI（不必等网络）。
+  const inlined = await inlineImages(html, {
+    docPath: context.variables.path,
+    resolve: deps?.resolveImage,
+  });
+
   // 就绪门脚本插进 </body> 之前（**在所有图片之后**——
   // 脚本要遍历 document.images，图片还没进 DOM 就遍历不到）。
-  return html.replace("</body>", `<script>\n${printReadyScript()}\n</script>\n</body>`);
+  return inlined.replace(
+    "</body>",
+    `<script>\n${printReadyScript()}\n</script>\n</body>`,
+  );
 }
 
 /**
