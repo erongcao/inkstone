@@ -21,7 +21,6 @@ const base = {
   title: "测试文档",
   theme: "inkstone-light",
   mode: "light" as const,
-  outline: [],
   includeOutline: false,
 };
 
@@ -184,10 +183,13 @@ describe("公式", () => {
 });
 
 describe("大纲", () => {
-  const outline = [
-    { depth: 1, text: "第一章", from: 0, to: 10, line: 1 },
-    { depth: 2, text: "第二节", from: 20, to: 30, line: 5 },
-  ];
+  /**
+   * 一份带两级标题的文档。
+   *
+   * 大纲**由文档自己派生**，不走选项传入——
+   * 大纲里的链接要指向正文里的标题，两边必须来自同一棵 mdast 树。
+   */
+  const DOC = "# 第一章\n\n正文一段。\n\n## 第二节\n\n正文二段。\n";
 
   it("默认不含大纲", () => {
     const html = exportToHtml("# 标题", base);
@@ -198,18 +200,14 @@ describe("大纲", () => {
   });
 
   it("开启后有大纲", () => {
-    const html = exportToHtml("# 标题", { ...base, outline, includeOutline: true });
+    const html = exportToHtml(DOC, { ...base, includeOutline: true });
     expect(html).toContain("inkstone-outline");
     expect(html).toContain("第一章");
     expect(html).toContain("第二节");
   });
 
   it("大纲的链接指向标题锚点", () => {
-    const html = exportToHtml("# 第一章\n\n## 第二节\n", {
-      ...base,
-      outline,
-      includeOutline: true,
-    });
+    const html = exportToHtml(DOC, { ...base, includeOutline: true });
     // 大纲里的 href 与标题上的 id 必须对得上
     const href = /href="#(section-[^"]+)"/.exec(html)?.[1];
     expect(href).toBeTruthy();
@@ -217,7 +215,7 @@ describe("大纲", () => {
   });
 
   it("大纲的层级用缩进体现", () => {
-    const html = exportToHtml("# 第一章", { ...base, outline, includeOutline: true });
+    const html = exportToHtml(DOC, { ...base, includeOutline: true });
     expect(html).toContain('data-depth="1"');
     expect(html).toContain('data-depth="2"');
   });

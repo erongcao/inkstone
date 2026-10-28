@@ -317,6 +317,16 @@
   眼睛看不见，测试也难覆盖。上游 `mdast-util-to-hast` 的注释直说
   「When your page is not in English, you must define translated values」。
   现在通过 `remark-rehype` 的 `footnoteLabel` / `footnoteBackLabel` 传进去
+- **导出的大纲链接指错标题**：锚点 id 靠「第几个 `<hN>` 标签」配对，
+  而这个对应关系只在「所有标题都是顶层标题」时成立——
+  引用块里的标题（`> # 标题`）、列表项里的标题、用户自己写的原始 HTML
+  （`<h1>标题</h1>`）都会占掉一个名额。
+  实测：文档里只有一个顶层标题 + 一个引用块标题时，
+  大纲项的 id 被贴到了**引用块那个标题**上，真正的大纲标题反而没有 id——
+  导出文件里点目录，跳到错误的位置，而文件本身看不出任何异常。
+  现在 id 由**标题节点自己**决定（深度 + 源码偏移，
+  `src/parser/heading-anchors.ts`，经 mdast 的 `data.hProperties` 写进 hast），
+  并且导出只解析**一棵**树——大纲与正文同源，没有第二次计算的机会
 - 界面国际化：词典条数 426 → 486；「快捷键一览」的显示 bug 见上
 - **单个 `~` 被吃成删除线**：`remark-gfm` 默认把**单个**波浪号也当删除线
   （GFM 规范并不允许，这是 GitHub 的宽松行为），而 lezer 只认成对 `~~`。

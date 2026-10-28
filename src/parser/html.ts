@@ -25,6 +25,7 @@ import { parseMarkdown, type MarkdownAst, type ParseOptions } from "./markdown";
 import { resolveFeatures } from "./features";
 import { applyAlerts } from "./alerts";
 import { applyImageSizes } from "./image-size";
+import { applyHeadingAnchors } from "./heading-anchors";
 import { highlightHastHandlers } from "./highlight";
 import { subSupHastHandlers } from "./subsup";
 import { rehypeMath, katexStylesheet, type HastNode } from "./rehype-math";
@@ -92,6 +93,18 @@ export interface HtmlOptions extends ParseOptions {
    * 与「在服务器上渲染不可信内容」不是一回事（后者需要净化，GitHub 走那条路）。
    */
   allowRawHtml?: boolean;
+  /**
+   * 是否给标题打锚点 id。
+   *
+   * ## 默认 `false`
+   *
+   * 剪贴板那条路不需要：往 Word / 邮件正文里贴的时候，
+   * `id` 是无意义的噪音（还会跟目标文档里已有的 id 撞车）。
+   *
+   * 导出那条路**必须开**——大纲里的链接靠它跳到正文标题上。
+   * 见 `heading-anchors.ts` 的说明（以及那里记录的一次错位事故）。
+   */
+  headingAnchors?: boolean;
 }
 
 /**
@@ -205,6 +218,15 @@ export function htmlFromAst(tree: MarkdownAst, options: HtmlOptions = {}): strin
   // 不在这里换成 image 节点，导出出来就是一串字面文本；
   // 无空格那种的 url 带着尺寸，不剥掉的话导出的图片地址是坏的。
   applyImageSizes(tree);
+
+  // 标题锚点：大纲的链接要靠它跳到正文标题上。
+  // 必须在 mdast → hast **之前**做——id 是靠 `data.hProperties` 带过去的，
+  // 过了这一步就只剩一串 HTML 字符串，没法再挂 id 上。
+  //
+  // 放在提示块变换**之后**没有影响：那个变换只动引用块，不碰标题节点。
+  if (options.headingAnchors === true) {
+    applyHeadingAnchors(tree);
+  }
 
   // 第一步：mdast → hast。
   // 注意 `runSync` 返回的是**hast 树本身**（不是 VFile）——

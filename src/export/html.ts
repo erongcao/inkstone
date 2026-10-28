@@ -25,11 +25,13 @@
  * 而这里是「解析完之后按什么样式排版」。解析仍然只有 remark 一套。
  */
 
-import { markdownToHtml } from "@/parser/html";
+import { htmlFromAst } from "@/parser/html";
+import { parseMarkdown } from "@/parser/markdown";
 import { featuresFromSettings } from "@/parser/features";
+import { headingAnchorId } from "@/parser/heading-anchors";
 import { readSettings } from "@/settings/store";
 import { highlightCode, resolveLanguage } from "@/editor/render/code-block";
-import type { OutlineItem } from "@/editor/document-index";
+import { buildIndexFromTree, type OutlineItem } from "@/editor/document-index";
 import type { ColorMode } from "@/settings/schema";
 import { katexStylesheet } from "@/parser/rehype-math";
 import { t, htmlLang } from "@/i18n";
@@ -42,9 +44,13 @@ export interface HtmlExportOptions {
   theme: string;
   /** 明暗模式 */
   mode: ColorMode;
-  /** 大纲；为空数组表示不要大纲 */
-  outline: OutlineItem[];
-  /** 是否包含大纲 */
+  /**
+   * 是否包含大纲。
+   *
+   * 大纲**由本文档自己派生**（不走选项传入）——
+   * 大纲里的链接要指向正文里的标题，两边必须来自**同一棵** mdast 树，
+   * 否则锚点会对不上。理由见 `parser/heading-anchors.ts`。
+   */
   includeOutline: boolean;
   /** 追加进 `<head>` 的原始 HTML */
   extraHead?: string;
@@ -629,8 +635,9 @@ function buildOutline(outline: OutlineItem[]): string {
   const items = outline
     .map((item) => {
       const text = item.text || t("（无标题）");
-      // 用锚点 id：章节序号，保证 id 唯一且可跳转
-      const anchor = `section-${item.depth}-${item.from}`;
+      // 锚点 id 与正文标题上的 id 用**同一个公式**——
+      // 见 `parser/heading-anchors.ts`。这里不能自己另算一套。
+      const anchor = headingAnchorId(item.depth, item.from);
       return `      <li data-depth="${item.depth}"><a href="#${anchor}">${escapeHtml(text)}</a></li>`;
     })
     .join("\n");
@@ -642,22 +649,6 @@ ${items}
   </nav>`;
 }
 
-/**
- * 给标题加锚点 id，好让大纲能跳转。
- *
- * 只处理 h1–h6：与大纲的 depth 对应，编号用「深度 + 源码偏移」保证唯一。
- */
-function addHeadingAnchors(html: string, outline: OutlineItem[]): string {
-  if (outline.length === 0) return html;
-  let index = 0;
-  return html.replace(/<h([1-6])>/g, (match, level: string) => {
-    const item = outline[index++];
-    if (!item) return match;
-    const anchor = `section-${item.depth}-${item.from}`;
-    return `<h${level} id="${anchor}">`;
-  });
-}
-
 /* ── 主入口 ── */
 
 /**
@@ -666,12 +657,29 @@ function addHeadingAnchors(html: string, outline: OutlineItem[]): string {
  * @param source Markdown 源码
  */
 export function exportToHtml(source: string, options: HtmlExportOptions): string {
-  // 正文：复用现成的 HTML 链路（含 KaTeX 公式渲染）
+  const features = featuresFromSettings(readSettings().markdown);
+
+  // **一棵**树：大纲与正文都从它派生。
+  //
+  // 早先是两棵——`service.ts` 自己解析一棵算大纲，这里再解析一棵出正文，
+  // 锚点靠「第几个 `<hN>` 标签」配对。两棵树一旦对不上（嵌套标题、
+  // 用户写的原始 HTML 都会多出标签），大纲里的链接就指错地方。
+  // 实测过一次：目录项的 id 被贴到了引用块里那个标题上，
+  // 真正的大纲标题反而没有 id，导出文件里点目录跳错位置。
+  //
+  // 理由与上游机制见 `parser/heading-anchors.ts`。
+  const tree = parseMarkdown(source, { features });
+
+  // 索引必须在渲染**之前**算：渲染会就地改树
+  // （提示块变换会往引用块里插节点、图片尺寸会改 url）。
+  const index = buildIndexFromTree(tree);
+
+  // 正文：复用现成的 HTML 链路（含 KaTeX 公式渲染与标题锚点）
   //
   // **必须传当前的 Markdown 开关**——不然关掉表格/脚注/高亮的用户
   // 导出来的 HTML 里那些语法还在，与屏幕上看到的不一致（架构约束 C）。
-  let body = markdownToHtml(source, {
-    features: featuresFromSettings(readSettings().markdown),
+  let body = htmlFromAst(tree, {
+    features,
     // **保留**用户写在 Markdown 里的原始 HTML（2026-10-28 维护者拍板）。
     //
     // 为什么不能丢：实测丢掉之后，块级的原始 HTML **连里面的文字一起没了**——
@@ -682,6 +690,8 @@ export function exportToHtml(source: string, options: HtmlExportOptions): string
     // 与剪贴板那条路**故意不一样**（那边维持丢弃），
     // 理由与安全边界见 `parser/html.ts` 的 `HtmlOptions`。
     allowRawHtml: true,
+    // 标题锚点：大纲的链接要靠它。
+    headingAnchors: true,
   });
 
   // 「公式没渲染」的检测必须发生在**高亮之前**。
@@ -693,10 +703,8 @@ export function exportToHtml(source: string, options: HtmlExportOptions): string
 
   // 代码高亮：导出侧补上（编辑器里那份是 CodeMirror 装饰器，不在这条链路上）
   body = highlightCodeBlocks(body);
-  // 标题锚点：让大纲可跳转
-  body = addHeadingAnchors(body, options.outline);
 
-  const outline = options.includeOutline ? buildOutline(options.outline) : "";
+  const outline = options.includeOutline ? buildOutline(index.outline) : "";
   const katexCss = katexStylesheet();
   const title = escapeHtml(options.title || t("未命名"));
 

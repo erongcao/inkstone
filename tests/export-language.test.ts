@@ -46,7 +46,6 @@ const base = {
   title: "Probe",
   theme: "github",
   mode: "light" as const,
-  outline: [{ depth: 1, text: "A Heading", from: 0, to: 10, line: 1 }],
   includeOutline: true,
 };
 

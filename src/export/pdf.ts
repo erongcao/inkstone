@@ -74,7 +74,7 @@ export async function buildPrintHtml(context: ExportContext): Promise<string> {
     title: context.title,
     theme: settings.appearance.theme,
     mode: currentColorMode(),
-    outline: [],
+    // 打印版不要大纲：打印的是**正文**，目录在纸上是多余的
     includeOutline: false,
     // 自定义 CSS 也要进导出——编辑器里有、导出里没有就是「屏幕与导出不一致」
     customCss: settings.appearance.customCss,

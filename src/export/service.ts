@@ -316,10 +316,6 @@ export async function exportDocument(formatId: string): Promise<ExportResult> {
         warnings.push(...output.warnings);
       }
     } else if (format.kind === "html") {
-      // 大纲与字数统计：从**同一棵** mdast 树派生（架构约束 3）
-      const tree = parseMarkdown(context.content);
-      const index = buildIndexFromTree(tree);
-
       // 是否带大纲：设置里的默认值，可能被 front matter 覆盖
       const includeOutline =
         context.overrides.htmlIncludeOutline ?? settings.export.htmlIncludeOutline;
@@ -330,18 +326,20 @@ export async function exportDocument(formatId: string): Promise<ExportResult> {
       // 详见 export/html.ts 里关于 `.katex-mathml` 的说明。
       await ensureMathRenderer();
 
+      // 大纲由导出链路**自己**从同一棵树派生——
+      // 不在这里另外解析一棵：两棵树的锚点可能对不上，
+      // 目录里的链接就会指错地方。理由见 parser/heading-anchors.ts。
       const html = exportToHtml(context.content, {
         title: context.title,
         theme: settings.appearance.theme,
         mode: currentColorMode(),
-        outline: index.outline,
         includeOutline,
         extraHead: settings.export.htmlExtraHead,
         extraBody: settings.export.htmlExtraBody,
         // 自定义 CSS 也要进导出——编辑器里有、导出里没有就是「屏幕与导出不一致」
         customCss: settings.appearance.customCss,
-        words: index.stats.words,
-        chars: index.stats.chars,
+        words: context.variables.words,
+        chars: context.variables.chars,
       });
       await writeTextFile(targetPath, html);
     } else {

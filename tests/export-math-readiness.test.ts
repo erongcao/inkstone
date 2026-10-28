@@ -40,7 +40,6 @@ const base = {
   title: "Probe",
   theme: "github",
   mode: "light" as const,
-  outline: [],
   includeOutline: false,
 };
 

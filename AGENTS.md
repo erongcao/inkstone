@@ -3821,6 +3821,111 @@ pandoc 只有**一个** `tex_math_dollars` 管全部美元符号公式
 
 都**验过会红**：拆掉 `+mark` 与 `-pipe_tables` → 6 条红。
 
+## 第十二个破口：导出的大纲链接指错标题（2026-10-28）
+
+### 症状
+
+导出的 HTML 里点目录，跳到**错误的位置**。
+文件本身看不出任何异常——大纲在那儿，标题在那儿，只是**对不上号**。
+
+### 根因：锚点靠「第几个 `<hN>` 标签」配对
+
+早先的实现分两处算：
+
+- `service.ts` 自己 `parseMarkdown` 一遍，抽出**顶层**标题当大纲；
+- `exportToHtml` 再解析一遍出正文，然后用正则
+  `/<h([1-6])>/g` 数出**第 N 个**标题标签，把第 N 个大纲项的 id 贴上去。
+
+这个「第 N 个 ↔ 第 N 个」的对应关系，**只在「文档里所有标题都是顶层标题」时成立**。
+三种情况会打破它，而且都很常见：
+
+| 情况 | 大纲收不收它 | HTML 里是不是 `<hN>` |
+|---|---|---|
+| 引用块里的标题（`> # 标题`） | 不收 | 是 |
+| 列表项里的标题（`- # 标题`） | 不收 | 是 |
+| 用户写的原始 HTML（`<h1>标题</h1>`） | 不收（那不是 mdast 的标题节点） | 是 |
+
+第三种尤其要命：**原始 HTML 是 2026-10-28 才决定保留进导出的**，
+保留之后用户正文里的 `<h1>` 也会占掉一个名额。
+
+### 实测
+
+文档里只有**一个**顶层标题 + 一个引用块标题时：
+
+```
+outline: [ '2:Real Heading@26' ]
+headings: [ '<h1 id="section-2-26">', '<h2>' ]
+```
+
+大纲项的 id 被贴到了**引用块里那个标题**上，
+真正的大纲标题（`<h2>`）**反而没有 id**——
+点目录跳过去，落在错误的地方。
+
+### 修法：id 由**标题节点自己**决定
+
+新模块 `src/parser/heading-anchors.ts`：
+
+- `headingAnchorId(depth, from)` —— 标题深度 + 它在源码里的起始偏移；
+- `applyHeadingAnchors(tree)` —— 遍历 mdast，给每个标题节点挂
+  `data.hProperties.id`。
+
+写进 hast 的机制是 mdast 的标准扩展点 `data.hProperties`：
+上游 `mdast-util-to-hast` 的 heading handler 末尾调 `state.applyData(node, result)`，
+而 `applyData` 会 `Object.assign(result.properties, structuredClone(hProperties))`
+（上游 `lib/state.js`）。
+
+**偏移量是唯一的**，所以 id 天然不重复；没有位置的标题（提示块变换插进去的合成节点）
+直接跳过。
+
+### 顺带把「两棵树」合成「一棵」
+
+光把 id 改成按节点算还不够——大纲和正文仍然来自**两次独立的解析**，
+两边算出来的偏移量只要有一处不同，链接照样对不上。
+
+所以 `exportToHtml` 改成**自己解析一次**：
+
+```ts
+const tree = parseMarkdown(source, { features });
+const index = buildIndexFromTree(tree);   // 索引要在渲染之前算
+let body = htmlFromAst(tree, { …, headingAnchors: true });
+```
+
+`HtmlExportOptions` 里的 `outline` 字段**删掉**——
+大纲不再由调用方传进来，**没有第二次计算的机会**。
+
+顺带：`service.ts` 里那段单独解析算大纲的代码删掉了，
+字数统计改用 `context.variables.words` / `context.variables.chars`
+（同一个来源，本来就是同一份 `buildIndexFromTree` 的结果）。
+
+### 剪贴板那条路**结构上**拿不到锚点
+
+`html-loader.ts` 的 `HtmlRenderer` 签名只收 `ParseOptions`，
+而 `headingAnchors` 在 `HtmlOptions` 上——剪贴板传不进去，
+也就不会带上一堆无意义的 `id`。
+
+### 守卫：`tests/export-outline-anchors.test.ts`
+
+判据是**成对**的：链接的落点，标题的**文字与层级**都要对得上。
+
+```
+大纲项「真标题」落到了另一个标题上（「引用块标题」）
+```
+
+比原来那条强得多——原来只断言「产物里存在 `id="<href>"`」，
+**抓不到错位**（只要有任何一个标题碰巧带着那个 id，它就绿）。
+
+另外覆盖：
+
+- 三种回归（引用块 / 列表项 / 原始 HTML）；
+- 标题里有行内标记时（`**加粗** 标题`）；
+- setext 标题（`一` / `===`）；
+- 锚点 id 不重复；
+- **走完整导出链路**（mock `writeTextFile` 抓真正写出去的那份文件）——
+  `service.ts` 曾经是**另外解析一棵树**算大纲的，只测 `exportToHtml` 看不到那一环。
+
+都**验过会红**：把旧实现装回去 → 4 条红（含完整链路那条）；
+只关掉 `headingAnchors` → 7 条红。
+
 ## 「装饰器局部重建」：先量收益，再决定做不做（2026-10-27）
 
 M2 留的最后一个性能项。这轮**没有**做，原因是量完之后发现
@@ -4205,6 +4310,11 @@ M3 全部完成（2026-10-23）。M4（导出）进行中（2026-10-25）：
   输入格式串按开关算（`src/export/pandoc-format.ts`），
   `==高亮==` 在 21 种 pandoc 格式里也不再是字面文本。
   理由、映射表与公式的粒度限制见上文「第十一个破口」
+- **导出的大纲链接落到对应的标题上**（2026-10-28）：锚点 id 由**标题节点自己**算
+  （深度 + 源码偏移，`src/parser/heading-anchors.ts`），
+  导出只解析**一棵**树，大纲与正文同源——
+  此前按「第几个 `<hN>` 标签」配对，引用块 / 列表项 / 原始 HTML 里的标题会抢走 id，
+  点目录跳错位置。理由见上文「第十二个破口」
 - **导出变量系统**：`${title}` `${author}` `${today}` 等，只在**导出产物**上替换，
   绝不碰文档正文；未定义的变量原样保留
 - **YAML front matter 覆盖导出设置**：默认关闭；开启后只开放安全的那几项，
