@@ -288,6 +288,18 @@
   且没有任何提示。现在把「等渲染器」放进产出函数内部
   （`buildPrintHtml` 改成 async、`ensureMarkdownToHtml` 同样自己等），
   顺带让 `exportToHtml` 在检测到未渲染的公式时**留下痕迹**而不是默默降级
+- **pandoc 那条导出链路完全不理会 Inkstone 的 Markdown 开关**：
+  它把原始 Markdown 直接交给外部 pandoc，输入格式是**写死**的
+  `markdown+tex_math_dollars+yaml_metadata_block`。两个后果：
+  用户关掉的开关（表格 / 任务列表 / 脚注 / 上下标 / front matter）在
+  导出的 Word 里**照旧生效**（屏幕上却已经是字面文本）；
+  而 pandoc 的 `==高亮==` 语法叫 `mark` 扩展且**默认关着**，
+  那条写死的格式串里没有它——于是**默认设置**下编辑器里的黄色高亮
+  导出到 Word 里变成一对字面的 `==`，21 种 pandoc 格式全中。
+  现在把开关翻译成 pandoc 的输入格式串（新增 `src/export/pandoc-format.ts`），
+  经 `convertWithPandoc` → Tauri 命令 → `--from=` 传下去。
+  已知粒度限制：pandoc 只有一个 `tex_math_dollars` 管全部美元符号公式，
+  而 Inkstone 有三个更细的公式开关，只关其中一个时另一个会跟着变
 - **原始 HTML 在导出里静默消失**（内容丢失级别的破口）：
   `<div align="center">` 居中一张图、`<details>` 折叠一段说明，
   在导出的文件里**整块没了**——CommonMark 里块级 HTML 是整个一个

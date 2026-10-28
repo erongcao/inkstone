@@ -3726,6 +3726,101 @@ KaTeX 的输出走的是后者，所以后者必须**一直**开着。
 两条都**验过会红**：拆掉导出的 `allowRawHtml` → 4 条红；
 让剪贴板「顺手放开」→ 剪贴板那条红。
 
+## 第十一个破口：pandoc 那条导出链路完全不理会 Inkstone 的开关（2026-10-28）
+
+导出有三条路：HTML（自己产出）、PDF（走 WebView 打印）、**pandoc**（外部进程）。
+前两条都走 Inkstone 自己的解析层，开关自然生效；
+**第三条不走**——它把**原始 Markdown** 直接交给外部的 pandoc。
+
+而它的输入格式是**写死**的一条：
+
+```
+--from=markdown+tex_math_dollars+yaml_metadata_block
+```
+
+### 两个后果
+
+**一、用户关掉的开关在 pandoc 导出里不生效。**
+
+关掉「表格」→ 屏幕上表格变成字面文本，导出的 Word 里**还是一张表**。
+`src/parser/features.ts` 的文件头写着「导出与剪贴板（同一套规则，屏幕与导出必须一致）」，
+这条承诺在 pandoc 这条路上没兑现。
+
+**二、默认设置下 `==高亮==` 就是坏的。**
+
+pandoc 的 `==高亮==` 语法叫 **`mark`** 扩展，而且**默认关着**——
+上面那条写死的格式串里没有它。于是用户在编辑器里看到的黄色高亮，
+导出到 Word 里变成了一对字面的 `==`，而且 **21 种 pandoc 格式全中**。
+
+实测（pandoc 3.8）：
+
+```console
+$ pandoc -f markdown        -t html  # 默认
+<p>普通 ==高亮== 文字。</p>
+$ pandoc -f markdown+mark   -t html
+<p>普通 <mark>高亮</mark> 文字。</p>
+```
+
+### 修法：把 Inkstone 的开关翻译成 pandoc 的输入格式串
+
+新增 `src/export/pandoc-format.ts`，把开关映射成 pandoc 的扩展开关：
+
+| Inkstone 开关 | pandoc 扩展 | 备注 |
+|---|---|---|
+| `highlight` | `+mark` | pandoc 默认**关**着，必须显式开 |
+| `tables` | `-pipe_tables` 等 | 关掉时四个表格语法全关 |
+| （始终） | `-grid_tables` `-multiline_tables` `-simple_tables` | **Inkstone 根本不支持**这三种 |
+| `taskLists` | `-task_lists` | |
+| `footnotes` | `-footnotes` | |
+| `subscriptSuperscript` | `-subscript` `-superscript` | |
+| `frontMatter` | `-yaml_metadata_block` | |
+| `inlineMath` / `blockMath` | `-tex_math_dollars` | **粒度不够**，见下 |
+
+格式串从 TS 侧算好，经 `convertWithPandoc` → Tauri 命令 → Rust 的 `--from=` 传下去。
+Rust 侧保留一个默认值（前端没传时用），并把它提成常量
+`DEFAULT_INPUT_FORMAT`（原先是散在命令行里的字面量）。
+
+### 一个坑：格式串里的 `+` / `-` 是**符号**，不是分隔符
+
+pandoc 的格式串长这样：
+
+```
+markdown+mark-pipe_tables
+```
+
+`+` 与 `-` 紧贴着扩展名，**中间没有分隔符**。
+第一版用 `parts.join("+")` 拼，拼出来的是 `markdown+-pipe_tables++mark`——
+pandoc 会把它读成「名字为空的扩展」并报错：
+
+```console
+The extension  is not supported for markdown.
+```
+
+正确写法是 `parts.join("")`。
+
+### 粒度限制：公式
+
+Inkstone 有**三个**公式开关（行内 / 单 $ / 块级），
+pandoc 只有**一个** `tex_math_dollars` 管全部美元符号公式
+（实测：`markdown-tex_math_dollars` 会把单 $、行内 $$、块级 $$ 一起关掉）。
+
+所以只能「两个都关时才关掉 pandoc 的」——
+只关其中一个时，另一个会跟着关（或跟着开）。
+这条限制写在 `pandoc-format.ts` 的文件头里，别当成 bug 反复查。
+
+### 守卫：`tests/pandoc-format.test.ts`
+
+两层：
+
+1. **映射函数**（纯函数，永远跑）
+2. **真 pandoc**（装了才跑，没装就跳过并说明）——
+   映射表是**抄**的，抄错了只有真跑一遍才知道。
+
+外加一条**走完整导出链路**的用例（mock `convertWithPandoc` 抓参数）——
+只测映射函数是不够的：中间任何一环没把参数传下去，单测都照样绿。
+
+都**验过会红**：拆掉 `+mark` 与 `-pipe_tables` → 6 条红。
+
 ## 「装饰器局部重建」：先量收益，再决定做不做（2026-10-27）
 
 M2 留的最后一个性能项。这轮**没有**做，原因是量完之后发现
@@ -4106,6 +4201,10 @@ M3 全部完成（2026-10-23）。M4（导出）进行中（2026-10-25）：
 - **导出保留原始 HTML**（2026-10-28）：`<div align="center">`、`<img>`、
   `<details>` 这类内容在导出物里原样保留（此前**整块消失**，连里面的文字一起）。
   剪贴板那条路维持丢弃；取舍与安全边界见上文「第十个破口」
+- **pandoc 导出遵守 Inkstone 的 Markdown 开关**（2026-10-28）：
+  输入格式串按开关算（`src/export/pandoc-format.ts`），
+  `==高亮==` 在 21 种 pandoc 格式里也不再是字面文本。
+  理由、映射表与公式的粒度限制见上文「第十一个破口」
 - **导出变量系统**：`${title}` `${author}` `${today}` 等，只在**导出产物**上替换，
   绝不碰文档正文；未定义的变量原样保留
 - **YAML front matter 覆盖导出设置**：默认关闭；开启后只开放安全的那几项，

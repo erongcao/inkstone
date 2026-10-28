@@ -28,7 +28,19 @@
 //! 让 pandoc 的行为与编辑器内所见一致（架构约束 3：解析规则唯一——同一份内容在两处
 //! 必须解析成同样的结构）。
 //!
-//! `--from=markdown+tex_math_dollars+yaml_metadata_block` 就是这个对齐点。
+//! ## 输入格式由前端算好后传进来
+//!
+//! `convert_with_pandoc` 带一个可选的 `from` 参数——
+//! 前端 `src/export/pandoc-format.ts` 按 **Inkstone 当前的 Markdown 开关**
+//! 算出该用哪些 pandoc 扩展（用户关掉「表格」，pandoc 的 `pipe_tables` 也要关）。
+//!
+//! 不传时用下面的默认值，那是一条「与默认设置对齐」的格式串。
+//!
+//! 默认值：
+//!
+//! ```text
+//! markdown+tex_math_dollars+yaml_metadata_block
+//! ```
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -38,6 +50,13 @@ use serde::Serialize;
 use tauri::AppHandle;
 use tauri_plugin_dialog::DialogExt;
 use tokio::sync::oneshot;
+
+/// 前端没给输入格式时用的默认值
+///
+/// 与 Inkstone 的**默认设置**对齐：单 `$` 公式开、front matter 当元数据。
+/// 注意它**不含** `mark`——`==高亮==` 在 pandoc 里叫 `mark` 扩展且默认关着，
+/// 但 Inkstone 的高亮是默认开着的，所以前端一定会把 `+mark` 传进来。
+const DEFAULT_INPUT_FORMAT: &str = "markdown+tex_math_dollars+yaml_metadata_block";
 
 /// pandoc 的可执行文件名（Windows 下带 .exe）
 #[cfg(windows)]
@@ -205,6 +224,9 @@ pub async fn pick_pandoc_output(
 /// `source` 是 Markdown 源码（含 front matter），`resource_dir` 是文档所在目录——
 /// pandoc 解析相对路径的图片时需要它来找文件，缺了会把图片静默丢掉。
 ///
+/// `from` 是 pandoc 的**输入**格式串，由前端按 Inkstone 当前的 Markdown 开关算出
+/// （见 `src/export/pandoc-format.ts`）。`None` 时用 `DEFAULT_INPUT_FORMAT`。
+///
 /// 返回值里的 `warnings` 是 pandoc 的警告（如「公式无法转成 OMML，降级成 TeX」）。
 /// 它们不影响导出成功，但用户应该知道——否则打开 Word 才发现公式不对却不知原因。
 #[tauri::command]
@@ -213,15 +235,25 @@ pub async fn convert_with_pandoc(
     source: String,
     output_path: String,
     resource_dir: String,
+    from: Option<String>,
 ) -> Result<PandocOutput, String> {
     let Some(pandoc) = find_pandoc() else {
         return Err("未找到 pandoc，无法导出该格式。请先安装 pandoc".to_string());
     };
 
+    let from = from.unwrap_or_else(|| DEFAULT_INPUT_FORMAT.to_string());
+
     // 阻塞的子进程调用放进 spawn_blocking：
     // pandoc 转换一份长文档要几百毫秒，直接在异步任务里同步等会把运行时线程占住。
     tauri::async_runtime::spawn_blocking(move || {
-        run_pandoc(&pandoc, &format, &source, &output_path, &resource_dir)
+        run_pandoc(
+            &pandoc,
+            &format,
+            &source,
+            &output_path,
+            &resource_dir,
+            &from,
+        )
     })
     .await
     .map_err(|e| format!("导出任务异常: {e}"))?
@@ -234,9 +266,10 @@ fn run_pandoc(
     source: &str,
     output_path: &str,
     resource_dir: &str,
+    input_format: &str,
 ) -> Result<PandocOutput, String> {
     let mut child = Command::new(pandoc)
-        .arg("--from=markdown+tex_math_dollars+yaml_metadata_block")
+        .arg(format!("--from={input_format}"))
         .arg(format!("--to={format}"))
         .arg(format!("--output={output_path}"))
         // 相对路径图片按文档所在目录解析
@@ -376,6 +409,7 @@ mod tests {
             "# hi",
             "/tmp/out.docx",
             "/tmp",
+            DEFAULT_INPUT_FORMAT,
         )
         .unwrap_err();
         assert!(!err.is_empty());

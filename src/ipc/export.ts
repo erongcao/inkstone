@@ -148,12 +148,17 @@ export interface PandocOutput {
  * @param source Markdown 源码（含 front matter）
  * @param outputPath 目标文件路径（由 pickExportPath 取得）
  * @param resourceDir 文档所在目录，供 pandoc 解析相对路径图片
+ * @param from pandoc 的**输入**格式串（如 `markdown+mark-pipe_tables`）。
+ *              由 `export/pandoc-format.ts` 按 Inkstone 的开关算出——
+ *              pandoc 用哪个语法解析用户的原文，得跟编辑器一致。
+ *              不传则用 Rust 侧的默认值。
  */
 export async function convertWithPandoc(
   format: string,
   source: string,
   outputPath: string,
   resourceDir: string,
+  from?: string,
 ): Promise<PandocOutput> {
   if (!isTauri()) {
     throw new Error(t("浏览器降级模式无法调用 pandoc，请在桌面应用里导出"));
@@ -164,5 +169,6 @@ export async function convertWithPandoc(
     source,
     outputPath,
     resourceDir,
+    from,
   });
 }

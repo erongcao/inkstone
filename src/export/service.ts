@@ -30,6 +30,8 @@ import {
   type VariableContext,
 } from "./variables";
 import { exportToHtml } from "./html";
+import { pandocInputFormat } from "./pandoc-format";
+import { featuresFromSettings } from "@/parser/features";
 import { sanitizeFileName, suggestFileName, type ExportFormat } from "./registry";
 import { findResolvedExportItem } from "./items";
 import {
@@ -296,11 +298,15 @@ export async function exportDocument(formatId: string): Promise<ExportResult> {
     if (format.kind === "pandoc") {
       // pandoc 自己写文件（二进制不经 JS 边界）
       const resourceDir = context.variables.path ? dirnameOf(context.variables.path) : "";
+      // 输入格式按 Inkstone 的开关算——
+      // 用户关掉「表格」，导出的 Word 里就不该还有一张表（屏幕与导出必须一致）。
+      const from = pandocInputFormat(featuresFromSettings(settings.markdown));
       const output = await convertWithPandoc(
         format.pandocFormat ?? format.id,
         context.content,
         targetPath,
         resourceDir,
+        from,
       );
       // pandoc 的警告要带回给用户——
       // 典型场景：转 Word 时块级公式无法变成 OMML，会降级成 TeX 源码。
