@@ -27,9 +27,27 @@
  * 这条守卫把**两边都钉住**：导出那边一改就红，剪贴板那边被「顺手放开」也红。
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, beforeEach, vi } from "vitest";
+import type * as ExportModule from "@/ipc/export";
+
+/** 捕获写到磁盘（或下载）的那份 HTML */
+const capture = vi.hoisted(() => ({ html: "" }));
+
+vi.mock("@/ipc/export", async (importOriginal) => {
+  const actual = await importOriginal<typeof ExportModule>();
+  return {
+    ...actual,
+    writeTextFile: async (_path: string, content: string) => {
+      capture.html = content;
+    },
+  };
+});
+
 import { exportToHtml } from "@/export/html";
+import { exportDocument } from "@/export/service";
 import { ensureMarkdownToHtml } from "@/parser/html-loader";
+import { resetSettings } from "@/settings/store";
+import { setDocumentContent, resetTabs } from "@/ipc/document";
 
 /** 导出选项 */
 const base = {
@@ -60,6 +78,12 @@ function body(html: string): string {
   const end = html.indexOf("</article>");
   return html.slice(start, end);
 }
+
+beforeEach(() => {
+  resetSettings();
+  resetTabs();
+  capture.html = "";
+});
 
 describe("原始 HTML：导出保留、剪贴板丢弃", () => {
   it("导出：块级原始 HTML 连同它的文字都保住", () => {
@@ -98,5 +122,27 @@ describe("原始 HTML：导出保留、剪贴板丢弃", () => {
     // 行内标签被丢，文字留下
     expect(html).not.toContain("<b>");
     expect(html).toContain("bold");
+  });
+});
+
+describe("走完整导出链路：写出去的那份文件里也有原始 HTML", () => {
+  it("导出的文件保留块级原始 HTML 与它的文字", async () => {
+    setDocumentContent('<div align="center">\nclick me\n</div>\n');
+
+    const result = await exportDocument("html");
+
+    expect(result.ok).toBe(true);
+    // 这是**真正写出去的那份文件**的内容，不是单测里的中间产物
+    expect(capture.html).toContain('<div align="center">');
+    expect(capture.html).toContain("click me");
+  });
+
+  it("导出的文件保留 <img> 这类没有文字的内容", async () => {
+    setDocumentContent('<div align="center">\n<img src="logo.png" width="200">\n</div>\n');
+
+    const result = await exportDocument("html");
+
+    expect(result.ok).toBe(true);
+    expect(capture.html).toContain('<img src="logo.png" width="200">');
   });
 });
