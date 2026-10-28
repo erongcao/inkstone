@@ -65,6 +65,11 @@ type PersistedBlob = DeepPartial<Settings> & { __v?: unknown };
  * v2 → v3：`appearance.fontFamily` / `appearance.monoFontFamily` 的**旧默认值**
  * 改成「空 = 跟随主题」。
  *
+ * v3 → v4：`appearance.followSystemAppearance` 从**死开关**变成
+ * 「强制跟随系统」——旧值不带用户意图，一律当 `false`。
+ * 这一条**不是幂等的**，所以要靠版本号保证只跑一次
+ * （理由见上面 `PERSISTED_VERSION` 的说明）。
+ *
  * 必须显式迁移，不能指望 `mergeSettings`：
  *   - 深合并只做「按 key 覆盖」，旧的 `autoPair` key 不会被自动删掉，
  *     残留的布尔值会和新字段一起躺在 localStorage 里；
