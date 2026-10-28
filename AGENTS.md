@@ -4661,6 +4661,30 @@ grep 会被骗：注释里写一句「见 `settings.editor.focusMode`」
 所以守卫带了一条**自检**（字段数不为零、且含两个具体字段名）。
 这与死菜单项那条守卫的自检是同一个道理。
 
+### 「置灰」是**给人看的信号**，不只是 DOM 属性（2026-10-28 实测）
+
+`.field` 的样式里原本只有：
+
+```css
+.field input[type="number"]:disabled { opacity: 0.5; cursor: not-allowed; }
+.field input[type="checkbox"]:disabled { cursor: not-allowed; }
+```
+
+**没有 `select:disabled`**——于是被置灰的下拉框看起来和能用的**一模一样**，
+用户只能点了没反应才发现它点不动。
+
+这跟「DOM 上有 `disabled` 但用户看不出来」是同一类问题：
+`disabled` 属性是给**程序**看的，**变淡**才是给**人**看的。
+
+规矩：**凡是能被置灰的控件，都要有对应的 `:disabled` 样式**
+（`input[type=number]` / `input[type=checkbox]` / `select` 三种都要）。
+
+守卫查的是**运行时算出来的样式**：注入真实样式表，
+读禁用与可用控件的 computed `opacity`，两者必须不一样
+（并确认是变淡、`cursor` 是 `not-allowed`）。
+不查样式表文本——那条规则的文本恒在，
+**class 有没有套到元素上才决定行为**。
+
 ## 题注（图题 / 表题）与自动编号（2026-10-28）
 
 ### 约定长什么样
