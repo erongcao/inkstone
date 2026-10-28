@@ -385,6 +385,18 @@ export async function exportDocument(formatId: string): Promise<ExportResult> {
         typography: typographyFromAppearance(settings.appearance),
         words: context.variables.words,
         chars: context.variables.chars,
+        // 打印 / 分页样式
+        //
+        // **不传纸张尺寸**：HTML 导出是一份「拿到哪都能打开」的文件，
+        // 把 A4 写死进去，用户在 Letter 纸上打印会被浏览器按 A4 排版。
+        // 纸张由浏览器 / 打印面板决定；页边距与分页规则由我们决定。
+        print: {
+          margin: context.overrides.pdfMargin ?? settings.export.pdfMargin,
+          chapterBreak:
+            context.overrides.pdfChapterBreak ?? settings.export.pdfChapterBreak,
+          includeOutline:
+            context.overrides.pdfIncludeOutline ?? settings.export.pdfIncludeOutline,
+        },
       });
       await writeTextFile(targetPath, html);
     } else {

@@ -4717,6 +4717,94 @@ pandoc 那条链路是**源码级**改写（`applyCaptionsToSource`），
 另有一条**自检**——对拍断言两边相等，而「相等」在空集上恒成立，
 所以先确认样例确实产出了题注。
 
+## 分页导出：纸张、边距、分页规则、纸上的目录（2026-10-28）
+
+### 打印样式只有**一份**实现
+
+`src/export/print-css.ts` 是唯一的出处，两个出口都调它：
+
+- **PDF 导出**：纸张尺寸 + 页边距都由设置决定（写进 `@page`）
+- **HTML 导出**：**不写纸张尺寸**（用浏览器 / 打印面板自己的），
+  但页边距与分页规则照旧
+
+为什么不写死纸张：HTML 导出是一份「拿到哪都能打开」的文件，
+把 A4 写进去，用户在 Letter 纸上打印时会被浏览器按 A4 排版
+（Chrome 的打印对话框默认跟随 CSS 的纸张）。
+
+早先打印样式有**两份**（HTML 导出的 `EXPORT_STYLES` 一段、
+PDF 导出自己拼一段）——同一份文档，浏览器里打出来与 PDF 里分页不一样。
+现在合成一份，`tests/print-pagination.test.ts` 里有一条断言
+「导出文件里只有一份 `@media print`」守着它。
+
+### 分页规则
+
+- 一级标题**另起一页**（可选）；文档的**第一个**标题前不留空白页
+- 图、表、题注不跨页断开
+- 标题不与后面的正文分到两页
+- 纸上可以带**目录**（打印保留内部链接，目录项在 PDF 里仍然能点）
+
+### 「屏幕上要不要目录」与「纸上要不要目录」是两个**独立**的旋钮
+
+这是本轮修掉的一个真破口：
+
+| 旋钮 | 设置项 | 作用范围 |
+|---|---|---|
+| 屏幕 | `export.html.includeOutline` | 导出文件**在屏幕上**要不要显示大纲 |
+| 纸面 | `export.pdf.includeOutline` | **打印出来的那张纸上**要不要目录 |
+
+早先大纲标记只按「屏幕上要不要」生成，于是「打印时带目录」在 HTML 导出里
+**空转**：设置里打开了，文件里压根没有大纲标记，纸上自然也没有目录——
+**不报错、不崩溃，只是没发生**。
+
+现在：
+
+- 标记的生成条件 = 「屏幕上要」**或**「纸上要」
+- 只要「纸上要、屏幕上不要」，标记会带一个 `inkstone-outline-print-only` 类：
+  屏幕上由基础样式藏起来（导出文件的屏幕样子不变），
+  打印时由打印样式的 `display: block !important` 放出来
+
+守卫在 `tests/print-pagination.test.ts`（「纸上要目录时，产物里真有目录」那组）。
+断言盯的是 **`<nav class="...">` 的 class 属性**，不是整份 HTML 的字符串——
+那条隐藏规则的 CSS 文本每个导出文件里都有，用字符串匹配分不出
+「类有没有套到 nav 上」。
+
+实机核对（真 Chrome + CDP，切 `Emulation.setEmulatedMedia`）：
+
+| 产物 | 屏幕 | 纸上 |
+|---|---|---|
+| 只在纸上 | `display: none` | `display: block` |
+| 只在屏幕上 | `display: block` | `display: none` |
+| 两边都要 | `display: block` | `display: block` |
+
+分页规则同样在真 Chrome 的 print 媒体下核对过：
+第一个 h1 的 `break-before: auto`（前面不留空白页）、
+第二个 h1 的 `break-before: page`（章节另起页）、
+h2 的 `page-break-after: avoid`（标题不与正文分页）。
+
+### 「页码」做不到——这是平台与内核的限制
+
+不是没做，是**当前这条链路上没有真办法**：
+
+- macOS 的 PDF 导出走 **WKWebView 的系统打印面板**（`Webview::print()`），
+  面板里没有页码开关；
+- Tauri 2.12 的 `Webview::print()` **不接任何参数**
+  （上游源码：`pub fn print(&self) -> crate::Result<()>`），
+  拿不到 Chromium 那套 `footerTemplate` / `displayHeaderFooter`；
+- Chromium 与 WebKit **都不支持 CSS 的 `counter(page)`**
+  （分页计数器是 Paged Media 规范里的，两大内核都没实现）。
+
+能有真页码的路只有换一条 PDF 生成链路
+（例如无头 Chromium 的 `Page.printToPDF`，它支持 `footerTemplate`），
+而那要随应用附带一个 Chromium——包体代价不可接受。
+
+**不塞假的**：自己数页再猜页码，猜错了用户看不出来。
+
+### 设置与 front matter 覆盖
+
+设置面板「导出」分组：纸张尺寸、页边距（窄 / 常规 / 宽）、章节另起一页、打印时带目录。
+front matter 里也能覆盖（`export.pdf.paperSize` / `margin` / `chapterBreak` / `includeOutline`），
+**逐字段白名单校验**，不合法��值退回设置面板的值（而不是让导出失败）。
+
 ## 当前状态
 
 M0 已完成（2026-10-20），**M1 已收官（2026-10-21）**，M2 写作体验实施中（2026-10-22）：

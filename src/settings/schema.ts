@@ -193,6 +193,28 @@ export interface ExportSettings {
   openFileAfterExport: boolean;
   /** PDF 纸张尺寸 */
   pdfPaperSize: "A4" | "Letter" | "Legal" | "A5";
+  /**
+   * 打印时的页边距预设。
+   *
+   * 值是**物理单位**（mm）：纸上的边距不该随正文字号变，
+   * 所以不能用 rem / em。
+   */
+  pdfMargin: "compact" | "normal" | "wide";
+  /**
+   * 一级标题是否**另起一页**。
+   *
+   * 打印长文时按章分页是常见需求（Word 的「分节符」）。
+   * 文档的**第一个**标题前面不会多出空白页。
+   */
+  pdfChapterBreak: boolean;
+  /**
+   * 打印时是否带上目录。
+   *
+   * 目录在纸上是可以点的（打印保留内部链接），
+   * 但**没有页码**——当前这条 PDF 链路（系统打印面板）拿不到页码计数器，
+   * 原因见 `src/export/print-css.ts` 的文件头。
+   */
+  pdfIncludeOutline: boolean;
   /** 导出 HTML 时包含大纲 */
   htmlIncludeOutline: boolean;
   /** 是否读取 YAML front matter 覆盖导出设置（安全相关，默认关闭） */
@@ -429,6 +451,9 @@ export const DEFAULT_SETTINGS: Settings = {
     openFolderAfterExport: false,
     openFileAfterExport: false,
     pdfPaperSize: "A4",
+    pdfMargin: "normal",
+    pdfChapterBreak: false,
+    pdfIncludeOutline: false,
     htmlIncludeOutline: true,
     readExportSettingsFromFrontMatter: false,
     fileNameTemplate: "",

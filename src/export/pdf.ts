@@ -154,73 +154,39 @@ export async function buildPrintHtml(context: ExportContext): Promise<string> {
   // 冷启动后立刻导出的话，它多半还没到。
   await ensureMathRenderer();
 
+  // 打印 / 分页设置（纸张与边距由设置决定，纸张尺寸不能猜）。
+  //
+  // front matter 的覆盖项优先于设置面板里的值——
+  // `readExportOverrides` 读了却不用，那个覆盖项就是**读到了却不生效**
+  // （比没读更让人困惑）。
+  const printOptions = {
+    paperSize: context.overrides.pdfPaperSize ?? settings.export.pdfPaperSize,
+    margin: context.overrides.pdfMargin ?? settings.export.pdfMargin,
+    chapterBreak: context.overrides.pdfChapterBreak ?? settings.export.pdfChapterBreak,
+    includeOutline:
+      context.overrides.pdfIncludeOutline ?? settings.export.pdfIncludeOutline,
+  };
+
   const html = exportToHtml(context.content, {
     title: context.title,
     theme: settings.appearance.theme,
     mode: currentColorMode(),
-    // 打印版不要大纲：打印的是**正文**，目录在纸上是多余的
-    includeOutline: false,
+    // 纸上要不要目录，由设置决定（目录里的链接在 PDF 里仍然能点）
+    includeOutline: printOptions.includeOutline,
     // 自定义 CSS 也要进导出——编辑器里有、导出里没有就是「屏幕与导出不一致」
     customCss: settings.appearance.customCss,
     // 排版同样要跟屏幕一致（字号 / 行高 / 写作区宽度 / 字体 / 页面背景）
     typography: typographyFromAppearance(settings.appearance),
     words: context.variables.words,
     chars: context.variables.chars,
+    // 打印样式由 `export/html.ts` 注入（与 HTML 导出**同一份**实现，
+    // 见 `src/export/print-css.ts` 的文件头）
+    print: printOptions,
   });
 
-  // 纸张尺寸 → CSS @page size
-  const paperSizes: Record<string, string> = {
-    A4: "A4",
-    Letter: "letter",
-    Legal: "legal",
-    A5: "A5",
-  };
-  // front matter 的覆盖项优先于设置面板里的值——
-  // `readExportOverrides` 明明读了 `export.pdf.paperSize`，
-  // 这里不接上它，那个覆盖项就是**读到了却不生效**（比没读更让人困惑）。
-  const paperSize = context.overrides.pdfPaperSize ?? settings.export.pdfPaperSize;
-  const size = paperSizes[paperSize] ?? "A4";
-
-  const printCss = `
-@page {
-  size: ${size};
-  margin: 18mm 16mm;
-}
-
-@media print {
-  html, body {
-    background: #fff !important;
-    color: #000 !important;
-  }
-  .inkstone-doc {
-    max-width: none !important;
-    padding: 0 !important;
-  }
-  .inkstone-doc pre {
-    white-space: pre-wrap !important;
-    word-break: break-word !important;
-    page-break-inside: avoid;
-  }
-  .inkstone-doc h1,
-  .inkstone-doc h2,
-  .inkstone-doc h3 {
-    page-break-after: avoid;
-  }
-  .inkstone-doc img,
-  .inkstone-doc table {
-    page-break-inside: avoid;
-  }
-}
-`;
-
-  // 把打印样式插进 <head> 末尾（在其它样式之后，能覆盖它们），
   // 就绪门脚本插进 </body> 之前（**在所有图片之后**——
   // 脚本要遍历 document.images，图片还没进 DOM 就遍历不到）。
-  const withPrintCss = html.replace("</head>", `<style>\n${printCss}\n</style>\n</head>`);
-  return withPrintCss.replace(
-    "</body>",
-    `<script>\n${printReadyScript()}\n</script>\n</body>`,
-  );
+  return html.replace("</body>", `<script>\n${printReadyScript()}\n</script>\n</body>`);
 }
 
 /**

@@ -37,6 +37,7 @@ import type { AppearanceSettings, ColorMode } from "@/settings/schema";
 import { katexStylesheet } from "@/parser/rehype-math";
 import { t, htmlLang } from "@/i18n";
 import { THEME_FONTS, THEME_TOKENS } from "./theme-tokens.generated";
+import { printStyles, type PrintOptions } from "./print-css";
 
 /**
  * 导出的排版：跟随用户在设置面板里的选择。
@@ -105,6 +106,12 @@ export interface HtmlExportOptions {
   chars?: number;
   /** 用户的排版设置（字号 / 行高 / 写作区宽度 / 字体 / 背景色） */
   typography?: ExportTypography;
+  /**
+   * 打印 / 分页设置。
+   *
+   * 不传 = 不注入打印样式（导出文件用浏览器 / 打印面板自己的纸张与边距）。
+   */
+  print?: PrintOptions;
 }
 
 /**
@@ -340,6 +347,9 @@ body {
 .inkstone-outline li[data-depth="5"] { padding-left: 4.8em; }
 .inkstone-outline li[data-depth="6"] { padding-left: 6em; }
 
+/* 只在纸上出现的目录：屏幕上藏起来，打印时由打印样式放出来 */
+.inkstone-outline.inkstone-outline-print-only { display: none; }
+
 .inkstone-footer {
   max-width: var(--ink-content-width);
   margin: 0 auto;
@@ -365,14 +375,12 @@ body {
 .hljs-strong { font-weight: 600; }
 .hljs-link { color: var(--ink-accent); text-decoration: underline; }
 
-/* ── 打印 ── */
-@media print {
-  body { background: #fff; color: #000; }
-  .inkstone-outline { display: none; }
-  .inkstone-doc { max-width: none; padding: 0; }
-  .inkstone-doc pre { white-space: pre-wrap; word-break: break-word; }
-}
-`;
+/*
+ * 打印样式**不在这里**。
+ *
+ * 它在 src/export/print-css.ts —— HTML 导出与 PDF 导出共用同一份，
+ * 两处各写一份必然漂移（同一份文档，浏览器里打出来与 PDF 里分页不一样）。
+ */`;
 
 /** 导出用的版式令牌（与 `src/styles/tokens.css` 的默认值一致） */
 const LAYOUT_TOKENS = `
@@ -544,7 +552,7 @@ export function highlightCodeBlocks(html: string): string {
 /* ── 大纲 ── */
 
 /** 生成大纲 HTML */
-function buildOutline(outline: OutlineItem[]): string {
+function buildOutline(outline: OutlineItem[], extraClass = ""): string {
   if (outline.length === 0) return "";
   // 大纲标题与 aria-label 都走 t()——
   // 写死中文的话，英文界面导出的 HTML 里会顶着两个「大纲」，
@@ -559,7 +567,7 @@ function buildOutline(outline: OutlineItem[]): string {
       return `      <li data-depth="${item.depth}"><a href="#${anchor}">${escapeHtml(text)}</a></li>`;
     })
     .join("\n");
-  return `  <nav class="inkstone-outline" aria-label="${escapeHtml(label)}">
+  return `  <nav class="inkstone-outline${extraClass}" aria-label="${escapeHtml(label)}">
     <h2>${escapeHtml(label)}</h2>
     <ol>
 ${items}
@@ -636,7 +644,27 @@ export function exportToHtml(source: string, options: HtmlExportOptions): string
   // 代码高亮：导出侧补上（编辑器里那份是 CodeMirror 装饰器，不在这条链路上）
   body = highlightCodeBlocks(body);
 
-  const outline = options.includeOutline ? buildOutline(index.outline) : "";
+  // 大纲标记：**屏幕要**或**纸上要**，任一为真就得生成。
+  //
+  // 两个是**独立**的旋钮：
+  //   - `includeOutline`        导出文件在屏幕上要不要显示大纲（`export.html.includeOutline`）
+  //   - `print.includeOutline`  打印出来的那张纸上要不要目录（`export.pdf.includeOutline`）
+  //
+  // 早先只按前者生成标记，于是后者在 HTML 导出里**空转**：
+  // 用户打开设置打开「打印时带目录」，文件里压根没有大纲标记，
+  // 纸上当然也没有目录——设置说了不算。
+  //
+  // 只有纸上要的时候，给标记加一个类：屏幕上藏起来（导出文件的屏幕样子不变），
+  // 打印时由打印样式放出来（`display: block !important` 压得住这条）。
+  const printOutline = options.print?.includeOutline === true;
+  const outlineOnlyForPrint = !options.includeOutline && printOutline;
+  const outline =
+    options.includeOutline || printOutline
+      ? buildOutline(
+          index.outline,
+          outlineOnlyForPrint ? " inkstone-outline-print-only" : "",
+        )
+      : "";
   const katexCss = katexStylesheet();
   const title = escapeHtml(options.title || t("未命名"));
 
@@ -677,6 +705,10 @@ export function exportToHtml(source: string, options: HtmlExportOptions): string
   // 至少读屏软件对大纲与页脚的朗读不会串味。
   // 写死 `zh-CN` 的话，英文界面导出的文件会被读屏软件当成中文，
   // 断词换行也跟着错。
+  // 顺序：主题样式 → KaTeX → 用户追加的 head → **打印样式** → 用户自定义 CSS。
+  //
+  // 用户的自定义 CSS 仍然**排在最后**（与编辑器一致，它能覆盖任何样式），
+  // 打印样式排在它前面——需要压过主题的地方都带 `!important`。
   return `<!DOCTYPE html>
 <html lang="${htmlLang()}" data-theme="${escapeHtml(options.theme)}" data-mode="${
     options.mode === "dark" ? "dark" : "light"
@@ -690,7 +722,9 @@ export function exportToHtml(source: string, options: HtmlExportOptions): string
 ${buildStyles(options)}
 </style>
 ${katexCss ? `<style>\n${katexCss}\n</style>` : ""}${mathWarning}${unrenderedMathWarning}${options.extraHead ?? ""}
-${options.customCss?.trim() ? `<style>\n${options.customCss}\n</style>\n` : ""}</head>
+${
+  options.print ? `<style>\n${printStyles(options.print)}\n</style>\n` : ""
+}${options.customCss?.trim() ? `<style>\n${options.customCss}\n</style>\n` : ""}</head>
 <body>
 ${outline}
 <article class="inkstone-doc">

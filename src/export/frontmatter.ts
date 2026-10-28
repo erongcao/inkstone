@@ -126,6 +126,9 @@ export function stringField(fields: Record<string, unknown>, key: string): strin
  *
  *   - `html.includeOutline`  导出 HTML 时是否带大纲
  *   - `pdf.paperSize`         PDF 纸张尺寸
+ *   - `pdf.margin`            打印页边距预设
+ *   - `pdf.chapterBreak`      一级标题是否另起一页
+ *   - `pdf.includeOutline`    纸上是否带目录
  *   - `fileNameTemplate`      导出文件名模板（用变量系统）
  *   - `variables`             自定义变量
  *
@@ -137,12 +140,21 @@ export function stringField(fields: Record<string, unknown>, key: string): strin
 export interface FrontMatterExportOverrides {
   htmlIncludeOutline?: boolean;
   pdfPaperSize?: "A4" | "Letter" | "Legal" | "A5";
+  /** 页边距预设 */
+  pdfMargin?: "compact" | "normal" | "wide";
+  /** 一级标题是否另起一页 */
+  pdfChapterBreak?: boolean;
+  /** 纸上是否带目录 */
+  pdfIncludeOutline?: boolean;
   fileNameTemplate?: string;
   variables?: Record<string, string>;
 }
 
 /** 合法纸张尺寸 */
 const PAPER_SIZES = new Set(["A4", "Letter", "Legal", "A5"]);
+
+/** 合法页边距预设 */
+const MARGINS = new Set(["compact", "normal", "wide"]);
 
 /**
  * 从 front matter 里读出导出的覆盖设置。
@@ -176,9 +188,22 @@ export function readExportOverrides(
 
     const pdfNode = exportFields.pdf;
     if (pdfNode !== null && typeof pdfNode === "object" && !Array.isArray(pdfNode)) {
-      const paperSize = (pdfNode as Record<string, unknown>).paperSize;
+      const pdfFields = pdfNode as Record<string, unknown>;
+      const paperSize = pdfFields.paperSize;
       if (typeof paperSize === "string" && PAPER_SIZES.has(paperSize)) {
         overrides.pdfPaperSize = paperSize as "A4" | "Letter" | "Legal" | "A5";
+      }
+      const margin = pdfFields.margin;
+      if (typeof margin === "string" && MARGINS.has(margin)) {
+        overrides.pdfMargin = margin as "compact" | "normal" | "wide";
+      }
+      const chapterBreak = pdfFields.chapterBreak;
+      if (typeof chapterBreak === "boolean") {
+        overrides.pdfChapterBreak = chapterBreak;
+      }
+      const includeOutline = pdfFields.includeOutline;
+      if (typeof includeOutline === "boolean") {
+        overrides.pdfIncludeOutline = includeOutline;
       }
     }
   }

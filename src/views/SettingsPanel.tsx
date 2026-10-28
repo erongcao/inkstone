@@ -479,6 +479,42 @@ function ExportSection({ settings, patch }: { settings: Settings; patch: PatchFn
           <option value="A5">A5</option>
         </select>
       </label>
+      <label className="field">
+        <span>{t("打印页边距")}</span>
+        <select
+          value={x.pdfMargin}
+          onChange={(e) =>
+            patch("export", { pdfMargin: e.target.value as typeof x.pdfMargin })
+          }
+        >
+          <option value="compact">{t("窄")}</option>
+          <option value="normal">{t("常规")}</option>
+          <option value="wide">{t("宽")}</option>
+        </select>
+      </label>
+      <label className="field field--inline">
+        <span>{t("章节另起一页")}</span>
+        <input
+          type="checkbox"
+          data-setting-key="export.pdfChapterBreak"
+          checked={x.pdfChapterBreak}
+          onChange={(e) => patch("export", { pdfChapterBreak: e.target.checked })}
+        />
+      </label>
+      <label className="field field--inline">
+        <span>{t("打印时带目录")}</span>
+        <input
+          type="checkbox"
+          data-setting-key="export.pdfIncludeOutline"
+          checked={x.pdfIncludeOutline}
+          onChange={(e) => patch("export", { pdfIncludeOutline: e.target.checked })}
+        />
+      </label>
+      <p className="field__note">
+        {t(
+          "目录在纸上可以点开，但没有页码——当前这条 PDF 链路走系统打印面板，拿不到页码计数器。",
+        )}
+      </p>
       <label className="field field--inline">
         <span>{t("HTML 导出包含大纲")}</span>
         <input

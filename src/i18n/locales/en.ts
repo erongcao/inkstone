@@ -585,4 +585,12 @@ export const en: Record<string, string> = {
   "全篇连续（图 1、图 2）": "Continuous through the document (Figure 1, Figure 2)",
   "以「图：」「表：」开头的段落，且紧挨着图片或表格时，会被当作题注并自动编号。编号只出现在渲染结果里，不会写回原文。":
     "A paragraph starting with “Figure:” or “Table:” that sits right next to an image or a table is treated as a caption and numbered automatically. The number only appears in the rendered result — it is never written back to the source.",
+  打印页边距: "Print margins",
+  窄: "Narrow",
+  常规: "Normal",
+  宽: "Wide",
+  章节另起一页: "Start each chapter on a new page",
+  打印时带目录: "Include the table of contents when printing",
+  "目录在纸上可以点开，但没有页码——当前这条 PDF 链路走系统打印面板，拿不到页码计数器。":
+    "The table of contents is clickable on paper, but has no page numbers — the current PDF path goes through the system print panel, which has no page-number counter.",
 };
