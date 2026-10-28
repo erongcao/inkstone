@@ -22,6 +22,8 @@
  */
 
 import { describe, expect, it, beforeEach, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { resolveColorMode } from "@/theme/themes";
 import { readSettings, resetSettings, updateSettings } from "@/settings/store";
@@ -144,5 +146,46 @@ describe("迁移层：旧值不带意图，但新值留得住", () => {
     vi.resetModules();
     const reloaded = await import("@/settings/store");
     expect(reloaded.readSettings().appearance.followSystemAppearance).toBe(true);
+  });
+});
+
+/**
+ * 「置灰」是**给人看的信号**，不只是 DOM 属性。
+ *
+ * `.field select` 的样式里原本**没有** `:disabled` 变体——
+ * 于是被置灰的下拉框看起来和能用的**一模一样**，
+ * 用户只能点了没反应才发现它点不动。
+ *
+ * 所以这里查的是**运行时算出来的样式**：
+ * 注入真实样式表，读禁用控件与可用控件的 computed opacity，
+ * 两者必须**不一样**。
+ */
+describe("置灰要真的看得见", () => {
+  it("禁用与可用的下拉框在视觉上不一样", () => {
+    const css = readFileSync(join(process.cwd(), "src/styles/components.css"), "utf8");
+    const style = document.createElement("style");
+    style.textContent = css;
+    document.head.appendChild(style);
+
+    const mk = (disabled: boolean) => {
+      const wrap = document.createElement("div");
+      wrap.className = "field";
+      const select = document.createElement("select");
+      select.disabled = disabled;
+      wrap.appendChild(select);
+      document.body.appendChild(wrap);
+      return select;
+    };
+
+    const enabled = mk(false);
+    const disabled = mk(true);
+
+    const enabledOpacity = getComputedStyle(enabled).opacity;
+    const disabledOpacity = getComputedStyle(disabled).opacity;
+
+    expect(disabledOpacity).not.toBe(enabledOpacity);
+    // 明确是「变淡」而不是别的变化
+    expect(Number(disabledOpacity)).toBeLessThan(Number(enabledOpacity));
+    expect(getComputedStyle(disabled).cursor).toBe("not-allowed");
   });
 });
