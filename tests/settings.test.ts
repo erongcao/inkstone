@@ -63,3 +63,75 @@ describe("设置版本迁移", () => {
     expect(result.current[0].editor.markerDisplay).toBe("live");
   });
 });
+
+/**
+ * 字体设置的迁移。
+ *
+ * ## 为什么要迁移
+ *
+ * 旧默认值是**具体的字体栈**，不是「没设置」。
+ * 不迁移的话：老用户存着那个栈 → 迁移后仍然是「设置过的字体」→
+ * 主题声明的字体（学术主题的衬线体）对他们依然不生效，
+ * 而新装的用户是生效的——**同一版本里两拨人表现不一样**。
+ *
+ * 判据是「恰好等于旧默认值」：用户自己填了别的字体，那是他的选择，不动。
+ */
+describe("字体设置的迁移", () => {
+  /** 旧版的正文字体默认值（历史事实，不能跟着代码改） */
+  const LEGACY_FONT =
+    '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif';
+
+  /** 旧版的等宽字体默认值 */
+  const LEGACY_MONO =
+    'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace';
+
+  beforeEach(() => {
+    localStorage.clear();
+    vi.resetModules();
+  });
+
+  it("旧默认正文字体被当作「没设过」（迁移成空串 = 跟随主题）", async () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ appearance: { fontFamily: LEGACY_FONT } }),
+    );
+    const { useSettings } = await import("@/settings/store");
+    const { result } = renderHook(() => useSettings());
+    expect(result.current[0].appearance.fontFamily).toBe("");
+  });
+
+  it("旧默认等宽字体同样被当作「没设过」", async () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ appearance: { monoFontFamily: LEGACY_MONO } }),
+    );
+    const { useSettings } = await import("@/settings/store");
+    const { result } = renderHook(() => useSettings());
+    expect(result.current[0].appearance.monoFontFamily).toBe("");
+  });
+
+  it("用户自己填的字体不被迁移掉", async () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ appearance: { fontFamily: "MyOwnFont, sans-serif" } }),
+    );
+    const { useSettings } = await import("@/settings/store");
+    const { result } = renderHook(() => useSettings());
+    expect(result.current[0].appearance.fontFamily).toBe("MyOwnFont, sans-serif");
+  });
+
+  it("新装的用户默认就是空串（跟随主题）", async () => {
+    const { useSettings } = await import("@/settings/store");
+    const { result } = renderHook(() => useSettings());
+    expect(result.current[0].appearance.fontFamily).toBe("");
+    expect(result.current[0].appearance.monoFontFamily).toBe("");
+  });
+
+  it("从磁盘灌入的旧配置也走迁移", async () => {
+    // 打包版走 Tauri store 那条路（hydrateSettings），
+    // 漏掉迁移的话：开发时是对的、打包后是错的——只在发布后复现。
+    const { hydrateSettings, readSettings } = await import("@/settings/store");
+    hydrateSettings({ appearance: { fontFamily: LEGACY_FONT } });
+    expect(readSettings().appearance.fontFamily).toBe("");
+  });
+});
