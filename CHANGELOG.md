@@ -327,6 +327,15 @@
   现在 id 由**标题节点自己**决定（深度 + 源码偏移，
   `src/parser/heading-anchors.ts`，经 mdast 的 `data.hProperties` 写进 hast），
   并且导出只解析**一棵**树——大纲与正文同源，没有第二次计算的机会
+- **front matter 的 `export.pdf.paperSize` 读到了却不生效**：
+  `readExportOverrides` 把这个字段读出来、也放进了 `ExportContext.overrides`，
+  但 `src/export/pdf.ts` 直接用了设置面板里的值——
+  用户开了「读取 front matter 覆盖导出设置」、写了 `paperSize: Letter`，
+  导出来的 PDF **还是 A4**，而且没有任何提示。
+  「读到了却不生效」比「根本没读」更糟：用户会以为自己写错了格式。
+  现在接上覆盖项，并用 `tests/export-frontmatter-overrides.test.ts`
+  把**四个**覆盖项都钉在产物上（纸张尺寸看 `@page`、大纲开关看 `<nav>`、
+  文件名模板看最终文件名、变量看替换结果）
 - 界面国际化：词典条数 426 → 486；「快捷键一览」的显示 bug 见上
 - **单个 `~` 被吃成删除线**：`remark-gfm` 默认把**单个**波浪号也当删除线
   （GFM 规范并不允许，这是 GitHub 的宽松行为），而 lezer 只认成对 `~~`。

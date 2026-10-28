@@ -89,7 +89,11 @@ export async function buildPrintHtml(context: ExportContext): Promise<string> {
     Legal: "legal",
     A5: "A5",
   };
-  const size = paperSizes[settings.export.pdfPaperSize] ?? "A4";
+  // front matter 的覆盖项优先于设置面板里的值——
+  // `readExportOverrides` 明明读了 `export.pdf.paperSize`，
+  // 这里不接上它，那个覆盖项就是**读到了却不生效**（比没读更让人困惑）。
+  const paperSize = context.overrides.pdfPaperSize ?? settings.export.pdfPaperSize;
+  const size = paperSizes[paperSize] ?? "A4";
 
   const printCss = `
 @page {

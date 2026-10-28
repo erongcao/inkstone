@@ -3926,6 +3926,83 @@ let body = htmlFromAst(tree, { …, headingAnchors: true });
 都**验过会红**：把旧实现装回去 → 4 条红（含完整链路那条）；
 只关掉 `headingAnchors` → 7 条红。
 
+## 第十三个破口：front matter 的 `export.pdf.paperSize` 读到了却不生效（2026-10-28）
+
+### 症状
+
+用户在文档的 front matter 里写：
+
+```yaml
+export:
+  pdf:
+    paperSize: Letter
+```
+
+并且在设置里打开了「读取 YAML front matter 覆盖导出设置」——
+导出来的 PDF **还是 A4**。没有任何提示，文档里也看不出哪里不对。
+
+### 根因
+
+`src/export/frontmatter.ts` 的 `readExportOverrides` **确实读到了**这个字段：
+
+```ts
+overrides.pdfPaperSize = paperSize as "A4" | "Letter" | "Legal" | "A5";
+```
+
+它也进了 `ExportContext.overrides`。
+但**全项目没有任何地方消费它**——`src/export/pdf.ts` 直接读了设置面板的值：
+
+```ts
+const size = paperSizes[settings.export.pdfPaperSize] ?? "A4";
+```
+
+四个覆盖项里，三个（`htmlIncludeOutline` / `fileNameTemplate` / `variables`）
+都接上了，只有 `pdfPaperSize` 漏了。
+
+### 为什么「读到了却不生效」比「根本没读」更糟
+
+用户看到 PDF 尺寸不对，第一反应是**自己写错了**——
+`paperSize: letter`（小写）？`paperSize: A4`？改来改去都找不到原因。
+
+「根本没读」至少是一致的：功能不存在，用户不会指望它。
+「读到了却不生效」是**骗人的**——接口存在、解析正确、校验通过，
+只是结果被丢掉了。
+
+### 修法
+
+`pdf.ts` 接上覆盖项（front matter 优先于设置面板）：
+
+```ts
+const paperSize = context.overrides.pdfPaperSize ?? settings.export.pdfPaperSize;
+```
+
+### 守卫：`tests/export-frontmatter-overrides.test.ts`
+
+**封口式**：front matter 能覆盖的每一项，都断言**产物真的变了**。
+
+| 覆盖项 | 产物判据 |
+|---|---|
+| `export.html.includeOutline` | 写出去的那份 HTML 里有没有 `<nav class="inkstone-outline">` |
+| `export.pdf.paperSize` | 打印 HTML 里 `@page { size: … }` 是不是 `letter` |
+| `fileNameTemplate` | 最终文件名 |
+| `variables` | 模板里 `${site}` 被替换成什么 |
+
+外加一条**自检**（`readExportOverrides` 确实产出了这四个键）——
+否则「产物没变」可能只是因为 front matter 压根没解析出来，
+守卫会指错方向。
+
+都**验过会红**：拆掉 `pdf.ts` 那一行 → 1 条红。
+
+### 顺带查过的同类清单
+
+「读到了却不生效」是个通用毛病，所以把同类清单都扫了一遍：
+
+- `FrontMatterExportOverrides` 的四个键 —— **只有 `pdfPaperSize` 是死的**（本轮修掉）
+- `settings.export.items` 的四个字段（`id` / `label` / `shortcut` / `visible`）—— 全部有消费点
+- `ExportVariable` 的 12 个 `source` —— `resolveVariable` 的 switch 全部覆盖
+- `MarkdownFeatures` 的 12 个开关 —— 全部有消费点（`mermaid` 走编辑器那条路，
+  `subscriptSuperscript` 走解析层 + pandoc 格式串）
+
 ## 「装饰器局部重建」：先量收益，再决定做不做（2026-10-27）
 
 M2 留的最后一个性能项。这轮**没有**做，原因是量完之后发现
@@ -4315,6 +4392,10 @@ M3 全部完成（2026-10-23）。M4（导出）进行中（2026-10-25）：
   导出只解析**一棵**树，大纲与正文同源——
   此前按「第几个 `<hN>` 标签」配对，引用块 / 列表项 / 原始 HTML 里的标题会抢走 id，
   点目录跳错位置。理由见上文「第十二个破口」
+- **front matter 的 `export.pdf.paperSize` 生效了**（2026-10-28）：
+  它此前**读到了却没人消费**，PDF 一直按设置面板的尺寸出，
+  而用户以为自己写错了格式。四个覆盖项现在都有产物级守卫，
+  理由见上文「第十三个破口」
 - **导出变量系统**：`${title}` `${author}` `${today}` 等，只在**导出产物**上替换，
   绝不碰文档正文；未定义的变量原样保留
 - **YAML front matter 覆盖导出设置**：默认关闭；开启后只开放安全的那几项，
