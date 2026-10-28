@@ -45,10 +45,94 @@ import { currentColorMode } from "@/theme/themes";
 import { ensureMathRenderer } from "@/editor/render/math-loader";
 
 /**
+ * 打印前的**就绪门**：页面自己报「我准备好了」，Rust 那头才调 `print()`。
+ *
+ * ## 为什么要有这个
+ *
+ * 原来 Rust 那头是「等页面 load 完 → `sleep(300ms)` → 打印」。
+ * 那个 300ms 是个**猜测**：睡够了没有，机器快一点慢一点、网络图大一点小一点，
+ * 结果都不一样。实测别人做同类工具时的教训很直接：
+ * 连续 6 次 dump，页数依次是 2/0/1/0/3/1——
+ * **靠固定时长猜「内容稳了」，两头都会错**，最后产出半截文件。
+ *
+ * ## 这个脚本等什么
+ *
+ * 1. `document.fonts.ready` —— 字体加载完。
+ *    内置主题只用系统字体栈，这一项通常是立刻就绪的；
+ *    但用户的「附加样式」里可能有 `@font-face`，那就要等。
+ * 2. 每张图的 `decode()` —— **解码**完（不只是下载完）。
+ *    `load` 事件只保证图**下载**完了；解码是另一回事，
+ *    没解码完就打印，纸上是一个空白框。
+ *
+ * ## 两个保险
+ *
+ * - **页内兜底**：超过 `timeoutMs` 还没好也放行——
+ *   一张永远加载不出来的图不该把整个导出卡死。
+ *   这个值必须**小于** Rust 那头的 20 秒上限（那边是外层兜底）。
+ * - **超时**：Rust 那头也有自己的时限，超时后照样打印（少张图好过没文件）。
+ *
+ * ## 报信的方式
+ *
+ * 在 `<html>` 上放两个标记：
+ *
+ *   - `data-print-gate="1"` —— **脚本自己开张了**（一进去就写）
+ *   - `data-print-ready="1"` —— **内容就绪了**（等完字体与图才写）
+ *
+ * 两个标记缺一不可：Rust 那头看到 `gate` 在而 `ready` 不在，
+ * 知道「还在等」；看到 `gate` 都不在，知道**脚本压根没跑起来**
+ * （被 CSP 挡了？抛异常了？）——那就别等了，直接打印。
+ * 否则每导一次 PDF 都要白等 20 秒，比原来的 300ms 还糟。
+ *
+ * Rust 那头用 `eval_with_callback` 读这两个标记——
+ * Tauri 2 的 `eval` 没有返回值，带回调的 `eval_with_callback` 才有。
+ *
+ * @param timeoutMs 页内兜底时限（毫秒）。测试用小的值，免得等 15 秒。
+ */
+export function printReadyScript(timeoutMs = 15000): string {
+  return `(function () {
+  var GATE = "data-print-gate";
+  var MARK = "data-print-ready";
+  // 先开张：让 Rust 那头知道「脚本在跑，只是还没好」
+  document.documentElement.setAttribute(GATE, "1");
+  function mark() {
+    document.documentElement.setAttribute(MARK, "1");
+  }
+  function finish() {
+    clearTimeout(timer);
+    mark();
+  }
+  // 兜底：一张永远加载不出来的图不该把整个导出卡死
+  var timer = setTimeout(finish, ${timeoutMs});
+
+  function waitImage(img) {
+    return new Promise(function (resolve) {
+      function decoded() {
+        if (!img.decode) { resolve(); return; }
+        // 坏图的 decode() 会 reject——那不是我们要等的东西，放行
+        img.decode().then(resolve, resolve);
+      }
+      if (img.complete) { decoded(); return; }
+      img.addEventListener("load", decoded, { once: true });
+      img.addEventListener("error", resolve, { once: true });
+    });
+  }
+
+  var waits = [];
+  if (document.fonts && document.fonts.ready) waits.push(document.fonts.ready);
+  var imgs = Array.prototype.slice.call(document.images || []);
+  if (imgs.length) waits.push(Promise.all(imgs.map(waitImage)));
+
+  Promise.all(waits).then(finish, finish);
+})();`;
+}
+
+/**
  * 生成打印用的 HTML。
  *
  * 在导出的 HTML 基础上追加一段打印样式：占满纸张宽度、去掉大纲、
  * 加上 `@page` 的纸张与页边距。
+ *
+ * 末尾再挂上**就绪门**脚本——Rust 那头等它报「好了」才打印。
  *
  * ## 为什么是 async
  *
@@ -129,8 +213,14 @@ export async function buildPrintHtml(context: ExportContext): Promise<string> {
 }
 `;
 
-  // 把打印样式插进 <head> 末尾（在其它样式之后，能覆盖它们）
-  return html.replace("</head>", `<style>\n${printCss}\n</style>\n</head>`);
+  // 把打印样式插进 <head> 末尾（在其它样式之后，能覆盖它们），
+  // 就绪门脚本插进 </body> 之前（**在所有图片之后**——
+  // 脚本要遍历 document.images，图片还没进 DOM 就遍历不到）。
+  const withPrintCss = html.replace("</head>", `<style>\n${printCss}\n</style>\n</head>`);
+  return withPrintCss.replace(
+    "</body>",
+    `<script>\n${printReadyScript()}\n</script>\n</body>`,
+  );
 }
 
 /**
