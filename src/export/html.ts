@@ -64,7 +64,13 @@ export interface ExportTypography {
 
 /** HTML 导出的选项 */
 export interface HtmlExportOptions {
-  /** 文档标题（进 `<title>` 与 `<h1>` 兜底） */
+  /**
+   * 文档标题（进 `<title>`）。
+   *
+   * **不注入标题 `<h1>`**——正文就是用户写的内容，一个字都不多。
+   * （早先的注释写着「与 `<h1>` 兜底」，那是句过时的描述；
+   * 实际行为一直是不注入，与 Typora 一致。）
+   */
   title: string;
   /** 主题 id；决定用哪套颜色令牌 */
   theme: string;
