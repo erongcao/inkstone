@@ -18,8 +18,8 @@
  *     极少数「应用刚启动就立刻复制」的情况会退化成只有纯文本。
  */
 
-/** 渲染函数签名 */
 import type { ParseOptions } from "./markdown";
+import { ensureMathRenderer } from "@/editor/render/math-loader";
 
 /** 与 `markdownToHtml` 同签名：`options` 必须透传，否则与编辑器内的解析分叉 */
 export type HtmlRenderer = (source: string, options?: ParseOptions) => string;
@@ -66,11 +66,29 @@ export function renderMarkdownToHtml(
   return renderer ? renderer(source, options) : null;
 }
 
-/** 等待渲染器就绪后渲染（菜单动作等异步场景用） */
+/**
+ * 等待渲染器就绪后渲染（菜单动作等异步场景用）。
+ *
+ * ## 为什么还要等公式渲染器
+ *
+ * 公式的渲染器（KaTeX，603 KB 的按需 chunk）与 HTML 处理器是**两个**独立的
+ * 按需加载物。HTML 处理器就绪，不代表公式渲染器就绪。
+ *
+ * 而 `rehypeMath` 拿不到渲染器时**不报错**——它只是把公式留在原始的
+ * `<code class="language-math">` 里。于是复制出去的 HTML 里，
+ * 公式变成了一串裸 LaTeX，而屏幕上明明是排好版的。
+ *
+ * 同步的那条路（⌘C 的 copy 事件）没法等——浏览器要求在事件处理里同步写好剪贴板。
+ * 那条路只能退回源码（纯文本兜底里本来就是 Markdown 源码，内容不丢）。
+ * 异步的这条没有这个限制，所以在这里等。
+ */
 export async function ensureMarkdownToHtml(
   source: string,
   options?: ParseOptions,
 ): Promise<string> {
+  // 两个都等：公式渲染器要先于 HTML 处理器就绪，
+  // 否则 HTML 处理器拿着没渲染器的状态跑一遍，公式就成了源码。
+  await ensureMathRenderer();
   const fn = await load();
   return fn(source, options);
 }

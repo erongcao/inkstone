@@ -22,6 +22,8 @@
  * UI 必须区别对待这三种情况，不能一律显示成「导出失败」。
  */
 
+import { t } from "@/i18n";
+
 /** 导出项的实现路径 */
 export type ExportFormatKind = "html" | "pandoc" | "pdf";
 
@@ -300,7 +302,7 @@ export function sanitizeFileName(name: string): string {
     }
     cleaned += char;
   }
-  return cleaned.trim().replace(/^\.+/, "") || "未命名";
+  return cleaned.trim().replace(/^\.+/, "") || t("未命名");
 }
 
 /**

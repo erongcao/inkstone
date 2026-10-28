@@ -177,6 +177,35 @@ export function getLocale(): Locale {
   return readSettings().general.language;
 }
 
+/**
+ * 语言 → HTML 的 `lang` 属性值（BCP 47）。
+ *
+ * ## 为什么单独列一张表
+ *
+ * 导出的 HTML 要写 `lang="…"`。它不是装饰：
+ *   - 屏幕阅读器靠它选发音规则（英文文档标成 `zh-CN` 会被读成中文）
+ *   - 浏览器断词换行也靠它
+ *
+ * 值目前与 `Locale` 同名，但**不直接用 `Locale` 当 `lang`**——
+ * 界面语言与文档语言是两件事，将来可能需要分开
+ * （界面是 `zh-TW`，导出的文档标记成 `zh-Hant-HK`）。
+ * 改这一张表就行，不用散在各处改。
+ */
+export const LOCALE_HTML_LANG: Record<Locale, string> = {
+  "zh-CN": "zh-CN",
+  "zh-TW": "zh-TW",
+  en: "en",
+};
+
+/**
+ * 取某个语言对应的 HTML `lang` 属性值。
+ *
+ * @param locale 语言；不传 = 当前语言
+ */
+export function htmlLang(locale: Locale = getLocale()): string {
+  return LOCALE_HTML_LANG[locale] ?? locale;
+}
+
 /** 订阅语言变化 */
 export function useLocale(): Locale {
   return useSyncExternalStore(subscribeSettings, getLocale, getLocale);

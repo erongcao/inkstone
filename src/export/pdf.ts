@@ -42,15 +42,33 @@ import { readSettings } from "@/settings/store";
 import { isBrowserFallback } from "@/ipc/export";
 import { t } from "@/i18n";
 import { currentColorMode } from "@/theme/themes";
+import { ensureMathRenderer } from "@/editor/render/math-loader";
 
 /**
  * 生成打印用的 HTML。
  *
  * 在导出的 HTML 基础上追加一段打印样式：占满纸张宽度、去掉大纲、
  * 加上 `@page` 的纸张与页边距。
+ *
+ * ## 为什么是 async
+ *
+ * 因为它得**先等公式渲染器就绪**。
+ *
+ * `rehypeMath` 拿不到渲染器时不会报错，只是把公式留在原始的
+ * `<code class="language-math">` 里——于是打印出来的 PDF 上，
+ * 公式变成了一串裸 LaTeX，而同一份文档导出的 HTML 里是排好版的公式。
+ * **同一份文档、两种导出格式、两种结果**，而且没有任何提示。
+ *
+ * HTML 导出那条链路已经在 `service.ts` 里等过了；
+ * 这里必须自己等——打印 HTML 是另一条独立的产出路径，
+ * 不能指望调用方记得替它做这件事。
  */
-export function buildPrintHtml(context: ExportContext): string {
+export async function buildPrintHtml(context: ExportContext): Promise<string> {
   const settings = readSettings();
+
+  // 先等渲染器：KaTeX 是按需加载的 603 KB chunk，
+  // 冷启动后立刻导出的话，它多半还没到。
+  await ensureMathRenderer();
 
   const html = exportToHtml(context.content, {
     title: context.title,
@@ -125,7 +143,7 @@ export async function printToPdf(
     return { ok: false, path: null, message, error: message };
   }
 
-  const html = buildPrintHtml(context);
+  const html = await buildPrintHtml(context);
 
   try {
     const { invoke } = await import("@tauri-apps/api/core");

@@ -32,7 +32,7 @@ import { highlightCode, resolveLanguage } from "@/editor/render/code-block";
 import type { OutlineItem } from "@/editor/document-index";
 import type { ColorMode } from "@/settings/schema";
 import { katexStylesheet } from "@/parser/rehype-math";
-import { t } from "@/i18n";
+import { t, htmlLang } from "@/i18n";
 
 /** HTML 导出的选项 */
 export interface HtmlExportOptions {
@@ -504,11 +504,28 @@ const LAYOUT_TOKENS = `
 }
 `;
 
-/** 组装主题 + 版式 + 排版三段 CSS */
+/**
+ * 组装主题 + 版式 + 排版三段 CSS
+ *
+ * ## 为什么导出的 CSS 要剥掉注释
+ *
+ * `EXPORT_STYLES` 里的注释是**给维护者看的实现说明**
+ * （「类名由 remark-github-blockquote-alert 生成」「与编辑器内同一套 class」）。
+ * 它们跟着样式表一起内联进导出文件，等于把源码里的中文注释
+ * 原样发给用户——文件是给别人看的，注释对读者没有意义。
+ *
+ * 只剥**我们自己写的**这段样式表：
+ *   - 用户的自定义 CSS（`options.customCss`）原样注入，一个字都不动
+ *   - KaTeX 的样式表是 `?raw` 读进来的第三方文件，本来就没有注释
+ *
+ * 判据是「注释开始符 + 最短匹配到注释结束符」——
+ * CSS 注释不能嵌套，配对匹配就是规范定义的行为。
+ */
 function buildStyles(options: HtmlExportOptions): string {
   const theme = THEME_TOKENS[options.theme] ?? THEME_TOKENS["inkstone-light"];
   const mode: "light" | "dark" = options.mode === "dark" ? "dark" : "light";
-  return `${LAYOUT_TOKENS}\n:root {\n${theme[mode]}\n}\n${EXPORT_STYLES}`;
+  const css = `${LAYOUT_TOKENS}\n:root {\n${theme[mode]}\n}\n${EXPORT_STYLES}`;
+  return css.replace(/\/\*[\s\S]*?\*\//g, "");
 }
 
 /* ── 代码高亮 ── */
@@ -605,6 +622,10 @@ export function highlightCodeBlocks(html: string): string {
 /** 生成大纲 HTML */
 function buildOutline(outline: OutlineItem[]): string {
   if (outline.length === 0) return "";
+  // 大纲标题与 aria-label 都走 t()——
+  // 写死中文的话，英文界面导出的 HTML 里会顶着两个「大纲」，
+  // 读屏软件还会把导航区念成中文。
+  const label = t("大纲");
   const items = outline
     .map((item) => {
       const text = item.text || t("（无标题）");
@@ -613,8 +634,8 @@ function buildOutline(outline: OutlineItem[]): string {
       return `      <li data-depth="${item.depth}"><a href="#${anchor}">${escapeHtml(text)}</a></li>`;
     })
     .join("\n");
-  return `  <nav class="inkstone-outline" aria-label="大纲">
-    <h2>大纲</h2>
+  return `  <nav class="inkstone-outline" aria-label="${escapeHtml(label)}">
+    <h2>${escapeHtml(label)}</h2>
     <ol>
 ${items}
     </ol>
@@ -652,6 +673,14 @@ export function exportToHtml(source: string, options: HtmlExportOptions): string
   let body = markdownToHtml(source, {
     features: featuresFromSettings(readSettings().markdown),
   });
+
+  // 「公式没渲染」的检测必须发生在**高亮之前**。
+  //
+  // 原因：块级公式没渲染时是 `<pre><code class="language-math math-display">`，
+  // 而下面这行高亮会把 class 改写成 `hljs language-plaintext`——
+  // `math-display` 这个标记当场消失，之后再找就找不到了。
+  const hasUnrenderedMath = /class="[^"]*\bmath-(?:inline|display)\b/.test(body);
+
   // 代码高亮：导出侧补上（编辑器里那份是 CodeMirror 装饰器，不在这条链路上）
   body = highlightCodeBlocks(body);
   // 标题锚点：让大纲可跳转
@@ -677,8 +706,29 @@ export function exportToHtml(source: string, options: HtmlExportOptions): string
       ? `\n<!-- 注意：未能内联 KaTeX 样式表，公式可能显示异常 -->\n`
       : "";
 
+  // 公式**根本没渲染**时（KaTeX 渲染器没就绪）也要说明——
+  // 否则产物里只剩一串裸 LaTeX，读者完全看不出那是公式，
+  // 而文件本身没有任何地方记录这件事。
+  //
+  // 正常情况下到不了这里：HTML / PDF 两条导出链路都会先等渲染器就绪。
+  // 这个分支是**兜底**——万一有人新加一条出口忘了等，
+  // 至少产物里留下了痕迹，而不是悄悄降级。
+  const unrenderedMathWarning = hasUnrenderedMath
+    ? `\n<!-- 注意：公式渲染器未就绪，下列公式以源码形式导出 -->\n`
+    : "";
+
+  // `lang` 跟**界面语言**走，而不是跟文档内容走。
+  //
+  // 导出物里混着两种文本：我们生成的界面文字（大纲标题、页脚统计）
+  // 与用户写的正文。前者一定是界面语言，后者我们**无从判断**
+  // （不引入语言检测库的话就没有可靠依据）。
+  //
+  // 既然一部分是已知的，就用已知的那部分——
+  // 至少读屏软件对大纲与页脚的朗读不会串味。
+  // 写死 `zh-CN` 的话，英文界面导出的文件会被读屏软件当成中文，
+  // 断词换行也跟着错。
   return `<!DOCTYPE html>
-<html lang="zh-CN" data-theme="${escapeHtml(options.theme)}" data-mode="${
+<html lang="${htmlLang()}" data-theme="${escapeHtml(options.theme)}" data-mode="${
     options.mode === "dark" ? "dark" : "light"
   }">
 <head>
@@ -689,7 +739,7 @@ export function exportToHtml(source: string, options: HtmlExportOptions): string
 <style>
 ${buildStyles(options)}
 </style>
-${katexCss ? `<style>\n${katexCss}\n</style>` : ""}${mathWarning}${options.extraHead ?? ""}
+${katexCss ? `<style>\n${katexCss}\n</style>` : ""}${mathWarning}${unrenderedMathWarning}${options.extraHead ?? ""}
 ${options.customCss?.trim() ? `<style>\n${options.customCss}\n</style>\n` : ""}</head>
 <body>
 ${outline}
