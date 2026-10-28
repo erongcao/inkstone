@@ -88,6 +88,16 @@ export interface ExportContext {
    * 此时一律用设置面板里的值。
    */
   overrides: FrontMatterExportOverrides;
+  /**
+   * 文档**有没有正文**（除了 front matter 之外还有别的内容）。
+   *
+   * 给 pandoc 那条链路的回读自检用：产出被读回来时，
+   * 若读出来是空的而源本来有正文，那说明内容整个丢了。
+   *
+   * 只有 front matter 的文档读回来**本来就是空的**（实测回读长度 1，
+   * 只有一个换行）——所以这条判断不能反过来做。
+   */
+  hasBodyContent: boolean;
 }
 
 /**
@@ -220,6 +230,12 @@ export function prepareExport(
     format,
     fileName,
     overrides,
+    // 「有没有正文」——除了 front matter 之外还有别的节点吗？
+    //
+    // 从 mdast 树看：**唯一**的 yaml 节点就是 front matter 本身
+    // （remark-frontmatter 把它放在第一个子节点位置）。
+    // 所以「有没有非 yaml 的子节点」就是「有没有正文」。
+    hasBodyContent: tree.children.some((child) => child.type !== "yaml"),
   };
 }
 
@@ -307,6 +323,9 @@ export async function exportDocument(formatId: string): Promise<ExportResult> {
         targetPath,
         resourceDir,
         from,
+        // 「源有没有正文」——Rust 侧转换完会把产出读回来自检，
+        // 这一条告诉它「读出来是空的」到底算不算失败。
+        context.hasBodyContent,
       );
       // pandoc 的警告要带回给用户——
       // 典型场景：转 Word 时块级公式无法变成 OMML，会降级成 TeX 源码。

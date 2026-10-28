@@ -152,6 +152,12 @@ export interface PandocOutput {
  *              由 `export/pandoc-format.ts` 按 Inkstone 的开关算出——
  *              pandoc 用哪个语法解析用户的原文，得跟编辑器一致。
  *              不传则用 Rust 侧的默认值。
+ * @param expectContent 源里**有没有正文**。Rust 侧转换完会把产出**读回来**自检
+ *              （读不出来 = 打不开的文件；读出来是空的 = 内容整个丢了），
+ *              第二条判据要靠这个标记才知道该不该查——
+ *              只有 front matter 的文档回读出来本来就是空的，不该判成失败。
+ *              由 `export/service.ts` 从 mdast 树给出：Rust 那边**不再解析一遍**
+ *              front matter（同一份文档结构在两处各解析一次，两边迟早漂移）。
  */
 export async function convertWithPandoc(
   format: string,
@@ -159,6 +165,7 @@ export async function convertWithPandoc(
   outputPath: string,
   resourceDir: string,
   from?: string,
+  expectContent?: boolean,
 ): Promise<PandocOutput> {
   if (!isTauri()) {
     throw new Error(t("浏览器降级模式无法调用 pandoc，请在桌面应用里导出"));
@@ -170,5 +177,6 @@ export async function convertWithPandoc(
     outputPath,
     resourceDir,
     from,
+    expectContent,
   });
 }
