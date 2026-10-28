@@ -3506,6 +3506,23 @@ return colorMode === "auto" ? (systemPrefersDark ? "dark" : "light") : colorMode
 这是「死开关」的**隐蔽版本**：值确实被读了（所以覆盖度守卫抓不到），
 但读了不用。
 
+**实测枚举**（2026-10-28，12 种输入组合全跑一遍）：
+`colorMode` × `followSystem` × `systemPrefersDark` 的 12 种组合里，
+`followSystem` 一次都没改变过结果——
+
+```
+colorMode=auto  followSystem=true  prefersDark=true  → dark
+colorMode=auto  followSystem=false prefersDark=true  → dark   ← 只有它不同
+colorMode=auto  followSystem=true  prefersDark=false → light
+colorMode=auto  followSystem=false prefersDark=false → light  ← 只有它不同
+colorMode=light followSystem=true/false → 一律 light
+colorMode=dark  followSystem=true/false → 一律 dark
+```
+
+即：**唯一还能被 `followSystem` 影响的那一行（`auto` + `prefersDark`）
+在两个分支里给出的是同一个值**。开关连「读了不用」都算不上，
+是**连分支都没走到**。
+
 它该是什么语义，是个**产品决定**，本轮没动：
 候选是「关掉后系统切换时应用不再跟随」（那需要 `useThemeRuntime`
 里的 `useSystemPrefersDark` 订阅也听它的），
