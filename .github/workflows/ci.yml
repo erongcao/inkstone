@@ -57,6 +57,13 @@ jobs:
         # 而这种不一致不会报错，只会「按下去没反应」。
         run: pnpm gen:shortcuts -- --check
 
+      - name: 校验主题令牌表未过期
+        # src/export/theme-tokens.generated.ts 是从主题 CSS 生成的。
+        # 改了 CSS 却忘了重新生成 → 导出的文件用着**另一套**配色，
+        # 而应用里看着完全正常（实测：academic 主题的导出是暗红配色，
+        # 应用里是蓝配色，连字体都不同）。
+        run: pnpm gen:theme-tokens -- --check
+
       - name: 校验打包元数据是 ASCII
         # Windows 的 MSI 数据库代码页是 1252，装不下中文。
         # 文件关联的 description 会被写进每个扩展名的 <ProgId Description="…">，

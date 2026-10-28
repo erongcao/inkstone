@@ -5,3 +5,8 @@ coverage
 pnpm-lock.yaml
 docs/*.md
 tests/corpus/*.md
+
+# 生成的文件：它的闸门是 `pnpm gen:theme-tokens -- --check`，
+# 不是 prettier——让 prettier 也管它会形成「先生成、再格式化、再校验」
+# 的循环（格式化改了生成结果，校验就说文件过期了）。
+src/export/theme-tokens.generated.ts

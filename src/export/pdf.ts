@@ -35,7 +35,7 @@
  * 纸张尺寸是**用户选的**，不能猜。
  */
 
-import { exportToHtml } from "./html";
+import { exportToHtml, typographyFromAppearance } from "./html";
 import type { ExportContext } from "./service";
 import type { ExportResult } from "./service";
 import { readSettings } from "@/settings/store";
@@ -78,6 +78,8 @@ export async function buildPrintHtml(context: ExportContext): Promise<string> {
     includeOutline: false,
     // 自定义 CSS 也要进导出——编辑器里有、导出里没有就是「屏幕与导出不一致」
     customCss: settings.appearance.customCss,
+    // 排版同样要跟屏幕一致（字号 / 行高 / 写作区宽度 / 字体 / 页面背景）
+    typography: typographyFromAppearance(settings.appearance),
     words: context.variables.words,
     chars: context.variables.chars,
   });

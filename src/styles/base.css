@@ -27,7 +27,9 @@ body {
   font-family: var(--ink-font-family);
   line-height: var(--ink-line-height);
   color: var(--ink-fg);
-  background-color: var(--ink-bg);
+  /* 页面背景走 --ink-page-bg——设置里的「页面背景色」写进这个变量。
+     没设置时它等于 var(--ink-bg)，所以这里要带 fallback。 */
+  background-color: var(--ink-page-bg, var(--ink-bg));
   overflow: hidden;
   /* macOS 下避免拖拽窗口时出现文字选中高亮 */
   -webkit-user-select: none;

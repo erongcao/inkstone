@@ -32,9 +32,35 @@ import { headingAnchorId } from "@/parser/heading-anchors";
 import { readSettings } from "@/settings/store";
 import { highlightCode, resolveLanguage } from "@/editor/render/code-block";
 import { buildIndexFromTree, type OutlineItem } from "@/editor/document-index";
-import type { ColorMode } from "@/settings/schema";
+import type { AppearanceSettings, ColorMode } from "@/settings/schema";
 import { katexStylesheet } from "@/parser/rehype-math";
 import { t, htmlLang } from "@/i18n";
+import { THEME_FONTS, THEME_TOKENS } from "./theme-tokens.generated";
+
+/**
+ * 导出的排版：跟随用户在设置面板里的选择。
+ *
+ * 应用里这些值是**写在 `<html>` 上的 inline style**（见 `useThemeRuntime.ts`），
+ * 优先级高于样式表规则。导出是独立的 HTML 文件，没有 inline style 可写，
+ * 所以只能在 `<style>` 里按同样的优先级排。
+ *
+ * 不跟的后果：用户把字号调到 18px、写作区调到 64rem，
+ * 导出的文件还是 16px / 46rem——屏幕与导出不一致（架构约束 C）。
+ */
+export interface ExportTypography {
+  /** 正文字体族（CSS font-family 值） */
+  fontFamily?: string;
+  /** 等宽字体族 */
+  monoFontFamily?: string;
+  /** 正文字号（px） */
+  fontSize?: number;
+  /** 行高倍数 */
+  lineHeight?: number;
+  /** 写作区最大宽度（rem） */
+  contentWidth?: number;
+  /** 页面背景色（CSS color）；空 = 用主题底色 */
+  backgroundColor?: string;
+}
 
 /** HTML 导出的选项 */
 export interface HtmlExportOptions {
@@ -70,208 +96,40 @@ export interface HtmlExportOptions {
   words?: number;
   /** 正文字符数 */
   chars?: number;
+  /** 用户的排版设置（字号 / 行高 / 写作区宽度 / 字体 / 背景色） */
+  typography?: ExportTypography;
+}
+
+/**
+ * 把设置里的外观选项翻译成导出的排版选项。
+ *
+ * **只有这六项进导出**——主题与明暗模式有各自的通道
+ * （`options.theme` / `options.mode`），自定义 CSS 也是单独一个字段。
+ */
+export function typographyFromAppearance(
+  appearance: AppearanceSettings,
+): ExportTypography {
+  return {
+    fontFamily: appearance.fontFamily,
+    monoFontFamily: appearance.monoFontFamily,
+    fontSize: appearance.fontSize,
+    lineHeight: appearance.lineHeight,
+    contentWidth: appearance.contentWidth,
+    backgroundColor: appearance.backgroundColor,
+  };
 }
 
 /* ── 主题 CSS ── */
 
 /**
- * 主题的颜色令牌表。
+ * 主题的颜色令牌**从 CSS 生成**——见 `theme-tokens.generated.ts`。
  *
- * 与 `src/themes/*.css` 保持一致，但这里是**字符串**形式——
- * 导出要的是能内联进 `<style>` 的文本，不能是构建期注入的样式表。
+ * 以前这里是手抄的一份，于是和应用内的 `src/themes/*.css` 漂移了：
+ * `academic` 主题的导出配色是暗红调、字体是无衬线，
+ * 而应用里是蓝调 + 衬线——同一份文档，导出后看着像另一个主题。
  *
- * 为什么不直接读 `src/themes/github.css`？
- * 那份文件是给 Vite 的 CSS 管线用的（`import()` 后自动注入 `<style>`），
- * 运行时拿不到它的文本。要在导出里复用，就得再维护一份字符串——
- * 那必然漂移。所以这里的令牌表是**导出链路的唯一真相源**，
- * 而 `src/themes/*.css` 是应用内的真相源。两边各司其职：
- * 应用内用 CSS 文件（能被 Vite 优化、能被浏览器缓存），导出用字符串（能内联）。
- *
- * 漂移的风险用测试兜住：见 `tests/export-html.test.ts` 的「主题令牌齐全」用例。
+ * 现在令牌只有一份（CSS 文件），导出用的表由 `pnpm gen:theme-tokens` 派生。
  */
-const THEME_TOKENS: Record<string, Record<"light" | "dark", string>> = {
-  "inkstone-light": {
-    light: `--ink-bg: #ffffff;
-  --ink-bg-soft: #f6f8fa;
-  --ink-bg-inset: #eaeef2;
-  --ink-fg: #1f2328;
-  --ink-fg-muted: #59636e;
-  --ink-fg-faint: #8c959f;
-  --ink-border: #d1d9e0;
-  --ink-border-strong: #afb8c1;
-  --ink-accent: #0969da;
-  --ink-code-bg: #f6f8fa;
-  --ink-code-fg: #1f2328;
-  --ink-code-border: #d1d9e0;
-  --ink-code-comment: #6e7781;
-  --ink-code-keyword: #cf222e;
-  --ink-code-string: #0a3069;
-  --ink-code-number: #0550ae;
-  --ink-code-function: #8250df;
-  --ink-code-type: #953800;
-  --ink-code-variable: #24292f;
-  --ink-code-punctuation: #57606a;
-  --ink-code-tag: #116329;
-  --ink-code-attr: #0550ae;
-  --ink-quote-border: #d1d9e0;
-  --ink-quote-fg: #57606a;
-  --ink-mark-bg: #fff8c5;
-  --ink-mark-fg: #1f2328;
-  --ink-table-border: #d1d9e0;
-  --ink-table-header-bg: #f6f8fa;
-  --ink-table-stripe-bg: #f6f8fa;`,
-    dark: `--ink-bg: #0d1117;
-  --ink-bg-soft: #161b22;
-  --ink-bg-inset: #010409;
-  --ink-fg: #e6edf3;
-  --ink-fg-muted: #9198a1;
-  --ink-fg-faint: #6e7681;
-  --ink-border: #30363d;
-  --ink-border-strong: #444c56;
-  --ink-accent: #4493f8;
-  --ink-code-bg: #161b22;
-  --ink-code-fg: #e6edf3;
-  --ink-code-border: #30363d;
-  --ink-code-comment: #8b949e;
-  --ink-code-keyword: #ff7b72;
-  --ink-code-string: #a5d6ff;
-  --ink-code-number: #79c0ff;
-  --ink-code-function: #d2a8ff;
-  --ink-code-type: #ffa657;
-  --ink-code-variable: #e6edf3;
-  --ink-code-punctuation: #8b949e;
-  --ink-code-tag: #7ee787;
-  --ink-code-attr: #79c0ff;
-  --ink-quote-border: #3d444d;
-  --ink-quote-fg: #9198a1;
-  --ink-mark-bg: rgba(187, 128, 9, 0.4);
-  --ink-mark-fg: #e6edf3;
-  --ink-table-border: #30363d;
-  --ink-table-header-bg: #161b22;
-  --ink-table-stripe-bg: #12181f;`,
-  },
-  github: {
-    light: `--ink-bg: #ffffff;
-  --ink-bg-soft: #f6f8fa;
-  --ink-bg-inset: #eff2f5;
-  --ink-fg: #1f2328;
-  --ink-fg-muted: #59636e;
-  --ink-fg-faint: #818b98;
-  --ink-border: #d1d9e0;
-  --ink-border-strong: #afb8c1;
-  --ink-accent: #0969da;
-  --ink-code-bg: #f6f8fa;
-  --ink-code-fg: #1f2328;
-  --ink-code-border: #d1d9e0;
-  --ink-code-comment: #6e7781;
-  --ink-code-keyword: #cf222e;
-  --ink-code-string: #0a3069;
-  --ink-code-number: #0550ae;
-  --ink-code-function: #8250df;
-  --ink-code-type: #953800;
-  --ink-code-variable: #24292f;
-  --ink-code-punctuation: #57606a;
-  --ink-code-tag: #116329;
-  --ink-code-attr: #0550ae;
-  --ink-quote-border: #d1d9e0;
-  --ink-quote-fg: #59636e;
-  --ink-mark-bg: #fff8c5;
-  --ink-mark-fg: #1f2328;
-  --ink-table-border: #d1d9e0;
-  --ink-table-header-bg: #f6f8fa;
-  --ink-table-stripe-bg: #f6f8fa;`,
-    dark: `--ink-bg: #0d1117;
-  --ink-bg-soft: #161b22;
-  --ink-bg-inset: #010409;
-  --ink-fg: #e6edf3;
-  --ink-fg-muted: #9198a1;
-  --ink-fg-faint: #6e7681;
-  --ink-border: #30363d;
-  --ink-border-strong: #444c56;
-  --ink-accent: #4493f8;
-  --ink-code-bg: #161b22;
-  --ink-code-fg: #e6edf3;
-  --ink-code-border: #30363d;
-  --ink-code-comment: #8b949e;
-  --ink-code-keyword: #ff7b72;
-  --ink-code-string: #a5d6ff;
-  --ink-code-number: #79c0ff;
-  --ink-code-function: #d2a8ff;
-  --ink-code-type: #ffa657;
-  --ink-code-variable: #e6edf3;
-  --ink-code-punctuation: #8b949e;
-  --ink-code-tag: #7ee787;
-  --ink-code-attr: #79c0ff;
-  --ink-quote-border: #3d444d;
-  --ink-quote-fg: #9198a1;
-  --ink-mark-bg: rgba(187, 128, 9, 0.4);
-  --ink-mark-fg: #e6edf3;
-  --ink-table-border: #30363d;
-  --ink-table-header-bg: #161b22;
-  --ink-table-stripe-bg: #12181f;`,
-  },
-  academic: {
-    // 学术主题：衬线体、克制的配色、适合打印
-    light: `--ink-bg: #ffffff;
-  --ink-bg-soft: #f7f6f2;
-  --ink-bg-inset: #efeee8;
-  --ink-fg: #1a1a1a;
-  --ink-fg-muted: #55524a;
-  --ink-fg-faint: #8a867c;
-  --ink-border: #ddd9cf;
-  --ink-border-strong: #b8b2a4;
-  --ink-accent: #7a2e2e;
-  --ink-code-bg: #f7f6f2;
-  --ink-code-fg: #1a1a1a;
-  --ink-code-border: #ddd9cf;
-  --ink-code-comment: #8a867c;
-  --ink-code-keyword: #7a2e2e;
-  --ink-code-string: #2f5f3f;
-  --ink-code-number: #2f4f8f;
-  --ink-code-function: #5a3f8f;
-  --ink-code-type: #7a5c2e;
-  --ink-code-variable: #1a1a1a;
-  --ink-code-punctuation: #55524a;
-  --ink-code-tag: #2f5f3f;
-  --ink-code-attr: #2f4f8f;
-  --ink-quote-border: #ddd9cf;
-  --ink-quote-fg: #55524a;
-  --ink-mark-bg: #f5ecc8;
-  --ink-mark-fg: #1a1a1a;
-  --ink-table-border: #ddd9cf;
-  --ink-table-header-bg: #f7f6f2;
-  --ink-table-stripe-bg: #faf9f6;`,
-    dark: `--ink-bg: #1a1a18;
-  --ink-bg-soft: #232320;
-  --ink-bg-inset: #111110;
-  --ink-fg: #e8e6df;
-  --ink-fg-muted: #a8a49a;
-  --ink-fg-faint: #7a766c;
-  --ink-border: #3a3833;
-  --ink-border-strong: #4e4b44;
-  --ink-accent: #d4a0a0;
-  --ink-code-bg: #232320;
-  --ink-code-fg: #e8e6df;
-  --ink-code-border: #3a3833;
-  --ink-code-comment: #7a766c;
-  --ink-code-keyword: #d4a0a0;
-  --ink-code-string: #9ec49a;
-  --ink-code-number: #9ab8e0;
-  --ink-code-function: #bda8e0;
-  --ink-code-type: #d4bb90;
-  --ink-code-variable: #e8e6df;
-  --ink-code-punctuation: #a8a49a;
-  --ink-code-tag: #9ec49a;
-  --ink-code-attr: #9ab8e0;
-  --ink-quote-border: #3a3833;
-  --ink-quote-fg: #a8a49a;
-  --ink-mark-bg: rgba(180, 140, 60, 0.3);
-  --ink-mark-fg: #e8e6df;
-  --ink-table-border: #3a3833;
-  --ink-table-header-bg: #232320;
-  --ink-table-stripe-bg: #1f1f1c;`,
-  },
-};
 
 /**
  * 导出专用的排版 CSS。
@@ -288,7 +146,8 @@ const EXPORT_STYLES = `
 body {
   margin: 0;
   padding: 0;
-  background: var(--ink-bg);
+  /* 页面背景走 --ink-page-bg——设置里的「页面背景色」写进这个变量 */
+  background: var(--ink-page-bg, var(--ink-bg));
   color: var(--ink-fg);
   font-family: var(--ink-font-family);
   font-size: var(--ink-font-size);
@@ -300,6 +159,7 @@ body {
   max-width: var(--ink-content-width);
   margin: 0 auto;
   padding: 3rem 1.5rem 6rem;
+  /* 正文区用主题底色：页面背景是用户另设的，正文底色仍跟主题 */
   background: var(--ink-bg);
 }
 
@@ -484,8 +344,8 @@ body {
 .hljs-title.class_, .hljs-class, .hljs-type, .hljs-built_in, .hljs-builtin-name { color: var(--ink-code-type); }
 .hljs-tag { color: var(--ink-code-tag); }
 .hljs-attr, .hljs-variable, .hljs-template-variable, .hljs-property { color: var(--ink-code-attr); }
-.hljs-deletion { color: #82071e; }
-.hljs-addition { color: #116329; }
+.hljs-deletion { color: var(--ink-code-deleted); }
+.hljs-addition { color: var(--ink-code-inserted); }
 .hljs-emphasis { font-style: italic; }
 .hljs-strong { font-weight: 600; }
 .hljs-link { color: var(--ink-accent); text-decoration: underline; }
@@ -502,11 +362,11 @@ body {
 /** 导出用的版式令牌（与 `src/styles/tokens.css` 的默认值一致） */
 const LAYOUT_TOKENS = `
 :root {
-  --ink-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
-  --ink-mono-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   --ink-font-size: 16px;
   --ink-line-height: 1.6;
   --ink-content-width: 46rem;
+  /* 页面背景：空设置时用主题的底色 */
+  --ink-page-bg: var(--ink-bg);
 }
 `;
 
@@ -526,12 +386,55 @@ const LAYOUT_TOKENS = `
  *
  * 判据是「注释开始符 + 最短匹配到注释结束符」——
  * CSS 注释不能嵌套，配对匹配就是规范定义的行为。
+ *
+ * ## 顺序很重要
+ *
+ * 后面的覆盖前面的，同特异度下**后者胜**（与 CSS 层叠一致）：
+ *
+ * 1. `LAYOUT_TOKENS` —— 版式的默认值
+ * 2. 主题的颜色令牌 —— 主题的配色
+ * 3. 主题的字体栈 —— 学术主题的衬线体在这里
+ * 4. **用户的排版设置** —— 设置面板里选的字体、字号、行高、写作区宽度
+ *
+ * 第 4 条必须在最后：应用里这些值是**写在 `<html>` 上的 inline style**，
+ * 优先级高于任何样式表规则——导出要复现这个效果。
  */
 function buildStyles(options: HtmlExportOptions): string {
   const theme = THEME_TOKENS[options.theme] ?? THEME_TOKENS["inkstone-light"];
   const mode: "light" | "dark" = options.mode === "dark" ? "dark" : "light";
-  const css = `${LAYOUT_TOKENS}\n:root {\n${theme[mode]}\n}\n${EXPORT_STYLES}`;
+  const fonts = THEME_FONTS[options.theme] ?? THEME_FONTS["inkstone-light"] ?? "";
+  const css = `${LAYOUT_TOKENS}\n:root {\n${theme[mode]}\n${fonts}\n${buildTypographyTokens(options.typography)}\n}\n${EXPORT_STYLES}`;
   return css.replace(/\/\*[\s\S]*?\*\//g, "");
+}
+
+/**
+ * 把用户在设置面板里选的排版翻译成 CSS 变量。
+ *
+ * 应用里这些是**写在 `<html>` 上的 inline style**（见 `useThemeRuntime.ts`），
+ * 优先级高于样式表。导出是独立的 HTML 文件，没有 inline style 可写，
+ * 所以只能在 `<style>` 里按同样的优先级排——
+ * **放在主题令牌之后**，效果才与屏幕上一致。
+ */
+function buildTypographyTokens(typography: ExportTypography | undefined): string {
+  if (!typography) return "";
+  const lines: string[] = [];
+  if (typography.fontFamily) lines.push(`--ink-font-family: ${typography.fontFamily};`);
+  if (typography.monoFontFamily) {
+    lines.push(`--ink-mono-family: ${typography.monoFontFamily};`);
+  }
+  if (typography.fontSize !== undefined) {
+    lines.push(`--ink-font-size: ${typography.fontSize}px;`);
+  }
+  if (typography.lineHeight !== undefined) {
+    lines.push(`--ink-line-height: ${typography.lineHeight};`);
+  }
+  if (typography.contentWidth !== undefined) {
+    lines.push(`--ink-content-width: ${typography.contentWidth}rem;`);
+  }
+  if (typography.backgroundColor) {
+    lines.push(`--ink-page-bg: ${typography.backgroundColor};`);
+  }
+  return lines.map((line) => `  ${line}`).join("\n");
 }
 
 /* ── 代码高亮 ── */

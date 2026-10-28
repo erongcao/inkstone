@@ -29,7 +29,7 @@ import {
   type ExportVariable,
   type VariableContext,
 } from "./variables";
-import { exportToHtml } from "./html";
+import { exportToHtml, typographyFromAppearance } from "./html";
 import { pandocInputFormat } from "./pandoc-format";
 import { featuresFromSettings } from "@/parser/features";
 import { sanitizeFileName, suggestFileName, type ExportFormat } from "./registry";
@@ -338,6 +338,8 @@ export async function exportDocument(formatId: string): Promise<ExportResult> {
         extraBody: settings.export.htmlExtraBody,
         // 自定义 CSS 也要进导出——编辑器里有、导出里没有就是「屏幕与导出不一致」
         customCss: settings.appearance.customCss,
+        // 排版（字号 / 行高 / 写作区宽度 / 字体 / 页面背景）同样要跟屏幕一致
+        typography: typographyFromAppearance(settings.appearance),
         words: context.variables.words,
         chars: context.variables.chars,
       });

@@ -42,6 +42,7 @@
 | HTML 导出保留 Markdown 里的原始 HTML（`<div>` / `<img>` / `<details>`） | ✅ M4 |
 | 导出项可自定义（增删、重排、重命名、绑定快捷键） | ✅ M4 |
 | 导出变量系统、YAML front matter 覆盖导出设置 | ✅ M4 |
+| 导出的主题与排版跟屏幕上完全一致（主题令牌由 CSS 生成） | ✅ M4 |
 | 界面国际化（简 / 繁 / 英，界面 + 原生菜单） | ✅ M5-3 |
 | 检查更新（查 GitHub Releases，给下载页链接） | ✅ M5-4 |
 | Windows / Linux 三平台 CI 与打包 | ✅ M5-5 |
