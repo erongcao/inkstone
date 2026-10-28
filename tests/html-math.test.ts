@@ -94,14 +94,23 @@ describe("解析选项必须透传（红线 3：解析规则唯一）", () => {
 });
 
 describe("Markdown 里的原始 HTML", () => {
-  it("当前会被丢弃（remark-rehype 的默认行为）", () => {
+  it("默认被丢弃（remark-rehype 的默认行为）", () => {
     // 如实记录现状而不是断言理想行为：`rehype-stringify` 的
     // `allowDangerousHtml` 只影响**已经变成 hast 节点**的 raw 内容
     // （KaTeX 的 HTML 走这条路），用户原文在 remark-rehype 阶段就没了。
-    // 要保留得再加 `rehype-raw`，那是另一个取舍（允许任意 HTML 进入剪贴板），
-    // 留到 M4 导出时一并决定，不在这里偷偷改变行为。
+    //
+    // **默认丢弃**，但「导出」那条路显式打开了它（2026-10-28 维护者拍板）：
+    // 导出物是用户自己产出的本地文件，自己的内容不该被悄悄丢掉；
+    // 剪贴板那条路维持丢弃。理由与安全边界见 `parser/html.ts` 的 `HtmlOptions`，
+    // 两条路的差异由 `tests/export-raw-html.test.ts` 钉住。
     const html = markdownToHtml('<span class="自定义">文字</span>');
     expect(html).toContain("文字");
     expect(html).not.toContain('class="自定义"');
+  });
+
+  it("显式要求保留时，原始 HTML 原样输出", () => {
+    const html = markdownToHtml('<div align="center">文字</div>', { allowRawHtml: true });
+    expect(html).toContain('<div align="center">');
+    expect(html).toContain("文字");
   });
 });

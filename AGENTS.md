@@ -917,7 +917,12 @@ hast 序列化 text 时做 HTML 转义，KaTeX CSS 里的子选择器（`.a > .b
 raw 内容全部由 KaTeX 生成（`trust: false` 已禁掉 `\href` / `\url` 这类宏）。
 副作用是用户写在 Markdown 里的原始 HTML 仍会被丢弃——`remark-rehype`
 在更早的阶段就没了，`allowDangerousHtml` 救不回来。要保留需另加 `rehype-raw`，
-那是「允许任意 HTML 进入剪贴板」的另一个取舍，**留给 M4 导出时一并决定**。
+那是「允许任意 HTML 进入剪贴板」的另一个取舍。
+
+**已于 2026-10-28 决定**（见下文「第十个破口」）：导出那条路**保留**原始 HTML
+（`remark-rehype` 开 `allowDangerousHtml`，不必加 `rehype-raw`——
+我们不需要把 HTML 解析成 hast 节点，原样输出就够了），
+剪贴板那条路维持丢弃。
 
 ### KaTeX 样式表两条取法，互补
 
@@ -3627,6 +3632,100 @@ HTML 导出那条路当初就是在调用方 `service.ts` 里等的，
 这三条守卫都**验过会红**：分别拆掉 `lang`、拆掉 `buildPrintHtml` 的 await、
 拆掉 `ensureMarkdownToHtml` 的 await，对应用例立刻报错。
 
+## 第十个破口：原始 HTML 在导出里静默消失（2026-10-28）
+
+这一轮把导出产物整个 dump 出来逐段看的时候，顺手试了几种原始 HTML。
+结果是**三种情况三个结果，没有一个跟屏幕一致**：
+
+| 源码 | 编辑器 | 导出（丢掉时） |
+|---|---|---|
+| `<div align="center">` + `click me` + `</div>` | 原样显示为文本 | **整块消失**（连「click me」一起没了） |
+| `inline <b>bold</b> here` | 原样显示为文本 | `inline bold here`（标签被丢） |
+| `line1<br>line2` | 原样显示为文本 | `line1line2`（**两个词被粘在一起**） |
+
+编辑器侧是在浏览器里实地看的（`cm-content` 的 DOM）：
+块级与行内的原始 HTML 都渲染成 `&lt;div align="center"&gt;` 这样的字面文本。
+
+### 为什么块级会连文字一起没
+
+CommonMark 里**块级 HTML 是整个一个 `html` 节点**——
+`<div align="center">click me</div>` 的值就是那一整段源码。
+
+而 `remark-rehype` 默认丢掉 mdast 的 `html` 节点，
+于是**节点里的文字也跟着没了**。
+行内 HTML 之所以「看起来没事」，是因为 `Hello <b>world</b> end.`
+被切成了 text / html / text / html / text 五个节点——
+丢掉的只是两个 html 节点，中间的 text 活了下来。
+
+**这是内容丢失级别的破口**：用户写的 `<div align="center">` 居中一张图、
+`<details>` 折叠一段说明，在导出的文件里**静默消失**。
+
+### 两条 `allowDangerousHtml` 不是一回事
+
+这是最容易搞混的地方：
+
+| 选项 | 在哪 | 管什么 |
+|---|---|---|
+| `allowDangerousHtml` | **`remark-rehype`**（mdast → hast） | mdast 的 `html` 节点**要不要留下来**（变成 hast 的 `raw` 节点） |
+| `allowDangerousHtml` | **`rehype-stringify`**（hast → HTML） | hast 里已有的 `raw` 节点**要不要序列化** |
+
+KaTeX 的输出走的是后者，所以后者必须**一直**开着。
+用户原始 HTML 走的是前者——以前没开，于是在更早的阶段就没了，
+后面那个开关救不回来。
+
+（`src/parser/rehype-math.ts` 的文件头曾写着「用户原始 HTML 从此会被保留」——
+那是把两个同名选项搞混了。这轮已订正。）
+
+### 决定（2026-10-28，维护者拍板）
+
+| 链路 | 原始 HTML | 为什么 |
+|---|---|---|
+| **导出** | **保留并渲染出来** | 导出物是用户自己产出的本地文件，自己的内容不该被悄悄丢掉 |
+| **剪贴板**（⌘C / 菜单「复制为 HTML」） | 维持丢弃 | 往 Word / 邮件正文里贴时少一些意外内容（脚本、样式块）更安全 |
+
+实现上是 `remark-rehype` 开 `allowDangerousHtml`——**不必加 `rehype-raw`**：
+我们不需要把 HTML 解析成 hast 节点，原样输出就够了，
+也就不必引一个新依赖（`rehype-raw` 会把 `hast-util-raw` 拖进来）。
+
+### 开关放在哪：处理器缓存要按「语言 + 这个开关」分键
+
+`parser/html.ts` 的 `HtmlOptions` 多一个 `allowRawHtml`（默认**关**）。
+
+处理器缓存因此改成 `Map`，键是「语言 + 是否保留原始 HTML」：
+
+- 语言：脚注标签是在 `.use()` 时定下的（`.use()` 的选项是静态的）
+- 原始 HTML 开关：`remarkRehype` 的 `allowDangerousHtml` 同样是静态选项
+
+用 `Map` 而不是单个槽位：**导出（保留）与剪贴板（丢弃）交替调用是常态**，
+单槽位会来回重建——那正是缓存要避免的事。
+
+### 剪贴板那条路的「丢」是**结构上**保证的
+
+`parser/html-loader.ts` 的 `HtmlRenderer` 签名**故意比 `markdownToHtml` 窄**——
+只收 `ParseOptions`，不收 `HtmlOptions`。
+
+于是剪贴板那条路上原始 HTML **结构上就丢不掉**：
+想保留就得改这个签名，那是一次有意识的决定，
+而不是「顺手多传一个字段」。
+
+### 安全边界（有意取舍，不是漏洞）
+
+开了之后，`<script>`、`<style>`、事件属性会**原样进入导出文件**——
+用浏览器打开那个文件时会执行。
+
+理由：导出物是用户自己产出的本地文件，与「在服务器上渲染不可信内容」
+不是一回事（后者需要净化，GitHub 走那条路）。
+
+### 守卫：`tests/export-raw-html.test.ts`
+
+**两边都钉住**：
+
+- 导出那边：块级 HTML 连同文字、行内标签、`<br>`、`<img>` 都要在
+- 剪贴板那边：原始 HTML 继续不在
+
+两条都**验过会红**：拆掉导出的 `allowRawHtml` → 4 条红；
+让剪贴板「顺手放开」→ 剪贴板那条红。
+
 ## 「装饰器局部重建」：先量收益，再决定做不做（2026-10-27）
 
 M2 留的最后一个性能项。这轮**没有**做，原因是量完之后发现
@@ -4004,6 +4103,9 @@ M3 全部完成（2026-10-23）。M4（导出）进行中（2026-10-25）：
   异步出口都自己 `await ensureMathRenderer()`——
   不再出现「同一份文档导 HTML 是排好版的公式、导 PDF 是裸 LaTeX」。
   理由见上文「第九个破口」
+- **导出保留原始 HTML**（2026-10-28）：`<div align="center">`、`<img>`、
+  `<details>` 这类内容在导出物里原样保留（此前**整块消失**，连里面的文字一起）。
+  剪贴板那条路维持丢弃；取舍与安全边界见上文「第十个破口」
 - **导出变量系统**：`${title}` `${author}` `${today}` 等，只在**导出产物**上替换，
   绝不碰文档正文；未定义的变量原样保留
 - **YAML front matter 覆盖导出设置**：默认关闭；开启后只开放安全的那几项，

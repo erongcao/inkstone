@@ -288,6 +288,23 @@
   且没有任何提示。现在把「等渲染器」放进产出函数内部
   （`buildPrintHtml` 改成 async、`ensureMarkdownToHtml` 同样自己等），
   顺带让 `exportToHtml` 在检测到未渲染的公式时**留下痕迹**而不是默默降级
+- **原始 HTML 在导出里静默消失**（内容丢失级别的破口）：
+  `<div align="center">` 居中一张图、`<details>` 折叠一段说明，
+  在导出的文件里**整块没了**——CommonMark 里块级 HTML 是整个一个
+  `html` 节点，丢掉节点，里面的文字也跟着没。
+  行内 HTML 看似没事，只是因为 `Hello <b>world</b> end.` 被切成了
+  text / html / text / html / text 五个节点，丢的只是中间两个；
+  而 `<br>` 更是把两个词粘成了 `line1line2`。
+  现在**导出保留并渲染**原始 HTML（2026-10-28 维护者拍板），
+  剪贴板那条路维持丢弃（往 Word / 邮件里贴时少些意外内容更安全）。
+  实现是 `remark-rehype` 开 `allowDangerousHtml`——不必加 `rehype-raw`，
+  我们不需要把 HTML 解析成 hast 节点，原样输出就够了。
+  两条路的差异由 `tests/export-raw-html.test.ts` 钉住（都验过会红）
+- **脚注区的标题与回链标签是英文**：这两处**只给读屏软件看**
+  （标题带 `sr-only` 类，回链是 `aria-label`），最容易被漏掉——
+  眼睛看不见，测试也难覆盖。上游 `mdast-util-to-hast` 的注释直说
+  「When your page is not in English, you must define translated values」。
+  现在通过 `remark-rehype` 的 `footnoteLabel` / `footnoteBackLabel` 传进去
 - 界面国际化：词典条数 426 → 486；「快捷键一览」的显示 bug 见上
 - **单个 `~` 被吃成删除线**：`remark-gfm` 默认把**单个**波浪号也当删除线
   （GFM 规范并不允许，这是 GitHub 的宽松行为），而 lezer 只认成对 `~~`。

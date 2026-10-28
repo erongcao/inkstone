@@ -21,7 +21,19 @@
 import type { ParseOptions } from "./markdown";
 import { ensureMathRenderer } from "@/editor/render/math-loader";
 
-/** 与 `markdownToHtml` 同签名：`options` 必须透传，否则与编辑器内的解析分叉 */
+/**
+ * 与 `markdownToHtml` 同签名：`options` 必须透传，否则与编辑器内的解析分叉。
+ *
+ * ## 这里的选项类型**故意比 `markdownToHtml` 窄**
+ *
+ * `markdownToHtml` 多一个 `allowRawHtml`（保留用户写在 Markdown 里的原始 HTML），
+ * 但本模块的签名只收 `ParseOptions`——
+ * 于是**剪贴板这条路上原始 HTML 结构上就丢不掉**：
+ * 想保留就得改这个签名，那是一次有意识的决定，而不是「顺手多传一个字段」。
+ *
+ * 两条路的取舍见 `parser/html.ts` 的 `HtmlOptions`：
+ * 导出保留（用户自己的内容不该消失），剪贴板丢弃（往 Word / 邮件里贴少些意外内容）。
+ */
 export type HtmlRenderer = (source: string, options?: ParseOptions) => string;
 
 let renderer: HtmlRenderer | null = null;

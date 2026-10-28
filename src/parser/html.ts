@@ -54,7 +54,52 @@ interface HtmlPipeline {
   stringify(tree: HastNode): string;
 }
 
-function buildHtmlProcessor(): HtmlPipeline {
+/**
+ * HTML 链路的选项。
+ *
+ * 在解析选项之外多一个 `allowRawHtml`——
+ * 因为它管的不是「怎么解析」，而是「解析出来的原始 HTML 怎么处置」。
+ */
+export interface HtmlOptions extends ParseOptions {
+  /**
+   * 是否保留用户写在 Markdown 里的原始 HTML。
+   *
+   * ## 默认 `false`（丢弃）
+   *
+   * `remark-rehype` 的默认行为：mdast 的 `html` 节点直接被丢掉。
+   *
+   * ## `true` 时保留
+   *
+   * mdast 的 `html` 节点变成 hast 的 `raw` 节点，
+   * 由 `rehype-stringify`（已经开着 `allowDangerousHtml`）原样序列化。
+   *
+   * ## 为什么两条链路要不一样
+   *
+   * - **导出**：保留。用户写 `<div align="center">` 居中一张图、
+   *   `<details>` 折叠一段说明，导出的文件里就该有——
+   *   否则这部分内容**静默消失**（实测：块级 HTML 连里面的文字一起没了）。
+   * - **剪贴板**（⌘C / 菜单「复制为 HTML」）：丢弃。往 Word / 邮件正文里贴时，
+   *   少一些意外内容（脚本、样式块）更安全。
+   *
+   * 2026-10-28 由维护者拍板：导出保留并渲染，剪贴板维持现状。
+   *
+   * ## 安全边界
+   *
+   * 开了之后，`<script>`、`<style>`、事件属性会**原样进入导出文件**——
+   * 用浏览器打开那个文件时会执行。
+   *
+   * 这是**有意的取舍**：导出物是用户自己产出的本地文件，
+   * 与「在服务器上渲染不可信内容」不是一回事（后者需要净化，GitHub 走那条路）。
+   */
+  allowRawHtml?: boolean;
+}
+
+/**
+ * 构建 HTML 输出处理器。
+ *
+ * @param allowRawHtml 是否保留用户原始 HTML（见 `HtmlOptions`）
+ */
+function buildHtmlProcessor(allowRawHtml: boolean): HtmlPipeline {
   return (
     unified()
       .use(remarkParse)
@@ -67,6 +112,13 @@ function buildHtmlProcessor(): HtmlPipeline {
       // handler 挂在 remarkRehype 的选项上——
       // 那是 mdast-util-to-hast 唯一开放的扩展入口。
       .use(remarkRehype, {
+        // 用户写在 Markdown 里的原始 HTML 要不要变成 hast 的 raw 节点。
+        //
+        // 注意这与 `rehype-stringify` 上那个同名选项**不是一回事**：
+        //   - 这里（remark-rehype）：决定 mdast 的 `html` 节点**要不要留下来**
+        //   - rehype-stringify：决定 hast 里已有的 `raw` 节点**要不要序列化**
+        // KaTeX 的输出走的是后者，所以后者必须一直开着。
+        allowDangerousHtml: allowRawHtml,
         handlers: { ...highlightHastHandlers, ...subSupHastHandlers },
         // 脚注区的标题与回链的无障碍标签。
         //
@@ -91,21 +143,29 @@ type HtmlProcessor = ReturnType<typeof buildHtmlProcessor>;
 /**
  * 处理器缓存。
  *
- * **按语言存**：脚注标签是在 `.use()` 时定下的（`.use()` 的选项是静态的，
- * 不会跟着设置里的语言变），所以语言一换就得重建处理器。
+ * **按「语言 + 是否保留原始 HTML」分键**：
  *
- * 语言很少变，所以「换语言就重建一次」的成本可以忽略；
- * 而每次调用都重建会让 `unified()` 的组装开销进到热路径里。
+ * - 语言：脚注标签是在 `.use()` 时定下的（`.use()` 的选项是静态的，
+ *   不跟着设置里的语言变），语言一换就得重建处理器。
+ * - 原始 HTML 开关：`remarkRehype` 的 `allowDangerousHtml` 同样是静态选项。
+ *
+ * 用 `Map` 而不是单个槽位：导出（保留）与剪贴板（丢弃）**交替调用**是常态，
+ * 单槽位会来回重建——那正是缓存要避免的事。
+ *
+ * 键的取值空间有界（语言数 × 2），不会无限增长。
  */
-let htmlProcessor: { locale: string; processor: HtmlProcessor } | null = null;
+const htmlProcessors = new Map<string, HtmlProcessor>();
 
 /** 获取（并缓存）HTML 输出处理器 */
-function getHtmlProcessor(): HtmlProcessor {
+function getHtmlProcessor(allowRawHtml: boolean): HtmlProcessor {
   const locale = getLocale();
-  if (!htmlProcessor || htmlProcessor.locale !== locale) {
-    htmlProcessor = { locale, processor: buildHtmlProcessor() };
+  const key = `${locale}|${allowRawHtml ? "raw" : "noraw"}`;
+  let processor = htmlProcessors.get(key);
+  if (!processor) {
+    processor = buildHtmlProcessor(allowRawHtml);
+    htmlProcessors.set(key, processor);
   }
-  return htmlProcessor.processor;
+  return processor;
 }
 
 /**
@@ -129,8 +189,8 @@ function getHtmlProcessor(): HtmlProcessor {
  * 代价：调用方要保证传进来的是一棵**一次性**的树
  * （`markdownToHtml` 传的就是刚解析出来的那棵）。
  */
-export function htmlFromAst(tree: MarkdownAst, options: ParseOptions = {}): string {
-  const processor = getHtmlProcessor();
+export function htmlFromAst(tree: MarkdownAst, options: HtmlOptions = {}): string {
+  const processor = getHtmlProcessor(options.allowRawHtml === true);
   const features = resolveFeatures(options.features);
 
   // 提示块变换要在 mdast → hast **之前**做：
@@ -174,7 +234,10 @@ export function htmlFromAst(tree: MarkdownAst, options: ParseOptions = {}): stri
  * `options` 必须原样传给 `parseMarkdown`：`singleDollarTextMath` 一开一关，
  * 屏幕上是公式的地方复制出去就不是公式（或者反过来）——
  * 这就是「解析规则唯一」被破坏的样子，签名与 `markdown-loader.ts` 保持一致。
+ *
+ * `allowRawHtml`（保留用户原始 HTML）默认**关**——
+ * 导出那条路会显式打开，见 `HtmlOptions` 的说明。
  */
-export function markdownToHtml(source: string, options?: ParseOptions): string {
+export function markdownToHtml(source: string, options?: HtmlOptions): string {
   return htmlFromAst(parseMarkdown(source, options), options);
 }

@@ -672,6 +672,16 @@ export function exportToHtml(source: string, options: HtmlExportOptions): string
   // 导出来的 HTML 里那些语法还在，与屏幕上看到的不一致（架构约束 C）。
   let body = markdownToHtml(source, {
     features: featuresFromSettings(readSettings().markdown),
+    // **保留**用户写在 Markdown 里的原始 HTML（2026-10-28 维护者拍板）。
+    //
+    // 为什么不能丢：实测丢掉之后，块级的原始 HTML **连里面的文字一起没了**——
+    // `<div align="center">` 居中一张图、`<details>` 折叠一段说明，
+    // 这些内容在导出的文件里**静默消失**。
+    // 保留之后，导出物与用户写的东西一致（`<br>` 也不会再把两个词粘在一起）。
+    //
+    // 与剪贴板那条路**故意不一样**（那边维持丢弃），
+    // 理由与安全边界见 `parser/html.ts` 的 `HtmlOptions`。
+    allowRawHtml: true,
   });
 
   // 「公式没渲染」的检测必须发生在**高亮之前**。
