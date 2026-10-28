@@ -72,7 +72,7 @@ export interface InlineImagesOptions {
 const SKIP_PREFIXES = ["data:", "http://", "https://", "blob:"];
 
 /**
- * 匹配 `<img>` 标签里的 `src` 属性。
+ * 匹配 `<img>` 标签里的 `src` 属性的**形状**（说明见函数内的正则）。
  *
  * - `src` **不一定在第一个**：用户手写的原始 HTML 可能是
  *   `<img alt="x" src="y">`，所以不锚定位置；
@@ -83,7 +83,6 @@ const SKIP_PREFIXES = ["data:", "http://", "https://", "blob:"];
  * 直接 `whole.replace(值, 新值)` 会替换掉**第一个**同名片段，
  * `<img alt="a.png" src="a.png">` 就会把 alt 改掉。
  */
-const IMG_SRC = /(<img\b[^>]*?\bsrc\s*=\s*)(["'])([^"']*)\2/gi;
 
 /**
  * HTML 实体解码。
@@ -135,12 +134,25 @@ export async function inlineImages(
 ): Promise<string> {
   const resolve = options.resolve ?? resolveImageSrc;
 
+  // 正则**在函数里新建**，不用模块级的常量。
+  //
+  // 为什么：带 `g` 标志的正则是**有状态的**（`lastIndex`），
+  // 而 `String.prototype.matchAll` 会把原正则的 `lastIndex` 复制进克隆——
+  // 共享一个带 `g` 的正则，就多了一份「它现在在哪儿」的隐式状态。
+  //
+  // 这个函数是**异步**的（中间有 await），两次调用可能交错：
+  // 一边 `replace` 推进了 `lastIndex`，另一边 `matchAll` 就可能**漏掉匹配**。
+  // 一次导出丢一张图，而产物里看不出任何异常——正是最难查的那类破口。
+  //
+  // 新建一个正则的成本可以忽略，换掉一份共享可变状态很划算。
+  const imgSrc = /(<img\b[^>]*?\bsrc\s*=\s*)(["'])([^"']*)\2/gi;
+
   // 先把要解析的地址收集起来：**同一张图只解析一次**。
   //
   // 为什么要收集：一张 2MB 的图 base64 出来是 2.7MB，
   // 重复解析既慢又占内存。
   const sources = new Set<string>();
-  for (const match of html.matchAll(IMG_SRC)) {
+  for (const match of html.matchAll(imgSrc)) {
     const raw = match[3];
     if (raw === "") continue;
     const decoded = decodeEntities(raw);
@@ -169,7 +181,7 @@ export async function inlineImages(
   //
   // 用捕获组**重建**这一段，而不是在整段里做字符串替换——
   // 后者会替换掉**第一个**同名片段（`alt` 里也可能是同一个地址）。
-  return html.replace(IMG_SRC, (whole, prefix: string, quote: string, raw: string) => {
+  return html.replace(imgSrc, (whole, prefix: string, quote: string, raw: string) => {
     const url = resolved.get(decodeEntities(raw));
     if (url === undefined) return whole;
     return `${prefix}${quote}${escapeAttribute(url)}${quote}`;
