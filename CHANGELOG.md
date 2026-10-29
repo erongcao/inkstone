@@ -5,10 +5,16 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-> 项目尚未发布任何正式版本，以下内容全部在 `[Unreleased]` 里。
-> 首次打标签发布时会把该节改写成对应版本号。
+[English](CHANGELOG.en.md)
+
+> `0.1.0` 只在开发期用过，**从未发布**——本项目的首个正式版是 `0.2.0`。
+> 发布出去的每一版都带三平台安装包。
 
 ## [Unreleased]
+
+（尚未发布的变更放在这里）
+
+## [0.2.0] - 2026-10-29
 
 ### 新增
 
@@ -583,4 +589,5 @@
   扫源码会被注释骗（注释掉的处理者照样 grep 得到，守卫照样绿，
   而运行时那个菜单项还是死的）；守卫另带一条自检防假绿
 
-## [Unreleased]: https://github.com/erongcao/inkstone/compare/HEAD...HEAD
+## [Unreleased]: https://github.com/erongcao/inkstone/compare/v0.2.0...HEAD
+## [0.2.0]: https://github.com/erongcao/inkstone/releases/tag/v0.2.0
