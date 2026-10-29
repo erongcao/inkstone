@@ -5547,3 +5547,48 @@ pandoc **没有** alert / callout 扩展（`pandoc --list-extensions=markdown` �
 
 pandoc 那条路不走 mdast（pandoc 自己解析），所以提示块与脚注
 在**源码层面**改写，其余原文不动。
+
+## 发布流程（2026-10-29 首次发布走通）
+
+### 打 tag ≠ 发布完成
+
+`git push origin v0.2.0` 会触发 `.github/workflows/release.yml`：
+四个平台并行构建（macOS arm64 / x86_64、Windows x64、Linux x64），
+产物由 `tauri-apps/tauri-action` 上传，并**创建一个草稿 Release**
+（`releaseDraft: true`）。
+
+**草稿不会自动变成正式版**。发布前有两步手工活：
+
+1. **正文要换成中英双份**。workflow 里写死的是
+   `releaseBody: 见 [CHANGELOG.md](…)`——那是**只有中文**的一句链接。
+   正式发布用 `gh release edit v0.2.0 --notes-file=<双份正文>` 覆盖掉。
+2. `gh release edit v0.2.0 --draft=false` 才对用户可见。
+
+### 「检查更新」查的是 `releases/latest`
+
+`src/ipc/update.ts` 打
+`https://api.github.com/repos/erongcao/inkstone/releases/latest`。
+所以**草稿状态下用户看不到更新**，正式发布后才会冒出来——
+这跟「用户升级到最新版」是同一条链路，发布顺序反了会得到假象。
+
+### 版本号散在三处，漏改一处就出事
+
+`package.json`（前端读）、`src-tauri/tauri.conf.json`（打包器读）、
+`src-tauri/Cargo.toml`（Rust 读 `CARGO_PKG_VERSION`）。
+任何一处漏改，发布出去的产物就会「自称」某个版本，
+而「检查更新」拿它跟 GitHub 上最新的 release 比——差一位就是**假的「有新版」**。
+
+`update::tests::三处版本号必须一致` 守住这条：Rust 侧直接读前两个文件，
+断言它们与 `CARGO_PKG_VERSION` 一致。
+
+（此前那条守卫把版本号**写死**成 `"0.1.0"`，版本一抬就假红——
+写死等于每次发版都要改测试，改漏了就是一条假红。已改成
+「版本号是个像样的 x.y.z」+ 上面那条三处一致。）
+
+### 对外文档一律中英双份
+
+README / CHANGELOG / 每一版的功能说明，都要有英文版（后缀 `.en.md`）。
+`AGENTS.md` 只中文——它是给 AI 与协作者看的内部工程手册，不参与对外分发。
+
+中文与英文的**条目数必须对得上**（CHANGELOG 22 个标题 / 175 条 bullet、
+功能说明 17 个标题 / 21 行表格）——两份是镜像，不是摘要。
