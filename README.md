@@ -58,7 +58,7 @@
 | 检查更新（查 GitHub Releases，给下载页链接） | ✅ M5-4 |
 | Windows / Linux 三平台 CI 与打包 | ✅ M5-5 |
 | 自动更新（下载并替换安装包） | ⏳ |
-| PDF 导出带真页码 | ❌ 平台限制，见[本版功能说明](docs/release-0.2.0.md#pdf-真页码为什么做不成) |
+| PDF 导出带真页码 | ❌ 平台限制，见[本版功能说明](docs/release-0.2.0.md#四pdf-真页码为什么做不成) |
 
 完整路线图见 [`docs/plan.md`](docs/plan.md)。
 
