@@ -71,6 +71,7 @@ pub fn run() {
             ai::http::ai_stream_chat,
             ai::http::ai_cancel_stream,
             ai::http::ai_list_models,
+            ai::http::ai_probe_endpoint,
             update::latest_release,
         ])
         .build(tauri::generate_context!())

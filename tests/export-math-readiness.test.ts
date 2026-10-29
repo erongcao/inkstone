@@ -70,6 +70,7 @@ function context(content: string): ExportContext {
     fileName: "probe.html",
     overrides: {},
     hasBodyContent: true,
+    unusedFootnotes: [],
   };
 }
 

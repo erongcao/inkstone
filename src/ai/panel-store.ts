@@ -35,14 +35,17 @@ import { chat } from "./chat";
 import { getAiEditorBridge, appendWithRule } from "./editor-bridge";
 import { resolveContext, type ContextKind, type ContextSlice } from "./context";
 import { resolveEndpointConfig } from "./endpoints";
+import { bm25Search, splitDocumentChunks, type SearchHit } from "./retrieval";
+import { buildQaRequest, parseCitations, type QaCitation } from "./qa";
+import { ensureMarkdownParser } from "@/parser/markdown-loader";
 import type { ChatRequest, EndpointConfig } from "./provider";
 import { acceptWriteback, type PendingWriteback } from "./writeback";
 import { readSettings } from "@/settings/store";
 import type { AiSettings } from "@/settings/schema";
 import { t } from "@/i18n";
 
-/** 面板的两个分区 */
-export type AiTab = "rewrite" | "summarize";
+/** 面板的三个分区 */
+export type AiTab = "rewrite" | "summarize" | "qa";
 
 /** 运行状态 */
 export type AiStatus = "idle" | "running" | "done" | "error";
@@ -74,7 +77,28 @@ export interface AiPanelState {
   /** 待写回的切片；跑完才有 */
   pending: PendingWriteback | null;
   /** 本次是改写（替换）还是总结（追加到文末） */
-  mode: "rewrite" | "summarize";
+  mode: "rewrite" | "summarize" | "qa";
+  /**
+   * 问答模式：用户提的问题。
+   *
+   * 存在 store 里而不是组件里——面板的三个分区共用同一份状态，
+   * 切走再切回来问题还在。
+   */
+  question: string;
+  /**
+   * 问答模式：检索到的来源片段。
+   *
+   * 界面要把它们列出来（带标题路径与摘录），
+   * 用户才能判断这个答案是从哪来的。
+   */
+  sources: SearchHit[];
+  /**
+   * 问答模式：答案里引用的来源序号。
+   *
+   * 「答案引用了哪几段」是问答模式的核心——
+   * 没有它，模型说什么用户都没法核对。
+   */
+  citations: QaCitation[];
 }
 
 const initialState: AiPanelState = {
@@ -89,6 +113,9 @@ const initialState: AiPanelState = {
   contextKind: null,
   pending: null,
   mode: "rewrite",
+  question: "",
+  sources: [],
+  citations: [],
 };
 
 let state: AiPanelState = initialState;
@@ -149,11 +176,15 @@ export function describeContext(ctx: ContextSlice): string {
  * 改写类用「选区 → 段落 → 章节」的降级链（`resolveContext` 的默认行为）；
  * 总结类用**整篇文档**（设计文档：「当前文档 → 一句话摘要」）。
  */
-function resolveCurrentContext(mode: "rewrite" | "summarize"): ContextSlice | null {
+function resolveCurrentContext(
+  mode: "rewrite" | "summarize" | "qa",
+): ContextSlice | null {
   const editor = getAiEditorBridge();
   if (!editor) return null;
   const source = editor.getSource();
-  if (mode === "summarize") {
+  // 问答模式用**整篇文档**——它靠 BM25 从全文里检索相关段落，
+  // 不是靠「选区 / 段落 / 章节」这条降级链。
+  if (mode === "summarize" || mode === "qa") {
     return resolveContext({
       source,
       cursor: editor.getCursor(),
@@ -253,13 +284,16 @@ export function openAiPanel(tab: AiTab = "rewrite"): void {
     contextLabel: ctx ? describeContext(ctx) : "",
     contextChars: ctx?.text.length ?? 0,
     contextKind: ctx?.kind ?? null,
+    // 问答模式的问题**留着**——那是用户写的东西，
+    // 关掉面板再打开不该把它清掉（改写/总结没有可留的状态）。
+    question: tab === "qa" ? state.question : "",
   });
 }
 
 /** 关闭面板（不写回任何东西） */
 export function closeAiPanel(): void {
   cancelAiRun();
-  setState({ ...initialState });
+  setState({ ...initialState, question: state.question });
 }
 
 /** 切换分区 */
@@ -274,6 +308,7 @@ export function setAiTab(tab: AiTab): void {
     contextLabel: ctx ? describeContext(ctx) : "",
     contextChars: ctx?.text.length ?? 0,
     contextKind: ctx?.kind ?? null,
+    question: tab === "qa" ? state.question : "",
   });
 }
 
@@ -283,6 +318,17 @@ export function cancelAiRun(): void {
     cancelCurrent();
     cancelCurrent = null;
   }
+}
+
+/**
+ * 记录问答模式里用户输入的问题。
+ *
+ * 放在 store 里而不是组件的 `useState`：
+ * 面板的三个分区共用同一份状态（见文件头），
+ * 切走再切回来问题还在——那是用户写的东西，不该被切分区清掉。
+ */
+export function setQaQuestion(question: string): void {
+  setState({ question });
 }
 
 /**
@@ -377,6 +423,139 @@ export async function runAiAction(
     // 请求在返回取消函数之前就结束了（同步完成的 mock、
     // 或者极快的响应）——这时不该再留着一个取消函数，
     // 否则下一次 cancelAiRun 会去取消一个早就结束的请求
+    if (finished) cancelCurrent = null;
+  } catch (error) {
+    cancelCurrent = null;
+    setState({ status: "error", error: String(error) });
+  }
+}
+
+/**
+ * 跑一次问答。
+ *
+ * ## 为什么问答要走「检索 + 提问」而不是「把全文丢给模型」
+ *
+ * 整篇文档丢进去有两个问题：
+ *
+ * 1. **超上下文**——长文档直接放不下，模型只能看到开头
+ * 2. **答非所问**——模型在几万字里找一个细节，很容易编
+ *
+ * 所以先在**本地**用 BM25 找出最相关的几段（见 `src/ai/retrieval.ts`），
+ * 只把这几段连同问题发给模型，并要求它用 `[n]` 标注来源。
+ *
+ * ## 引用溯源是问答模式的**核心**
+ *
+ * 没有引用，用户没法核对答案——而模型编造内容正是问答场景最大的风险。
+ * 所以答案回来后要解析出它引用了哪几段（`parseCitations`），
+ * 并把那些段落的标题路径与摘录列在答案下面。
+ */
+export async function runQa(question: string): Promise<void> {
+  cancelAiRun();
+
+  const settings = readSettings();
+  if (!settings.ai.enabled) {
+    setState({ status: "error", error: t("AI 未启用。请先到「设置 → AI」打开开关。") });
+    return;
+  }
+
+  const endpoint = resolveEndpointConfig(settings.ai);
+  if (!endpoint) {
+    setState({
+      status: "error",
+      error: t("没有可用的端点。请到「设置 → AI」选一个端点。"),
+    });
+    return;
+  }
+
+  const editor = getAiEditorBridge();
+  if (!editor) {
+    setState({ status: "error", error: t("编辑器还没准备好。") });
+    return;
+  }
+
+  const asked = question.trim();
+  if (!asked) {
+    setState({ status: "error", error: t("先写下你的问题。") });
+    return;
+  }
+
+  // 切块走的是 remark（架构约束 C：解析规则唯一），
+  // 而 remark 管线是**懒加载**的（132 KB，不能进主 chunk）——
+  // 没就绪时切块会返回空数组，于是「文档里什么都没找到」，
+  // 那是一句**假的**提示。所以先等它就绪。
+  await ensureMarkdownParser();
+
+  const source = editor.getSource();
+  const chunks = splitDocumentChunks(source);
+  const hits = bm25Search(asked, chunks, { topK: 5 });
+
+  if (hits.length === 0) {
+    setState({
+      status: "error",
+      error: t("文档里没有找到与这个问题相关的内容。"),
+      question: asked,
+      sources: [],
+      citations: [],
+    });
+    return;
+  }
+
+  const request: ChatRequest = {
+    ...buildQaRequest(asked, hits, settings.ai.qaSystemPrompt),
+    maxTokens: settings.ai.maxOutputTokens,
+    temperature: settings.ai.temperature,
+  };
+
+  setState({
+    status: "running",
+    actionLabel: t("问答"),
+    mode: "qa",
+    output: "",
+    error: null,
+    pending: null,
+    question: asked,
+    sources: hits,
+    citations: [],
+    contextLabel: t("从文档里找到 {count} 段相关内容", { count: hits.length }),
+  });
+
+  let streamed = "";
+  let finished = false;
+  try {
+    cancelCurrent = await runner(endpoint, request, {
+      onDelta: (text) => {
+        streamed += text;
+        setState({ output: streamed });
+      },
+      onDone: () => {
+        finished = true;
+        cancelCurrent = null;
+        const cleaned = cleanModelOutput(streamed);
+        if (!cleaned) {
+          setState({ status: "error", error: t("模型没有返回任何内容。") });
+          return;
+        }
+        setState({
+          status: "done",
+          output: cleaned,
+          // 答案引用了哪几段——没有它，用户没法核对。
+          citations: parseCitations(cleaned, hits),
+          pending: {
+            // 问答的答案是**追加**到文末，不是替换某一段。
+            from: source.length,
+            to: source.length,
+            text: cleaned,
+            original: "",
+            label: t("问答"),
+          },
+        });
+      },
+      onError: (message) => {
+        finished = true;
+        cancelCurrent = null;
+        setState({ status: "error", error: message });
+      },
+    });
     if (finished) cancelCurrent = null;
   } catch (error) {
     cancelCurrent = null;

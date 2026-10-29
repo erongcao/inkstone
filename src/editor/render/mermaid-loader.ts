@@ -80,6 +80,17 @@ const cache = new Map<string, DiagramResult>();
 /** 已挂起、还没渲染的键 */
 const queued = new Set<string>();
 
+/**
+ * 正在飞的渲染：`主题 + 代码` → promise。
+ *
+ * 为什么要单独记一份：编辑器那条路是「排队 + 防抖」，
+ * 导出那条路是「立刻渲染」（`renderDiagramAsync`）——
+ * 两条路完全可能同时盯上同一段代码（用户一边改图一边导出）。
+ * 没有这张表的话，同一段图会被渲染两次：
+ * mermaid 一次 50–300 ms，而且两次渲染产出的 SVG id 会撞车。
+ */
+const inFlight = new Map<string, Promise<DiagramResult>>();
+
 /** 防抖计时器 */
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -160,43 +171,102 @@ function remember(key: string, result: DiagramResult): void {
   }
 }
 
+/**
+ * 渲染串行化用的链。
+ *
+ * ## 为什么必须串行
+ *
+ * mermaid 的主题是**全局配置**——`initialize()` 一调，整个实例就换了主题，
+ * 而 `render()` 本身**没有**「用哪个主题渲染」这个参数。
+ * 于是两张不同主题的图并发渲染时会互相把对方的主题换掉，
+ * 出来的图有一张配色是错的，而且错得**很难发现**。
+ *
+ * 排成一队、一次只跑一个：慢一点，但结果一定对。
+ * 代价很小——一次导出通常也就几张图。
+ */
+let renderChain: Promise<unknown> = Promise.resolve();
+
+/** 把一个渲染任务挂到串行链的末尾 */
+function serialize<T>(task: () => Promise<T>): Promise<T> {
+  // `then(task, task)`：前一个任务失败时**也要**继续跑下一个——
+  // 一张图画崩了不能把后面的图一起带死。
+  const run = renderChain.then(task, task);
+  // 链本身不能被拒绝，否则后面的任务会全被跳过
+  renderChain = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
+/**
+ * 让 mermaid 的全局主题跟目标模式对上。
+ *
+ * 主题是全局配置而不是 render 的参数，所以换模式必须重新 `initialize`。
+ * `activeMode` 记的就是「现在全局是哪个主题」。
+ */
+function ensureTheme(mermaid: MermaidApi, mode: string): void {
+  if (mode === activeMode) return;
+  mermaid.initialize({
+    startOnLoad: false,
+    securityLevel: "strict",
+    theme: mode === "dark" ? "dark" : "base",
+    flowchart: { htmlLabels: true, useMaxWidth: true },
+    sequence: { useMaxWidth: true },
+  });
+  activeMode = mode;
+}
+
+/**
+ * 渲染一张图并写进缓存。
+ *
+ * ## 为什么不抛异常
+ *
+ * 渲染失败是**正常情况**——用户正在打字时，图本来就还是半成品。
+ * 抛出去会让整块消失（编辑器那边），或者整次导出失败（导出那边）。
+ * 所以失败被转成 `{ ok: false, output: 错误文本 }` 的缓存条目，
+ * 由调用方自己决定怎么表现（显示错误块 / 退回源码块）。
+ */
+async function renderKey(
+  code: string,
+  mode: string,
+  key: string,
+): Promise<DiagramResult> {
+  return serialize(async () => {
+    // 排队期间可能已经有别的路径渲染好了（编辑器与导出链路会撞上）
+    const cached = cache.get(key);
+    if (cached) return cached;
+
+    try {
+      const mermaid = await load();
+      ensureTheme(mermaid, mode);
+      renderSeq += 1;
+      const { svg } = await mermaid.render(`inkstone-mermaid-${renderSeq}`, code);
+      const result: DiagramResult = { ok: true, output: svg };
+      remember(key, result);
+      return result;
+    } catch (error) {
+      const result: DiagramResult = { ok: false, output: describeError(error) };
+      remember(key, result);
+      return result;
+    }
+  });
+}
+
 /** 真正发起渲染（已在防抖之后调用） */
 async function flush(): Promise<void> {
   const keys = [...queued];
   queued.clear();
   if (keys.length === 0) return;
 
-  try {
-    const mermaid = await load();
-    for (const key of keys) {
-      const cut = key.indexOf(KEY_SEP);
-      const keyMode = key.slice(0, cut);
-      const code = key.slice(cut + 1);
-      // 主题变了就重新 initialize（theme 是全局配置，不是每次 render 的参数）
-      if (keyMode !== activeMode) {
-        mermaid.initialize({
-          startOnLoad: false,
-          securityLevel: "strict",
-          theme: keyMode === "dark" ? "dark" : "base",
-          flowchart: { htmlLabels: true, useMaxWidth: true },
-          sequence: { useMaxWidth: true },
-        });
-        activeMode = keyMode;
-      }
-      try {
-        renderSeq += 1;
-        const { svg } = await mermaid.render(`inkstone-mermaid-${renderSeq}`, code);
-        remember(key, { ok: true, output: svg });
-      } catch (error) {
-        // 用户正在打字，中间状态本来就不是合法的图表语法。
-        // 抛出去会让整块消失——所以把错误文本存进缓存，让渲染层显示成错误块。
-        remember(key, { ok: false, output: describeError(error) });
-      }
-    }
-  } catch (error) {
-    for (const key of keys) {
-      remember(key, { ok: false, output: describeError(error) });
-    }
+  for (const key of keys) {
+    const cut = key.indexOf(KEY_SEP);
+    const keyMode = key.slice(0, cut);
+    const code = key.slice(cut + 1);
+    // 逐张渲染。`renderKey` **从不抛异常**——失败会变成
+    // `{ ok: false }` 的缓存条目（用户正在打字时，中间状态本来就不是
+    // 合法语法，抛出去会让整块消失），所以这里不用自己 try/catch。
+    await renderKey(code, keyMode, key);
   }
   // 无论成败都要通知：成功才能出图，失败才能出错误块
   notify();
@@ -238,6 +308,55 @@ export function renderDiagram(code: string): DiagramResult | null {
 }
 
 /**
+ * 同步等到某段图表渲染完成（导出链路用）。
+ *
+ * ## 与 `renderDiagram()` 的分工
+ *
+ * - `renderDiagram()` 是**同步**的：没命中缓存就登记排队、返回 null，
+ *   块暂时保持源码形态。编辑器要的就是这个——
+ *   装饰器管线是同步的，不能被一个 50–300 ms 的渲染卡住。
+ * - 这里要的是「**现在就要**」的结果：没命中就**立刻**渲染，**不等防抖**。
+ *   导出时用户正等着文件写盘，不能让图表以源码形态落进导出物。
+ *
+ * ## 为什么复用同一个缓存
+ *
+ * 导出出来的图必须和屏幕上那张**一模一样**（架构约束 C：屏幕与导出必须一致）。
+ * 复用同一份缓存就保证了同一套 mermaid 配置（主题 / securityLevel /
+ * flowchart 选项）——两份实现各配各的，迟早会漂移。
+ *
+ * ## 失败不抛异常
+ *
+ * 语法错误的图在编辑器里是「渲染成错误块」，导出侧应当能**退回源码块**。
+ * 所以失败被转成 `{ ok: false, output: 错误文本 }`（与缓存条目同形状），
+ * 调用方据此决定要不要保留原代码块。
+ *
+ * @param code 图表源码
+ */
+export async function renderDiagramAsync(code: string): Promise<DiagramResult | null> {
+  const trimmed = code.trim();
+  if (!trimmed) return null;
+
+  const mode = currentColorMode();
+  const key = cacheKey(trimmed, mode);
+
+  // 命中缓存：和屏幕上那张是同一个结果，直接复用
+  const cached = cache.get(key);
+  if (cached) return cached;
+
+  // 同一段图已经在渲染了 → 复用那个 promise，不要起第二次渲染
+  const pending = inFlight.get(key);
+  if (pending) return pending;
+
+  const promise = renderKey(trimmed, mode, key).finally(() => {
+    inFlight.delete(key);
+    // 通知监听者：编辑器可能正等着这张图刷新
+    notify();
+  });
+  inFlight.set(key, promise);
+  return promise;
+}
+
+/**
  * 订阅「有新结果」事件，返回取消订阅函数。
  *
  * 订阅时如果缓存里已经有东西会**立即**回调一次——
@@ -268,6 +387,9 @@ export function primeMermaid(): void {
 export function resetDiagramCache(): void {
   cache.clear();
   queued.clear();
+  // 在飞的那张也要忘掉：否则下一次调用会复用上一个测试留下的 promise，
+  // 拿到一个跟当前测试无关的结果。
+  inFlight.clear();
   activeMode = null;
   if (debounceTimer !== null) {
     clearTimeout(debounceTimer);

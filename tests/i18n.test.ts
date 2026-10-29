@@ -135,7 +135,7 @@ describe("字典完整性", () => {
 
   it("拼接出来的界面文案都登记进了字典（拼接后再查表，对不上就一直显示中文）", () => {
     // AI 提示词是有意不翻译的——它们是给模型看的指令，不是界面文案
-    const PROMPTS = ["你是一位中文"];
+    const PROMPTS = ["你是一位中文", "你是一位文档问答助手"];
     const missing = [...new Set(concatenatedGroups())]
       .filter((text) => !PROMPTS.some((prefix) => text.startsWith(prefix)))
       .filter((text) => !(text in en));

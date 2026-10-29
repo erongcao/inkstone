@@ -605,4 +605,76 @@ export const en: Record<string, string> = {
   打印时带目录: "Include the table of contents when printing",
   "目录在纸上可以点开，但没有页码——当前这条 PDF 链路走系统打印面板，拿不到页码计数器。":
     "The table of contents is clickable on paper, but has no page numbers — the current PDF path goes through the system print panel, which has no page-number counter.",
+  "连接成功，找到 {count} 个模型。": "Connected — found {count} models.",
+  "连接成功，但这个服务没有「列出模型」接口。模型 ID 需要手输。":
+    "Connected, but this service has no “list models” endpoint. Type the model ID manually.",
+  "连接成功，但这个服务没有「列出模型」接口（HTTP 404）。模型 ID 需要手输。":
+    "Connected, but this service has no “list models” endpoint (HTTP 404). Type the model ID manually.",
+  "端点地址不对（HTTP 404）。检查 base URL 是否写对。":
+    "Wrong endpoint URL (HTTP 404). Check the base URL.",
+  "聊天接口返回 HTTP {status}：{detail}":
+    "The chat endpoint returned HTTP {status}: {detail}",
+  "这个端点还没有配置密钥。先在上面填 API Key 并保存。":
+    "This endpoint has no API key yet. Enter one above and save.",
+  "鉴权方式配置有问题：{detail}": "The authentication setup is wrong: {detail}",
+  "连不上服务：{detail}。检查服务是否启动、地址与端口是否正确。":
+    "Can’t reach the service: {detail}. Check that it’s running and that the address and port are right.",
+  "密钥被拒绝（HTTP {status}）。检查 API Key 是否正确、是否属于这个端点。":
+    "The key was rejected (HTTP {status}). Check that the API key is correct and belongs to this endpoint.",
+  "被限流（HTTP 429）。等一会儿再试，或者换个账户。":
+    "Rate limited (HTTP 429). Wait a moment and try again, or use another account.",
+  "服务端出错（HTTP {status}）：{detail}": "The server errored (HTTP {status}): {detail}",
+  "服务端返回 HTTP {status}：{detail}": "The server returned HTTP {status}: {detail}",
+  "（没有返回内容）": "(no content returned)",
+  "端点 id 不能为空。": "The endpoint id can’t be empty.",
+  "端点 id 只能包含字母、数字、点、下划线和连字符，且必须以字母或数字开头——它要当钥匙串的 account 名用。":
+    "The endpoint id may only contain letters, digits, dots, underscores and hyphens, and must start with a letter or digit — it’s used as the keychain account name.",
+  "已经有一个 id 为「{id}」的自建端点了。":
+    "There’s already a custom endpoint with the id “{id}”.",
+  "「{id}」是内置端点的 id，不能拿来当自建端点的 id——内置端点与自建端点在钥匙串里共用同一个 account 名，会互相覆盖对方的密钥。":
+    "“{id}” is a built-in endpoint id and can’t be used for a custom endpoint — built-in and custom endpoints share one keychain account name, so they’d overwrite each other’s keys.",
+  "端点地址不能为空。": "The endpoint URL can’t be empty.",
+  "端点地址不是一个合法的 URL（要带 http:// 或 https://）。":
+    "The endpoint URL isn’t a valid URL (it needs http:// or https://).",
+  "端点地址只支持 http:// 与 https://。":
+    "Only http:// and https:// are supported for endpoint URLs.",
+  "浏览器开发模式拿不到系统钥匙串里的密钥，只能测本机推理服务（Ollama / LM Studio / vLLM）。":
+    "Browser dev mode can’t read the key from the system keychain, so only local inference servers (Ollama / LM Studio / vLLM) can be tested.",
+  "先写下你的问题。": "Type your question first.",
+  "文档里没有找到与这个问题相关的内容。":
+    "Nothing in the document matches this question.",
+  问答: "Q&A",
+  "从文档里找到 {count} 段相关内容": "Found {count} relevant passages in the document",
+  "有 {count} 个脚注定义没有被引用，已按原文保留在原处。":
+    "{count} footnote definitions are never referenced; they were kept as written.",
+  "问点什么，比如「这份文档的结论是什么？」":
+    "Ask something, e.g. “What is this document’s conclusion?”",
+  "正在思考…": "Thinking…",
+  提问: "Ask",
+  "问一个问题，Inkstone 会先在文档里找出相关的段落，再交给模型回答。":
+    "Ask a question — Inkstone first finds the relevant passages in the document, then hands them to the model.",
+  引用来源: "Sources",
+  "第 {index} 号来源不存在": "Source {index} doesn’t exist",
+  "测试连接失败：{error}": "Connection test failed: {error}",
+  "显示名不能为空。": "The display name can’t be empty.",
+  端点已保存: "Endpoint saved",
+  "确定删除自建端点「{label}」吗？它的密钥也会一并从钥匙串里删掉。":
+    "Delete the custom endpoint “{label}”? Its key will be deleted from the keychain too.",
+  "端点「{label}」已删除，密钥也一并从钥匙串里删掉了。":
+    "The endpoint “{label}” was deleted, and its key was removed from the keychain too.",
+  "端点已删除，但钥匙串里的密钥清理失败：{error}":
+    "The endpoint was deleted, but the key couldn’t be removed from the keychain: {error}",
+  "正在测试连接…": "Testing the connection…",
+  测试连接: "Test connection",
+  自建端点: "Custom endpoints",
+  "自建端点的 id 同时是系统钥匙串里的账号名，所以它不能与内置端点重名——重名会互相覆盖对方的密钥。":
+    "A custom endpoint’s id is also the account name in the system keychain, so it can’t duplicate a built-in one — they’d overwrite each other’s keys.",
+  新建自建端点: "New custom endpoint",
+  "端点 id（同时是钥匙串的账号名）": "Endpoint id (also the keychain account name)",
+  "端点 id 建好之后不能改——它是密钥在钥匙串里的位置，改名等于换一把钥匙，旧的那把会变成没人能删的孤儿。":
+    "The endpoint id can’t be changed once created — it’s where the key lives in the keychain; renaming it means using a different key, and the old one becomes an orphan nobody can delete.",
+  显示名: "Display name",
+  端点地址: "Endpoint URL",
+  备注: "Notes",
+  保存端点: "Save endpoint",
 };

@@ -10,9 +10,10 @@
 
 use std::collections::HashSet;
 use std::sync::Mutex;
+use std::time::Duration;
 
 use futures_util::StreamExt;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 
 use super::secrets;
@@ -179,6 +180,136 @@ async fn fetch_model_list(
         return Err(format!("HTTP {}: {}", status.as_u16(), detail));
     }
     Ok(text)
+}
+
+/// 前端 → Rust：一次「探测」请求
+///
+/// 与 `ListModelsRequest` 的区别：方法可以是 GET 或 POST，
+/// 而且**不解析响应体**——探测要的是「状态码是多少」，
+/// 响应体由前端按协议自己看。
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProbeRequest {
+    /// 完整 URL（路径由前端按协议拼好——Rust 侧不懂协议）
+    pub url: String,
+    /// `GET` 或 `POST`
+    pub method: String,
+    /// POST 的请求体（GET 时忽略）
+    #[serde(default)]
+    pub body: Option<String>,
+    pub auth: AuthSpec,
+    /// 额外的请求头（不含任何密钥）
+    #[serde(default)]
+    pub headers: HashSet<String>,
+}
+
+/// 一次探测的**结果**
+///
+/// ## 为什么不用 `Result` 表达失败
+///
+/// 4xx / 5xx 对用户意味着**完全不同**的事：
+/// 401 是「密钥错了」、404 是「这个服务没有列表接口」或「路径写错了」、
+/// 连不上是「服务没启动」。这三种都要原样送到前端去分类，
+/// 所以它们是**结果**而不是错误。
+///
+/// 真正算错误的只有「鉴权方式配置有问题」这种配置错误——
+/// 那条走 `Err`。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProbeResponse {
+    /// `http` = 真的发出去了并拿到状态码；
+    /// `network` = 传输层失败（连不上 / 超时 / DNS 解析不了）；
+    /// `no-secret` = 这个端点没配密钥，请求**没发出去**；
+    /// `bad-auth` = 鉴权方式配置有问题（比如 `kind=header` 却没给 header 名）
+    pub kind: String,
+    /// HTTP 状态码；`kind != "http"` 时为 0
+    pub status: u16,
+    /// 响应体（截断）
+    pub body: String,
+    /// 给用户看的说明（传输失败时是错误详情）
+    pub detail: String,
+}
+
+/// 探测请求的超时
+///
+/// 比流式聊天短得多：探测只等「状态码」，
+/// 而流式请求是要跑很久的（模型思考 + 输出）。
+const PROBE_TIMEOUT: Duration = Duration::from_secs(20);
+
+/// 探测某个端点
+///
+/// 返回值里**永远**有 `kind`，前端据此分类；
+/// 只有配置错误才走 `Err`。
+#[tauri::command]
+pub async fn ai_probe_endpoint(app: AppHandle, req: ProbeRequest) -> Result<ProbeResponse, String> {
+    // 密钥取不到时**不要发请求**——
+    // 发一个没有密钥的请求，上游只会回一句含糊的 401，
+    // 用户分不清是「密钥填错」还是「压根没填」。
+    let secret = match resolve_secret(&app, &req.auth) {
+        Ok(s) => s,
+        Err(e) => {
+            return Ok(ProbeResponse {
+                kind: "no-secret".to_string(),
+                status: 0,
+                body: String::new(),
+                detail: e,
+            })
+        }
+    };
+
+    let (url, headers) = match build_authed(&req.url, &req.auth, secret.as_deref(), &req.headers) {
+        Ok(v) => v,
+        Err(e) => {
+            return Ok(ProbeResponse {
+                kind: "bad-auth".to_string(),
+                status: 0,
+                body: String::new(),
+                detail: e,
+            })
+        }
+    };
+
+    let client = reqwest::Client::builder()
+        .timeout(PROBE_TIMEOUT)
+        .build()
+        .map_err(|e| format!("创建 HTTP 客户端失败: {e}"))?;
+
+    let mut builder = if req.method.eq_ignore_ascii_case("POST") {
+        client.post(&url)
+    } else {
+        client.get(&url)
+    };
+    for (name, value) in headers {
+        builder = builder.header(name, value);
+    }
+    if let Some(body) = req.body.as_deref() {
+        builder = builder
+            .header("content-type", "application/json")
+            .header("accept", "text/event-stream")
+            .body(body.to_string());
+    }
+
+    let response = match builder.send().await {
+        Ok(r) => r,
+        Err(e) => {
+            return Ok(ProbeResponse {
+                kind: "network".to_string(),
+                status: 0,
+                body: String::new(),
+                detail: e.to_string(),
+            })
+        }
+    };
+
+    let status = response.status();
+    let text = response.text().await.unwrap_or_default();
+    let detail: String = text.chars().take(400).collect();
+    Ok(ProbeResponse {
+        kind: "http".to_string(),
+        status: status.as_u16(),
+        body: detail.clone(),
+        detail,
+    })
 }
 
 /// 前端监听的事件名

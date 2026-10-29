@@ -31,6 +31,7 @@ import { openAICompatible } from "@/ai/providers/openai-compatible";
 import { anthropic } from "@/ai/providers/anthropic";
 import { gemini } from "@/ai/providers/gemini";
 import { readSettings, resetSettings, updateSettings } from "@/settings/store";
+import { resetModelListState } from "@/ai/model-list-store";
 
 function cfg(over: Partial<EndpointConfig> = {}) {
   const base: EndpointConfig = {
@@ -60,6 +61,10 @@ function stubFetch(body: string, init: { ok?: boolean; status?: number } = {}) {
 beforeEach(() => {
   localStorage.clear();
   resetSettings();
+  // 模型列表是**模块级**的（见 `src/ai/model-list-store.ts`），
+  // 不重置的话上一个用例的列表会漏到下一个用例里——
+  // 那正是「列表跨面板开关不丢」这个性质带来的副作用。
+  resetModelListState();
 });
 
 afterEach(() => {

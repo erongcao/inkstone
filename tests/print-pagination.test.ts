@@ -69,6 +69,7 @@ function context(
     fileName: "probe.html",
     overrides,
     hasBodyContent: true,
+    unusedFootnotes: [],
   };
 }
 

@@ -30,8 +30,15 @@ import {
   type VariableContext,
 } from "./variables";
 import { exportToHtml, typographyFromAppearance } from "./html";
+import { renderMermaidBlocks } from "./mermaid";
 import { inlineImages, type ImageResolver } from "./inline-images";
 import { pandocInputFormat } from "./pandoc-format";
+import { rewriteAlertsForPandoc } from "./alerts";
+import {
+  escapeUnusedFootnotes,
+  findUnusedFootnoteDefinitions,
+  type UnusedFootnoteDefinition,
+} from "@/parser/footnotes";
 import { featuresFromSettings } from "@/parser/features";
 import { applyCaptionsToSource, collectCaptions } from "@/parser/captions";
 import { sanitizeFileName, suggestFileName, type ExportFormat } from "./registry";
@@ -101,6 +108,16 @@ export interface ExportContext {
    * 只有一个换行）——所以这条判断不能反过来做。
    */
   hasBodyContent: boolean;
+  /**
+   * 「定义了却没人引用」的脚注定义。
+   *
+   * remark 与 pandoc 都会把这种定义**整条丢掉**——
+   * 那就是静默丢用户的内容。它们在导出前会被改成字面文本，
+   * 内容留在原处（与屏幕逐字一致）。
+   *
+   * 顺带用来给用户一条提醒：这个定义没人引用，多半是漏写了一个引用。
+   */
+  unusedFootnotes: UnusedFootnoteDefinition[];
 }
 
 /**
@@ -239,6 +256,10 @@ export function prepareExport(
     // （remark-frontmatter 把它放在第一个子节点位置）。
     // 所以「有没有非 yaml 的子节点」就是「有没有正文」。
     hasBodyContent: tree.children.some((child) => child.type !== "yaml"),
+    // 没人引用的脚注定义——按用户的 Markdown 开关解析（关掉脚注时不该有）
+    unusedFootnotes: findUnusedFootnoteDefinitions(
+      parseMarkdown(content, { features: featuresFromSettings(settings.markdown) }),
+    ),
   };
 }
 
@@ -268,6 +289,41 @@ function withCaptionNumbers(source: string, settings: Settings): string {
     numbering: captionSettings.numbering,
   });
   return applyCaptionsToSource(source, captions);
+}
+
+/**
+ * 给 pandoc 的源码：把 GitHub 提示块改写成它认得的形态。
+ *
+ * 屏幕上 `> [!NOTE]` 是一个带标题的彩色提示块，
+ * 而 pandoc 不认识这个语法（实测没有 `alert` / `callout` 扩展）——
+ * 直接喂过去，Word 里就是一段普通引用，正文里还留着字面量 `[!NOTE]`。
+ *
+ * **用户关掉「GitHub 提示块」时不做这个变换**：
+ * 屏幕上那会儿就是普通引用，导出也得是普通引用（架构约束 C）。
+ *
+ * 同样只改副本，源文件不动。
+ */
+function withAlertBlocks(source: string, settings: Settings): string {
+  if (!settings.markdown.githubAlerts) return source;
+  return rewriteAlertsForPandoc(source);
+}
+
+/**
+ * 喂给 pandoc 的那份源码。
+ *
+ * 三件事都在这里做——
+ * 题注编号、提示块改写、没人引用的脚注定义转字面文本。
+ * 共同点是「**改的是副本，用户的源文件一个字节都不动**」。
+ */
+function pandocSource(
+  source: string,
+  settings: Settings,
+  unused: UnusedFootnoteDefinition[],
+): string {
+  const withAlerts = withAlertBlocks(withCaptionNumbers(source, settings), settings);
+  // 没人引用的脚注定义：pandoc 会整条丢掉（它自己会告警），
+  // 但我们要的是**内容不丢**——改成字面文本，内容与屏幕逐字一致。
+  return escapeUnusedFootnotes(withAlerts, unused);
 }
 
 /**
@@ -303,31 +359,44 @@ export async function buildHtmlExport(
   // 大纲由导出链路**自己**从同一棵树派生——
   // 不在这里另外解析一棵：两棵树的锚点可能对不上，
   // 目录里的链接就会指错地方。理由见 parser/heading-anchors.ts。
-  const html = exportToHtml(context.content, {
-    title: context.title,
-    theme: settings.appearance.theme,
-    mode: currentColorMode(),
-    includeOutline,
-    extraHead: settings.export.htmlExtraHead,
-    extraBody: settings.export.htmlExtraBody,
-    // 自定义 CSS 也要进导出——编辑器里有、导出里没有就是「屏幕与导出不一致」
-    customCss: settings.appearance.customCss,
-    // 排版（字号 / 行高 / 写作区宽度 / 字体 / 页面背景）同样要跟屏幕一致
-    typography: typographyFromAppearance(settings.appearance),
-    words: context.variables.words,
-    chars: context.variables.chars,
-    // 打印 / 分页样式
-    //
-    // **不传纸张尺寸**：HTML 导出是一份「拿到哪都能打开」的文件，
-    // 把 A4 写死进去，用户在 Letter 纸上打印会被浏览器按 A4 排版。
-    // 纸张由浏览器 / 打印面板决定；页边距与分页规则由我们决定。
-    print: {
-      margin: context.overrides.pdfMargin ?? settings.export.pdfMargin,
-      chapterBreak: context.overrides.pdfChapterBreak ?? settings.export.pdfChapterBreak,
-      includeOutline:
-        context.overrides.pdfIncludeOutline ?? settings.export.pdfIncludeOutline,
-    },
-  });
+  // Mermaid 图渲染成内联 SVG。
+  //
+  // 屏幕上看到的是图，导出后却是一坨 mermaid 源码——
+  // 那就是「屏幕与导出不一致」（架构约束 C）。
+  //
+  // 放在 `exportToHtml` **之后**是安全的：`highlightCodeBlocks` 现在
+  // 放过 mermaid 块（`language-mermaid` 标记原样保留），
+  // 所以这一步照样认得出哪些块是图。
+  //
+  // 渲染失败时那一步会**原样保留源码块**——绝不能静默丢内容。
+  const html = await renderMermaidBlocks(
+    exportToHtml(context.content, {
+      title: context.title,
+      theme: settings.appearance.theme,
+      mode: currentColorMode(),
+      includeOutline,
+      extraHead: settings.export.htmlExtraHead,
+      extraBody: settings.export.htmlExtraBody,
+      // 自定义 CSS 也要进导出——编辑器里有、导出里没有就是「屏幕与导出不一致」
+      customCss: settings.appearance.customCss,
+      // 排版（字号 / 行高 / 写作区宽度 / 字体 / 页面背景）同样要跟屏幕一致
+      typography: typographyFromAppearance(settings.appearance),
+      words: context.variables.words,
+      chars: context.variables.chars,
+      // 打印 / 分页样式
+      //
+      // **不传纸张尺寸**：HTML 导出是一份「拿到哪都能打开」的文件，
+      // 把 A4 写死进去，用户在 Letter 纸上打印会被浏览器按 A4 排版。
+      // 纸张由浏览器 / 打印面板决定；页边距与分页规则由我们决定。
+      print: {
+        margin: context.overrides.pdfMargin ?? settings.export.pdfMargin,
+        chapterBreak:
+          context.overrides.pdfChapterBreak ?? settings.export.pdfChapterBreak,
+        includeOutline:
+          context.overrides.pdfIncludeOutline ?? settings.export.pdfIncludeOutline,
+      },
+    }),
+  );
 
   // 图片内联成 data: URI。
   //
@@ -404,6 +473,16 @@ export async function exportDocument(formatId: string): Promise<ExportResult> {
   // 导出过程中的警告（目前来自 pandoc）
   const warnings: string[] = [];
 
+  // 没人引用的脚注定义：内容没丢（已按原文保留），但多半是漏写了一个引用。
+  // 提醒一句——用户自己看得见，导出物里也看得见，只是没人跳过去。
+  if (context.unusedFootnotes.length > 0) {
+    warnings.push(
+      t("有 {count} 个脚注定义没有被引用，已按原文保留在原处。", {
+        count: context.unusedFootnotes.length,
+      }),
+    );
+  }
+
   try {
     if (format.kind === "pandoc") {
       // pandoc 自己写文件（二进制不经 JS 边界）
@@ -413,9 +492,10 @@ export async function exportDocument(formatId: string): Promise<ExportResult> {
       const from = pandocInputFormat(featuresFromSettings(settings.markdown));
       const output = await convertWithPandoc(
         format.pandocFormat ?? format.id,
-        // 题注在这里换成编号前缀（pandoc 不认识「图：」这种约定）。
+        // 题注在这里换成编号前缀、提示块在这里换成 pandoc 认得的形态、
+        // 没人引用的脚注定义在这里转成字面文本（不然会被丢掉）。
         // 改的是喂给 pandoc 的副本，用户的 .md 文件不动。
-        withCaptionNumbers(context.content, settings),
+        pandocSource(context.content, settings, context.unusedFootnotes),
         targetPath,
         resourceDir,
         from,

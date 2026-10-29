@@ -30,6 +30,7 @@ import { parseMarkdown } from "@/parser/markdown";
 import { featuresFromSettings } from "@/parser/features";
 import { headingAnchorId } from "@/parser/heading-anchors";
 import { applyCaptions } from "@/parser/captions";
+import { applyUnusedFootnotes } from "@/parser/footnotes";
 import { readSettings } from "@/settings/store";
 import { highlightCode, resolveLanguage } from "@/editor/render/code-block";
 import { buildIndexFromTree, type OutlineItem } from "@/editor/document-index";
@@ -279,6 +280,17 @@ body {
   line-height: 1.55;
 }
 
+/* Mermaid 图：导出时渲染成内联 SVG */
+.inkstone-doc .inkstone-mermaid {
+  margin: 0 0 1em;
+  text-align: center;
+  overflow-x: auto;
+}
+.inkstone-doc .inkstone-mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
 .inkstone-doc table {
   border-collapse: collapse;
   margin: 0 0 1em;
@@ -324,6 +336,12 @@ body {
 
 .inkstone-doc .footnotes { margin-top: 3em; padding-top: 1em; border-top: 1px solid var(--ink-border); font-size: 0.9em; }
 .inkstone-doc .footnotes h2 { font-size: 1.1em; border: none; margin-top: 0; }
+
+/* 没人引用的脚注定义：按原文留在原处，但标灰——
+   它是用户的正文，不该被导出悄悄丢掉（见 parser/footnotes.ts）。 */
+.inkstone-doc .inkstone-footnote-unused {
+  color: var(--ink-fg-muted);
+}
 
 /* 大纲 */
 .inkstone-outline {
@@ -534,7 +552,17 @@ function decodeEntities(text: string): string {
 export function highlightCodeBlocks(html: string): string {
   const pattern = /<pre><code class="language-([^"]*)">([\s\S]*?)<\/code><\/pre>/g;
 
-  return html.replace(pattern, (_match, language: string, escaped: string) => {
+  return html.replace(pattern, (match, language: string, escaped: string) => {
+    // **mermaid 不做高亮**，原样放行。
+    //
+    // 理由有两条，缺一不可：
+    //   1. highlight.js 没有 mermaid 语法，高亮它只会得到一段无意义的
+    //      `hljs language-plaintext`——把 `language-mermaid` 这个标记抹掉，
+    //      而导出链路正是靠它认出「这块是图不是代码」。
+    //   2. 图渲染失败时要退回**源码块**，那时用户看到的应该还是
+    //      「一段 mermaid 源码」，而不是「一段被高亮过的 mermaid 源码」。
+    if (language === "mermaid") return match;
+
     // 反转义回原文（两轮，见 decodeEntities 的说明）
     const source = decodeEntities(escaped);
 
@@ -600,6 +628,13 @@ export function exportToHtml(source: string, options: HtmlExportOptions): string
   // 索引必须在渲染**之前**算：渲染会就地改树
   // （提示块变换会往引用块里插节点、图片尺寸会改 url）。
   const index = buildIndexFromTree(tree);
+
+  // 「定义了却没人引用」的脚注定义：remark 会把它们整条丢掉，
+  // 那就是**静默丢用户的内容**——屏幕上看得见的字，导出后没了。
+  //
+  // 改成按原文留在原处（与屏幕逐字一致）。
+  // 放在索引之后：字数统计要跟编辑器一致，不该因为这次变换而变。
+  applyUnusedFootnotes(tree, source);
 
   // 题注：把「图：」换成「图 1-1 」。
   //

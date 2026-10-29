@@ -1,11 +1,13 @@
 /**
  * 设置面板的 AI 分区。
  *
- * 三件事在这里闭环：
+ * 四件事在这里闭环：
  *   1. 选端点（内置预设 + 用户自建）
  *   2. 存密钥（**走系统钥匙串**，输入框里永远不是明文回显）
  *   3. 能力位联动禁用 —— 模型不支持的参数不能让用户填，
  *      否则上游直接 400（实测 GPT-5 / GLM-5.x 移除了 temperature）
+ *   4. **自建端点的增删改** —— 以前 `ai.endpoints` 这个字段
+ *      全项目只有读方，没有一处写入：设置里定义了它，界面却写不了它。
  *
  * 计费性质必须显示出来：订阅 / 按量 / 本地免费三者对用户的
  * 成本含义完全不同，混起来显示会让人误判。
@@ -16,9 +18,24 @@ import { BUILTIN_ENDPOINTS, BILLING_LABELS } from "@/ai/endpoints";
 import { aiSecretStatus, aiSetSecret, aiDeleteSecret } from "@/ai/ipc";
 import type { SecretStatus } from "@/ai/ipc";
 import { providerFor } from "@/ai/chat";
-import { fetchModelList, type ModelInfo } from "@/ai/models";
+import { fetchModelList } from "@/ai/models";
 import { resolveEndpoint, type EndpointConfig } from "@/ai/provider";
-import type { AiEndpointSetting, Settings } from "@/settings/schema";
+import { testConnection, type ConnectionResult } from "@/ai/connection";
+import {
+  clearModelList,
+  finishModelListLoading,
+  setModelList,
+  setModelListLoading,
+  useModelListState,
+} from "@/ai/model-list-store";
+import {
+  newEndpointDefaults,
+  removeEndpoint,
+  upsertEndpoint,
+  validateBaseUrl,
+  validateEndpointId,
+} from "@/ai/custom-endpoints";
+import type { AiEndpointSetting, AiProtocol, Settings } from "@/settings/schema";
 import { t } from "@/i18n";
 
 type PatchFn = <K extends keyof Settings>(key: K, value: Partial<Settings[K]>) => void;
@@ -27,6 +44,24 @@ interface Props {
   settings: Settings;
   patch: PatchFn;
 }
+
+/** 表单里正在编辑的端点 */
+interface EndpointDraft {
+  id: string;
+  label: string;
+  protocol: AiProtocol;
+  baseUrl: string;
+  model: string;
+  billing: EndpointConfig["billing"];
+  maxConcurrent: number;
+  note: string;
+}
+
+const PROTOCOL_LABELS: Record<AiProtocol, string> = {
+  openai: "OpenAI 兼容",
+  anthropic: "Anthropic",
+  gemini: "Gemini",
+};
 
 export function AiSection({ settings, patch }: Props) {
   const ai = settings.ai;
@@ -38,16 +73,24 @@ export function AiSection({ settings, patch }: Props) {
     null,
   );
   const [notice, setNotice] = useState<string | null>(null);
-  // 模型列表与密钥状态是同一个道理：**属于某个端点**。
-  // 换端点就作废，免得把上一个端点的模型摆到当前端点下面。
-  const [modelList, setModelList] = useState<{
+
+  // 模型列表放在**模块级 store**里（见 `src/ai/model-list-store.ts`）：
+  // 它按端点归属，而端点是全局配置——面板一关列表就该还在，
+  // AI 面板（浮层）里也要显示同一个列表。
+  const modelLists = useModelListState();
+
+  // 「测试连接」的结果。同样按端点归属：换端点就作废。
+  const [probeFor, setProbeFor] = useState<{
     id: string;
-    models: ModelInfo[];
-    error: string | null;
+    result: ConnectionResult;
   } | null>(null);
-  // 正在取列表的是哪个端点。记 id 而不是记布尔值：
-  // 用户在请求途中换端点，旧请求回来时不该把新端点的加载态关掉。
-  const [loadingFor, setLoadingFor] = useState<string | null>(null);
+  const [probingFor, setProbingFor] = useState<string | null>(null);
+
+  // 自建端点的编辑态
+  const [draft, setDraft] = useState<EndpointDraft | null>(null);
+  const [draftError, setDraftError] = useState<string | null>(null);
+  /** 正在编辑的那个端点（新建时为 null） */
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const selectedId = ai.defaultEndpointId || BUILTIN_ENDPOINTS[0]?.id || "";
   const builtin = BUILTIN_ENDPOINTS.find((e) => e.id === selectedId);
@@ -57,8 +100,11 @@ export function AiSection({ settings, patch }: Props) {
   const status = statusFor?.id === selectedId ? statusFor.value : null;
 
   // 模型列表同样按端点归属：换端点就当没有
-  const list = modelList?.id === selectedId ? modelList : null;
-  const loading = loadingFor === selectedId;
+  const list = modelLists.lists[selectedId] ?? null;
+  const loading = modelLists.loadingFor === selectedId;
+
+  const probe = probeFor?.id === selectedId ? probeFor.result : null;
+  const probing = probingFor === selectedId;
 
   // 该端点自己选的模型 > 全局默认 > 端点预设自带的模型
   // （与 `resolveEndpointConfig` 是同一条规则，两处不能分叉）
@@ -80,11 +126,10 @@ export function AiSection({ settings, patch }: Props) {
     if (!active) return;
     const provider = providerFor(active.protocol);
     const cfg = resolveEndpoint(active);
-    setLoadingFor(active.id);
+    setModelListLoading(active.id);
     try {
       const result = await fetchModelList(provider, cfg);
-      setModelList({
-        id: active.id,
+      setModelList(active.id, {
         models: result.ok ? result.models : [],
         error: result.ok
           ? result.models.length === 0
@@ -93,10 +138,41 @@ export function AiSection({ settings, patch }: Props) {
           : result.message,
       });
     } catch (error) {
-      setModelList({ id: active.id, models: [], error: String(error) });
+      setModelList(active.id, { models: [], error: String(error) });
     } finally {
       // 只关掉**自己**那次请求的加载态：用户中途换了端点就别去动别人的
-      setLoadingFor((cur) => (cur === active.id ? null : cur));
+      finishModelListLoading(active.id);
+    }
+  }, [active]);
+
+  /**
+   * 测一次连接。
+   *
+   * 判定的细节在 `src/ai/connection.ts`——这里只负责把结果摆出来。
+   */
+  const onTestConnection = useCallback(async () => {
+    if (!active) return;
+    const provider = providerFor(active.protocol);
+    const cfg = resolveEndpoint(active);
+    setProbingFor(active.id);
+    try {
+      const result = await testConnection(provider, cfg);
+      setProbeFor({ id: active.id, result });
+      // 测通了就顺手把模型列表也拉下来——用户接着就能选模型。
+      if (result.outcome === "ok" && result.models.length > 0) {
+        setModelList(active.id, { models: result.models, error: null });
+      }
+    } catch (error) {
+      setProbeFor({
+        id: active.id,
+        result: {
+          outcome: "server-error",
+          models: [],
+          message: t("测试连接失败：{error}", { error: String(error) }),
+        },
+      });
+    } finally {
+      setProbingFor((cur) => (cur === active.id ? null : cur));
     }
   }, [active]);
 
@@ -141,6 +217,127 @@ export function AiSection({ settings, patch }: Props) {
       setNotice(t("删除失败：{error}", { error: String(error) }));
     }
   }, [selectedId, refreshStatus]);
+
+  /* ── 自建端点的增删改 ── */
+
+  const startCreate = useCallback(() => {
+    setEditingId(null);
+    setDraftError(null);
+    const base = newEndpointDefaults("", ai.endpoints);
+    setDraft({
+      id: base.id,
+      label: base.label,
+      protocol: base.protocol,
+      baseUrl: base.baseUrl,
+      model: base.model,
+      billing: base.billing,
+      maxConcurrent: base.maxConcurrent,
+      note: base.note ?? "",
+    });
+  }, [ai.endpoints]);
+
+  const startEdit = useCallback((endpoint: AiEndpointSetting) => {
+    setEditingId(endpoint.id);
+    setDraftError(null);
+    setDraft({
+      id: endpoint.id,
+      label: endpoint.label,
+      protocol: endpoint.protocol,
+      baseUrl: endpoint.baseUrl,
+      model: endpoint.model,
+      billing: endpoint.billing,
+      maxConcurrent: endpoint.maxConcurrent,
+      note: endpoint.note ?? "",
+    });
+  }, []);
+
+  const cancelDraft = useCallback(() => {
+    setDraft(null);
+    setDraftError(null);
+    setEditingId(null);
+  }, []);
+
+  const saveDraft = useCallback(() => {
+    if (!draft) return;
+    const id = draft.id.trim();
+
+    // id 冲突检查：**新建**时才查（编辑时 id 不允许改）
+    if (editingId === null) {
+      const idCheck = validateEndpointId(id, ai.endpoints);
+      if (!idCheck.ok) {
+        setDraftError(idCheck.message);
+        return;
+      }
+    }
+    const urlCheck = validateBaseUrl(draft.baseUrl);
+    if (!urlCheck.ok) {
+      setDraftError(urlCheck.message);
+      return;
+    }
+    if (!draft.label.trim()) {
+      setDraftError(t("显示名不能为空。"));
+      return;
+    }
+
+    const endpoint: AiEndpointSetting = {
+      id: editingId ?? id,
+      label: draft.label.trim(),
+      protocol: draft.protocol,
+      baseUrl: draft.baseUrl.trim(),
+      model: draft.model.trim(),
+      billing: draft.billing,
+      maxConcurrent: draft.maxConcurrent,
+      ...(draft.note.trim() ? { note: draft.note.trim() } : {}),
+    };
+    patch("ai", { endpoints: upsertEndpoint(ai.endpoints, endpoint) });
+    cancelDraft();
+    setNotice(t("端点已保存"));
+  }, [ai.endpoints, cancelDraft, draft, editingId, patch]);
+
+  /**
+   * 删掉一个自建端点。
+   *
+   * **钥匙串里的密钥也要一起删**——不然它会变成孤儿：
+   * 用户在钥匙串里再也看不到它，也删不掉，而端点已经不存在了。
+   *
+   * 模型列表与该端点选的模型也一起清掉。
+   */
+  const deleteEndpoint = useCallback(
+    async (endpoint: AiEndpointSetting) => {
+      const confirmed = window.confirm(
+        t("确定删除自建端点「{label}」吗？它的密钥也会一并从钥匙串里删掉。", {
+          label: endpoint.label,
+        }),
+      );
+      if (!confirmed) return;
+
+      patch("ai", {
+        endpoints: removeEndpoint(ai.endpoints, endpoint.id),
+        // 端点没了，它选的模型也就没有意义了。
+        //
+        // 这里**清空**而不是删键：设置是深合并的（`mergeSettings`），
+        // 合并语义下删键做不到——把值置空即可（读的时候按「空 = 没用过」处理）。
+        modelOverrides: { ...(ai.modelOverrides ?? {}), [endpoint.id]: "" },
+      });
+      clearModelList(endpoint.id);
+      if (ai.defaultEndpointId === endpoint.id) {
+        patch("ai", { defaultEndpointId: BUILTIN_ENDPOINTS[0]?.id ?? "" });
+      }
+      try {
+        await aiDeleteSecret(endpoint.id);
+        setNotice(
+          t("端点「{label}」已删除，密钥也一并从钥匙串里删掉了。", {
+            label: endpoint.label,
+          }),
+        );
+      } catch (error) {
+        setNotice(
+          t("端点已删除，但钥匙串里的密钥清理失败：{error}", { error: String(error) }),
+        );
+      }
+    },
+    [ai.defaultEndpointId, ai.endpoints, ai.modelOverrides, patch],
+  );
 
   const resolved = active ? resolveEndpoint(active) : null;
   const note = custom ? custom.note : builtin?.note;
@@ -222,7 +419,21 @@ export function AiSection({ settings, patch }: Props) {
         >
           {loading ? t("正在获取模型列表…") : t("获取模型列表")}
         </button>
+        <button
+          type="button"
+          className="btn"
+          onClick={() => void onTestConnection()}
+          disabled={!active || probing}
+        >
+          {probing ? t("正在测试连接…") : t("测试连接")}
+        </button>
       </div>
+
+      {probe && (
+        <p className={probe.outcome === "ok" ? "ai-notice" : "ai-warning"} role="status">
+          {probe.message}
+        </p>
+      )}
 
       {list?.error && (
         <p className="ai-warning" role="alert">
@@ -305,6 +516,168 @@ export function AiSection({ settings, patch }: Props) {
           onChange={(ev) => patch("ai", { maxOutputTokens: Number(ev.target.value) })}
         />
       </label>
+
+      {/* ── 自建端点 ── */}
+      <h4 className="settings-subheading">{t("自建端点")}</h4>
+      <p className="ai-endpoint-note">
+        {t(
+          "自建端点的 id 同时是系统钥匙串里的账号名，所以它不能与内置端点重名——重名会互相覆盖对方的密钥。",
+        )}
+      </p>
+
+      {ai.endpoints.length > 0 && (
+        <ul className="ai-endpoint-list">
+          {ai.endpoints.map((endpoint) => (
+            <li key={endpoint.id}>
+              <span className="ai-endpoint-list__name">{endpoint.label}</span>
+              <span className="ai-endpoint-list__meta">
+                {endpoint.protocol} · {endpoint.baseUrl}
+              </span>
+              <span className="ai-endpoint-list__actions">
+                <button type="button" className="btn" onClick={() => startEdit(endpoint)}>
+                  {t("编辑")}
+                </button>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => void deleteEndpoint(endpoint)}
+                >
+                  {t("删除")}
+                </button>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {draft === null ? (
+        <div className="field field--actions">
+          <button type="button" className="btn" onClick={startCreate}>
+            {t("新建自建端点")}
+          </button>
+        </div>
+      ) : (
+        <div className="ai-endpoint-form">
+          <label className="field">
+            <span>{t("端点 id（同时是钥匙串的账号名）")}</span>
+            <input
+              type="text"
+              value={draft.id}
+              readOnly={editingId !== null}
+              onChange={(ev) => setDraft({ ...draft, id: ev.target.value })}
+            />
+          </label>
+          {editingId !== null && (
+            <p className="ai-endpoint-note">
+              {t(
+                "端点 id 建好之后不能改——它是密钥在钥匙串里的位置，改名等于换一把钥匙，旧的那把会变成没人能删的孤儿。",
+              )}
+            </p>
+          )}
+
+          <label className="field">
+            <span>{t("显示名")}</span>
+            <input
+              type="text"
+              value={draft.label}
+              onChange={(ev) => setDraft({ ...draft, label: ev.target.value })}
+            />
+          </label>
+
+          <label className="field">
+            <span>{t("协议")}</span>
+            <select
+              value={draft.protocol}
+              onChange={(ev) =>
+                setDraft({ ...draft, protocol: ev.target.value as AiProtocol })
+              }
+            >
+              {(Object.keys(PROTOCOL_LABELS) as AiProtocol[]).map((protocol) => (
+                <option key={protocol} value={protocol}>
+                  {PROTOCOL_LABELS[protocol]}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="field">
+            <span>{t("端点地址")}</span>
+            <input
+              type="text"
+              value={draft.baseUrl}
+              placeholder="http://127.0.0.1:11434/v1"
+              onChange={(ev) => setDraft({ ...draft, baseUrl: ev.target.value })}
+            />
+          </label>
+
+          <label className="field">
+            <span>{t("模型 ID")}</span>
+            <input
+              type="text"
+              value={draft.model}
+              onChange={(ev) => setDraft({ ...draft, model: ev.target.value })}
+            />
+          </label>
+
+          <label className="field">
+            <span>{t("计费")}</span>
+            <select
+              value={draft.billing}
+              onChange={(ev) =>
+                setDraft({
+                  ...draft,
+                  billing: ev.target.value as EndpointConfig["billing"],
+                })
+              }
+            >
+              {(Object.keys(BILLING_LABELS) as EndpointConfig["billing"][]).map(
+                (billing) => (
+                  <option key={billing} value={billing}>
+                    {BILLING_LABELS[billing]}
+                  </option>
+                ),
+              )}
+            </select>
+          </label>
+
+          <label className="field">
+            <span>{t("并发上限")}</span>
+            <input
+              type="number"
+              min={0}
+              step={1}
+              value={draft.maxConcurrent}
+              onChange={(ev) =>
+                setDraft({ ...draft, maxConcurrent: Number(ev.target.value) })
+              }
+            />
+          </label>
+
+          <label className="field">
+            <span>{t("备注")}</span>
+            <input
+              type="text"
+              value={draft.note}
+              onChange={(ev) => setDraft({ ...draft, note: ev.target.value })}
+            />
+          </label>
+
+          {draftError && (
+            <p className="ai-warning" role="alert">
+              {draftError}
+            </p>
+          )}
+
+          <div className="field field--actions">
+            <button type="button" className="btn btn--primary" onClick={saveDraft}>
+              {t("保存端点")}
+            </button>
+            <button type="button" className="btn" onClick={cancelDraft}>
+              {t("取消")}
+            </button>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

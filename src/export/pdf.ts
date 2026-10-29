@@ -36,6 +36,7 @@
  */
 
 import { exportToHtml, typographyFromAppearance } from "./html";
+import { renderMermaidBlocks } from "./mermaid";
 import { inlineImages, type ImageResolver } from "./inline-images";
 import type { ExportContext } from "./service";
 import type { ExportResult } from "./service";
@@ -171,22 +172,24 @@ export async function buildPrintHtml(
       context.overrides.pdfIncludeOutline ?? settings.export.pdfIncludeOutline,
   };
 
-  const html = exportToHtml(context.content, {
-    title: context.title,
-    theme: settings.appearance.theme,
-    mode: currentColorMode(),
-    // 纸上要不要目录，由设置决定（目录里的链接在 PDF 里仍然能点）
-    includeOutline: printOptions.includeOutline,
-    // 自定义 CSS 也要进导出——编辑器里有、导出里没有就是「屏幕与导出不一致」
-    customCss: settings.appearance.customCss,
-    // 排版同样要跟屏幕一致（字号 / 行高 / 写作区宽度 / 字体 / 页面背景）
-    typography: typographyFromAppearance(settings.appearance),
-    words: context.variables.words,
-    chars: context.variables.chars,
-    // 打印样式由 `export/html.ts` 注入（与 HTML 导出**同一份**实现，
-    // 见 `src/export/print-css.ts` 的文件头）
-    print: printOptions,
-  });
+  const html = await renderMermaidBlocks(
+    exportToHtml(context.content, {
+      title: context.title,
+      theme: settings.appearance.theme,
+      mode: currentColorMode(),
+      // 纸上要不要目录，由设置决定（目录里的链接在 PDF 里仍然能点）
+      includeOutline: printOptions.includeOutline,
+      // 自定义 CSS 也要进导出——编辑器里有、导出里没有就是「屏幕与导出不一致」
+      customCss: settings.appearance.customCss,
+      // 排版同样要跟屏幕一致（字号 / 行高 / 写作区宽度 / 字体 / 页面背景）
+      typography: typographyFromAppearance(settings.appearance),
+      words: context.variables.words,
+      chars: context.variables.chars,
+      // 打印样式由 `export/html.ts` 注入（与 HTML 导出**同一份**实现，
+      // 见 `src/export/print-css.ts` 的文件头）
+      print: printOptions,
+    }),
+  );
 
   // 图片内联成 data: URI。
   //

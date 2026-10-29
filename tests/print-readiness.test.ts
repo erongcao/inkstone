@@ -216,6 +216,7 @@ describe("就绪门：挂进打印用的 HTML", () => {
       fileName: "probe.pdf",
       overrides: {},
       hasBodyContent: true,
+      unusedFootnotes: [],
     };
 
     const html = await buildPrintHtml(context);

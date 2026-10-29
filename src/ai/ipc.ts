@@ -95,6 +95,107 @@ async function listModelsInBrowser(payload: ListModelsPayload): Promise<string> 
   return response.text();
 }
 
+/**
+ * 前端 → Rust：一次「探测」请求。
+ *
+ * 与 `ListModelsPayload` 的区别：方法可以是 GET 或 POST，
+ * 而且要的是**状态码**——「测试连接」要靠它把
+ * 「密钥填错」「这个服务没有列表接口」「路径不对」三件事分开。
+ */
+export interface ProbePayload {
+  /** 完整 URL（路径由前端按协议拼好，Rust 侧不懂协议） */
+  url: string;
+  /** `GET` 或 `POST` */
+  method: "GET" | "POST";
+  /** POST 的请求体 */
+  body?: string;
+  /** 鉴权描述：Rust 侧按它去钥匙串取密钥并注入 */
+  auth: AuthSpec;
+  /** 额外的请求头（不含任何密钥） */
+  headers: string[];
+}
+
+/**
+ * 探测结果。
+ *
+ * `kind` 决定它意味着什么：
+ *
+ * - `http`    —— 真的发出去了并拿到状态码（看 `status`）
+ * - `network` —— 传输层失败（连不上 / 超时 / DNS 解析不了）
+ * - `no-secret` —— 这个端点没配密钥，请求**压根没发出去**
+ * - `bad-auth`  —— 鉴权方式配置有问题
+ */
+export interface ProbeResult {
+  kind: "http" | "network" | "no-secret" | "bad-auth";
+  /** HTTP 状态码；`kind !== "http"` 时为 0 */
+  status: number;
+  /** 响应体（截断） */
+  body: string;
+  /** 给用户看的说明 */
+  detail: string;
+}
+
+/**
+ * 探测某个端点。
+ *
+ * 传输在 Rust 侧（密钥不经过前端），判定在前端——
+ * 与流式聊天、列模型是同一套分工。
+ */
+export async function aiProbeEndpoint(payload: ProbePayload): Promise<ProbeResult> {
+  if (!isTauriRuntime()) {
+    return probeInBrowser(payload);
+  }
+  return invoke<ProbeResult>("ai_probe_endpoint", { req: payload });
+}
+
+/**
+ * 浏览器降级：前端 fetch 探测。
+ *
+ * 与 `listModelsInBrowser` 同一套限制——**只有本地端点能走**：
+ * 云端端点在浏览器里会被 CORS 挡住，密钥也拿不到（它在系统钥匙串里）。
+ */
+async function probeInBrowser(payload: ProbePayload): Promise<ProbeResult> {
+  if (payload.auth.kind !== "none") {
+    return {
+      kind: "no-secret",
+      status: 0,
+      body: "",
+      detail: t(
+        "浏览器开发模式拿不到系统钥匙串里的密钥，只能测本机推理服务（Ollama / LM Studio / vLLM）。",
+      ),
+    };
+  }
+
+  const headers: Record<string, string> = {};
+  for (const raw of payload.headers) {
+    const at = raw.indexOf(":");
+    if (at > 0) headers[raw.slice(0, at).trim()] = raw.slice(at + 1).trim();
+  }
+  if (payload.body !== undefined) headers["content-type"] = "application/json";
+
+  try {
+    const response = await fetch(payload.url, {
+      method: payload.method,
+      headers,
+      body: payload.body,
+    });
+    const text = await response.text();
+    return {
+      kind: "http",
+      status: response.status,
+      body: text.slice(0, 400),
+      detail: "",
+    };
+  } catch (error) {
+    return {
+      kind: "network",
+      status: 0,
+      body: "",
+      detail: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 /** Rust 侧收到的流式请求 */
 interface StreamRequestPayload {
   id: string;

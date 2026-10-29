@@ -405,14 +405,17 @@ export interface AiSettings {
   rewriteSystemPrompt: string;
   /** 总结类的系统提示词 */
   summarizeSystemPrompt: string;
-  /*
-   * 这里原来有一个 `chatSystemPrompt`（问答类的系统提示词）。
+  /**
+   * 问答类的系统提示词。
    *
-   * 删掉它是因为**问答模式这个功能不存在**：
-   * `src/ai/chat.ts` 是传输层（改写、总结都走它），
-   * 并没有一个「用户提问 → AI 回答」的交互模式。
-   * 留着一个给不存在的功能用的提示词，就是留着一个没人能改、也没人看的字段。
+   * 问答模式（BM25 检索 + 问答面板 + 引用溯源）真的存在了，
+   * 所以这个字段有用了——它规定模型**只根据给它的片段回答**，
+   * 并用 `[n]` 标注来源。
+   *
+   * 这是**新增**字段，老用户没有它 → 深合并会补上默认值，
+   * 所以不需要迁移。
    */
+  qaSystemPrompt: string;
   /** 单次请求的最大输出 token */
   maxOutputTokens: number;
   /** 温度（仅在端点能力位允许时生效） */
@@ -516,6 +519,11 @@ export const DEFAULT_SETTINGS: Settings = {
     summarizeSystemPrompt:
       "你是一位中文写作助手。请对用户给的 Markdown 文档做摘要，" +
       "只输出 Markdown 本身，不要解释。",
+    qaSystemPrompt:
+      "你是一位文档问答助手。用户会给你文档的若干片段和一个问题。" +
+      "请只根据这些片段回答，并在每个结论后面用 [n] 标注来源编号" +
+      "（n 是片段的编号）。如果片段里没有答案，就回答「根据文档无法回答」。" +
+      "不要编造片段里没有的信息，也不要使用片段之外的知识。",
     maxOutputTokens: 4096,
     temperature: 0.7,
   },
