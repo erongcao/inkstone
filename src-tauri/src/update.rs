@@ -134,7 +134,53 @@ mod tests {
     #[test]
     fn 当前版本来自_cargo_manifest() {
         // 这个断言的意义：发布出去的二进制必须与 Cargo.toml 里的版本一致，
-        // 否则「检查更新」会比出一个假的「有新版」
-        assert_eq!(env!("CARGO_PKG_VERSION"), "0.1.0");
+        // 否则「检查更新」会比出一个假的「有新版」。
+        //
+        // **不写死具体版本号**：版本号每次发布都会变，写死等于每次发版都要改测试，
+        // 改漏了就是一条假红。「三处版本号一致」由下面那条测试守住——
+        // 那条才是真正会出事的（漏改一处 → 报出来的版本与发布出去的版本对不上）。
+        let version = env!("CARGO_PKG_VERSION");
+        assert!(!version.is_empty());
+        assert_eq!(
+            version.split('.').count(),
+            3,
+            "版本号应当是 x.y.z 三段，实际是 {version}"
+        );
+    }
+
+    #[test]
+    fn 三处版本号必须一致() {
+        // 版本号散在三个地方：
+        //   package.json        —— 前端读它（`src/ipc/update.ts`）
+        //   src-tauri/tauri.conf.json —— 打包器读它（产物里的版本号）
+        //   src-tauri/Cargo.toml —— Rust 读它（本文件里的 CARGO_PKG_VERSION）
+        // 任何一处漏改，发布出去的产物就会「自称」某个版本，
+        // 而「检查更新」拿它跟 GitHub 上最新的 release 比——
+        // 差一位就是假的「有新版」。
+        let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let root = manifest_dir.parent().expect("src-tauri 的上一级是仓库根");
+
+        let read_json = |path: std::path::PathBuf| -> serde_json::Value {
+            let text = std::fs::read_to_string(&path)
+                .unwrap_or_else(|e| panic!("读不到 {}：{e}", path.display()));
+            serde_json::from_str(&text)
+                .unwrap_or_else(|e| panic!("{} 不是合法 JSON：{e}", path.display()))
+        };
+
+        let pkg = read_json(root.join("package.json"));
+        let conf = read_json(root.join("src-tauri").join("tauri.conf.json"));
+
+        assert_eq!(
+            pkg["version"].as_str().expect("package.json 缺 version"),
+            env!("CARGO_PKG_VERSION"),
+            "package.json 与 Cargo.toml 的版本号不一致"
+        );
+        assert_eq!(
+            conf["version"]
+                .as_str()
+                .expect("tauri.conf.json 缺 version"),
+            env!("CARGO_PKG_VERSION"),
+            "tauri.conf.json 与 Cargo.toml 的版本号不一致"
+        );
     }
 }

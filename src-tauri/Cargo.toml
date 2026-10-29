@@ -1,6 +1,6 @@
 [package]
 name = "inkstone"
-version = "0.1.0"
+version = "0.2.0"
 description = "开源 Markdown 编辑器 —— 类 Typora 的 Live Preview 混合编辑体验"
 authors = ["Inkstone contributors"]
 edition = "2021"
